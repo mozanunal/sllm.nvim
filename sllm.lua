@@ -1,10 +1,11 @@
 -- File: lua/sllm/init.lua
 local M = {}
 
--- We'll store the buffer handle in a module-level variable.
--- If it doesn't exist (or gets invalidated), we'll create a new one.
+-- Module vars
 M.llm_buf = nil
+M.continue = true
 
+-- Private functions
 local function buf_is_valid(buf)
 	return buf and vim.api.nvim_buf_is_valid(buf)
 end
@@ -40,17 +41,38 @@ end
 local function show_llm_buffer()
 	local buf = get_llm_buffer()
 	local win = find_llm_window()
-	if win then
-		-- Already visible, just jump there
-		vim.api.nvim_set_current_win(win)
-	else
-		-- Not visible anywhere, so open in a new split
+	-- If the LLM buffer isn't visible, open it in a new vertical split.
+	if not win then
+		-- Create a vertical split. Neovim automatically moves you into this new window.
 		vim.cmd("vsplit")
+		-- Put the LLM buffer in the newly created window.
 		vim.api.nvim_win_set_buf(0, buf)
-		local new_win = vim.api.nvim_get_current_win()
-		vim.wo[new_win].wrap = true
+
+		-- Optional window-local settings
+		local new_win             = vim.api.nvim_get_current_win()
+		vim.wo[new_win].wrap      = true
 		vim.wo[new_win].linebreak = true
+
+		-- "wincmd p" jumps back to the previously active window
+		vim.cmd("wincmd p")
 	end
+end
+
+local function clean_llm_buffer()
+	if buf_is_valid(M.llm_buf) then
+		-- Replace all lines with an empty list, effectively clearing the buffer
+		vim.api.nvim_buf_set_lines(M.llm_buf, 0, -1, false, {})
+	end
+end
+
+-- Public functions
+function M.new_chat()
+	M.continue = false
+	clean_llm_buffer()
+	show_llm_buffer()
+	append_to_llm_buffer({ "New chat created." })
+	M.ask_llm()
+	M.continue = true
 end
 
 -- Public function #1: focus the LLM window if it's open; otherwise show it.
@@ -60,6 +82,8 @@ function M.focus_llm_window()
 		vim.api.nvim_set_current_win(llm_win)
 	else
 		show_llm_buffer()
+		local llm_win = find_llm_window()
+		vim.api.nvim_set_current_win(llm_win)
 	end
 end
 
@@ -75,7 +99,6 @@ end
 
 -- Public function #3: prompt user for input, run `llm`, and stream output to the buffer.
 function M.ask_llm()
-	local continue = vim.fn.input("Continue previous chat? (y/N): "):lower() == "y"
 	local user_input = vim.fn.input("Prompt: ")
 	if user_input == "" then
 		print("No prompt provided.")
@@ -86,7 +109,7 @@ function M.ask_llm()
 	show_llm_buffer()
 
 	-- Build the command
-	local cmd = continue
+	local cmd = M.continue
 			and ("llm -c " .. vim.fn.shellescape(user_input))
 			or ("llm " .. vim.fn.shellescape(user_input))
 
@@ -124,6 +147,7 @@ end
 -- Public function #4: set up user commands and the keymaps you requested.
 function M.setup()
 	vim.keymap.set("n", "<leader>ss", M.ask_llm, { desc = "Ask LLM" })
+	vim.keymap.set("n", "<leader>sn", M.new_chat, { desc = "New LLM chat" })
 	vim.keymap.set("n", "<leader>sa", M.ask_llm, { desc = "Add file to llm context" })
 	vim.keymap.set("n", "<leader>sf", M.focus_llm_window, { desc = "Focus LLM window" })
 	vim.keymap.set("n", "<leader>st", M.toggle_llm_buffer, { desc = "Toggle LLM buffer visibility" })

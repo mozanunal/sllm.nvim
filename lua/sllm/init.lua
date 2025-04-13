@@ -171,8 +171,23 @@ function M.ask_llm()
   })
 end
 
+function M.health_check()
+  local llm_exists = vim.fn.executable('llm')
+  if not llm_exists then
+    vim.notify(
+      "LLM executable not found. Please ensure 'llm' is installed and available in your PATH.",
+      vim.log.levels.ERROR
+    )
+    return false
+  end
+  return true
+end
+
 -- set up user commands and the keymaps you requested.
 function M.setup()
+  if not M.health_check() then
+    return -- Exit if health check fails
+  end
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
   vim.keymap.set('n', '<leader>sa', M.add_current_file_to_context, { desc = 'Add file to llm context' })

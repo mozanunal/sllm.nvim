@@ -112,7 +112,12 @@ function M.add_current_file_to_context()
 
 	-- Also store the filename in M.llm_context
 	table.insert(M.llm_context, filename)
-	append_to_llm_buffer({ "file added to llm context: " .. filename })
+	vim.notify("File added to LLM context: " .. filename, vim.log.levels.INFO, { title = "LLM Context" })
+end
+
+function M.reset_context()
+	M.llm_context = nil -- Clear the context
+	vim.notify("LLM context has been reset.", vim.log.levels.INFO, { title = "LLM Context" })
 end
 
 -- Public function #3: prompt user for input, run `llm`, and stream output to the buffer.
@@ -179,6 +184,7 @@ function M.setup()
 	vim.keymap.set("n", "<leader>ss", M.ask_llm, { desc = "Ask LLM" })
 	vim.keymap.set("n", "<leader>sn", M.new_chat, { desc = "New LLM chat" })
 	vim.keymap.set("n", "<leader>sa", M.add_current_file_to_context, { desc = "Add file to llm context" })
+	vim.keymap.set("n", "<leader>sr", M.reset_context, { desc = "Reset LLM context" })  -- Keymap for resetting context
 	vim.keymap.set("n", "<leader>sf", M.focus_llm_window, { desc = "Focus LLM window" })
 	vim.keymap.set("n", "<leader>st", M.toggle_llm_buffer, { desc = "Toggle LLM buffer visibility" })
 end

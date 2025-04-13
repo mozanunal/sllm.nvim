@@ -171,23 +171,31 @@ function M.ask_llm()
   })
 end
 
-function M.health_check()
-  local llm_exists = vim.fn.executable('llm')
-  if not llm_exists then
-    vim.notify(
-      "LLM executable not found. Please ensure 'llm' is installed and available in your PATH.",
-      vim.log.levels.ERROR
-    )
-    return false
+
+function M.check()
+  -- Use the `vim.health` API provided by Neovim
+  local health = require('vim.health')
+
+  -- 1. Check for Neovim version
+  local nvim_version = vim.version()
+  if (nvim_version.major < 0) or (nvim_version.minor < 5) then
+    health.warn('Neovim 0.5 or above is recommended for myplugin.')
+  else
+    health.ok('Neovim version is 0.5 or above.')
   end
-  return true
+
+  -- 2. Check if a required dependency exists
+  local has_required_dep = vim.fn.executable('llm') == 1
+  if not has_required_dep then
+    health.error('llm is required by myplugin but not found in your PATH.')
+  else
+    health.ok('llm is installed and found in your PATH.')
+  end
 end
 
 -- set up user commands and the keymaps you requested.
 function M.setup()
-  if not M.health_check() then
-    return -- Exit if health check fails
-  end
+	M.check()
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
   vim.keymap.set('n', '<leader>sa', M.add_current_file_to_context, { desc = 'Add file to llm context' })
@@ -195,3 +203,5 @@ function M.setup()
   vim.keymap.set('n', '<leader>sf', M.focus_llm_window, { desc = 'Focus LLM window' })
   vim.keymap.set('n', '<leader>st', M.toggle_llm_buffer, { desc = 'Toggle LLM buffer visibility' })
 end
+
+M.setup()

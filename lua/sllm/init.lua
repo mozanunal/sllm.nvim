@@ -75,7 +75,7 @@ function M.new_chat()
   M.continue = true
 end
 
--- Public function #1: focus the LLM window if it's open; otherwise show it.
+-- focus the LLM window if it's open; otherwise show it.
 function M.focus_llm_window()
   local llm_win = find_llm_window()
   if llm_win then
@@ -87,7 +87,7 @@ function M.focus_llm_window()
   end
 end
 
--- Public function #2: toggle the LLM buffer’s visibility.
+-- toggle the LLM buffer’s visibility.
 function M.toggle_llm_buffer()
   local llm_win = find_llm_window()
   if llm_win then
@@ -114,7 +114,7 @@ function M.reset_context()
   vim.notify('LLM context has been reset.', vim.log.levels.INFO, { title = 'LLM Context' })
 end
 
--- Public function #3: prompt user for input, run `llm`, and stream output to the buffer.
+-- prompt user for input, run `llm`, and stream output to the buffer.
 function M.ask_llm()
   local user_input = vim.fn.input('Prompt: ')
   if user_input == '' then
@@ -171,7 +171,7 @@ function M.ask_llm()
   })
 end
 
--- Public function #4: set up user commands and the keymaps you requested.
+-- set up user commands and the keymaps you requested.
 function M.setup()
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
@@ -180,6 +180,3 @@ function M.setup()
   vim.keymap.set('n', '<leader>sf', M.focus_llm_window, { desc = 'Focus LLM window' })
   vim.keymap.set('n', '<leader>st', M.toggle_llm_buffer, { desc = 'Toggle LLM buffer visibility' })
 end
-
-M.setup()
-_G.M = M

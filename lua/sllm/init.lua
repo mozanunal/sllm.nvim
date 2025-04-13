@@ -65,6 +65,22 @@ local function clean_llm_buffer()
   end
 end
 
+local function in_visual_mode()
+  local current_mode = vim.api.nvim_get_mode().mode
+  return current_mode:match('^[vV]$') ~= nil
+end
+
+-- Function to get the current visual selection
+local function get_visual_selection()
+  -- Check if there is a visual selection
+  if in_visual_mode() then
+    local _, ls, cs = unpack(vim.fn.getpos('v'))
+    local _, le, ce = unpack(vim.fn.getpos('.'))
+    return vim.api.nvim_buf_get_text(0, ls - 1, cs - 1, le - 1, ce, {})
+  end
+  return nil -- No selection
+end
+
 -- Public functions
 function M.new_chat()
   M.continue = false
@@ -116,10 +132,15 @@ end
 
 -- prompt user for input, run `llm`, and stream output to the buffer.
 function M.ask_llm()
+  local visual_selection = get_visual_selection()
   local user_input = vim.fn.input('Prompt: ')
   if user_input == '' then
     print('No prompt provided.')
     return
+  end
+
+  if visual_selection then
+    user_input = user_input .. '\nSelection: \n```' .. table.concat(visual_selection, '\n') .. '```\n'
   end
 
   -- Show/focus the buffer so we see the conversation happen
@@ -135,7 +156,10 @@ function M.ask_llm()
   cmd = cmd .. vim.fn.shellescape(user_input)
 
   -- Add prompt to buffer
-  append_to_llm_buffer({ '## Prompt', '', user_input, '' })
+  local lines = vim.split(user_input, '\n', { plain = true })
+  append_to_llm_buffer({ '## Prompt', '' })
+  append_to_llm_buffer(lines)
+  append_to_llm_buffer({ '' })
   if M.llm_context then
     append_to_llm_buffer({ '## Context' })
     for _, filename in ipairs(M.llm_context) do
@@ -171,7 +195,6 @@ function M.ask_llm()
   })
 end
 
-
 function M.check()
   -- Use the `vim.health` API provided by Neovim
   local health = require('vim.health')
@@ -195,8 +218,8 @@ end
 
 -- set up user commands and the keymaps you requested.
 function M.setup()
-	M.check()
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
+  vim.keymap.set('v', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
   vim.keymap.set('n', '<leader>sa', M.add_current_file_to_context, { desc = 'Add file to llm context' })
   vim.keymap.set('n', '<leader>sr', M.reset_context, { desc = 'Reset LLM context' }) -- Keymap for resetting context

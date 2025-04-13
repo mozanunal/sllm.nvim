@@ -1,8 +1,8 @@
--- File: lua/sllm/init.lua
 local M = {}
 
 -- Module vars
 M.llm_buf = nil
+M.llm_context = nil
 M.continue = true
 
 -- Private functions
@@ -35,6 +35,12 @@ end
 local function append_to_llm_buffer(lines)
 	if lines then
 		vim.api.nvim_buf_set_lines(M.llm_buf, -1, -1, false, lines)
+		-- Set the cursor to the last line of the buffer
+		local win = find_llm_window() -- Find the window associated with the LLM buffer
+		if win then
+			local last_line = vim.api.nvim_buf_line_count(M.llm_buf)
+			vim.api.nvim_win_set_cursor(win, { last_line, 0 }) -- Move cursor to the last line in the window
+		end
 	end
 end
 
@@ -97,6 +103,18 @@ function M.toggle_llm_buffer()
 	end
 end
 
+function M.add_current_file_to_context()
+	-- Initialize M.llm_context if it's nil
+	M.llm_context = M.llm_context or {}
+
+	-- Get the filenam from the active buffer
+	local filename = vim.api.nvim_buf_get_name(0)
+
+	-- Also store the filename in M.llm_context
+	table.insert(M.llm_context, filename)
+	append_to_llm_buffer({ "file added to llm context: " .. filename })
+end
+
 -- Public function #3: prompt user for input, run `llm`, and stream output to the buffer.
 function M.ask_llm()
 	local user_input = vim.fn.input("Prompt: ")
@@ -110,36 +128,48 @@ function M.ask_llm()
 
 	-- Build the command
 	local cmd = M.continue
-			and ("llm -c " .. vim.fn.shellescape(user_input))
-			or ("llm " .. vim.fn.shellescape(user_input))
+			and ("llm -c ")
+			or ("llm ")
+	if M.llm_context then
+		for _, filename in ipairs(M.llm_context) do
+			cmd = cmd .. "-f " .. filename .. " "
+		end
+	end
+	cmd = cmd .. vim.fn.shellescape(user_input)
 
 	-- Add prompt to buffer
-	append_to_llm_buffer({ "> " .. user_input, "" })
+	append_to_llm_buffer({ "## Prompt", "", user_input, "" })
+	if M.llm_context then
+		append_to_llm_buffer({ "## Context" })
+		for _, filename in ipairs(M.llm_context) do
+			append_to_llm_buffer({ "- " .. filename })
+		end
+		append_to_llm_buffer({ "" })
+	end
+	append_to_llm_buffer({ "## Response", "" })
 
-	-- Run `llm` asynchronously and stream output to the buffer.
+	-- Run `llm` asynchronously an d stream output to the buffer.
 	vim.fn.jobstart(cmd, {
-		stdout_buffered = false,
+		stdout_buffered = true,
 		pty = true,
 		on_stdout = function(_, data, _)
 			if data then
 				for _, line in ipairs(data) do
-					if line ~= "" then
-						append_to_llm_buffer({ line })
-					end
+					-- Remove carriage returns
+					line = line:gsub("\r", "")
+					append_to_llm_buffer({ line })
 				end
 			end
 		end,
 		on_stderr = function(_, data, _)
 			if data then
 				for _, line in ipairs(data) do
-					if line ~= "" then
-						append_to_llm_buffer({ line })
-					end
+					append_to_llm_buffer({ line })
 				end
 			end
 		end,
 		on_exit = function(_, exit_code, _)
-			append_to_llm_buffer({ "", "Job finished with exit code: " .. exit_code })
+			-- append_to_llm_buffer({ "---" })
 		end,
 	})
 end
@@ -148,9 +178,10 @@ end
 function M.setup()
 	vim.keymap.set("n", "<leader>ss", M.ask_llm, { desc = "Ask LLM" })
 	vim.keymap.set("n", "<leader>sn", M.new_chat, { desc = "New LLM chat" })
-	vim.keymap.set("n", "<leader>sa", M.ask_llm, { desc = "Add file to llm context" })
+	vim.keymap.set("n", "<leader>sa", M.add_current_file_to_context, { desc = "Add file to llm context" })
 	vim.keymap.set("n", "<leader>sf", M.focus_llm_window, { desc = "Focus LLM window" })
 	vim.keymap.set("n", "<leader>st", M.toggle_llm_buffer, { desc = "Toggle LLM buffer visibility" })
 end
 
 M.setup()
+_G.M = M

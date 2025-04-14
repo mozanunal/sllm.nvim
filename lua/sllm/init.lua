@@ -226,3 +226,5 @@ function M.setup()
   vim.keymap.set('n', '<leader>sf', M.focus_llm_window, { desc = 'Focus LLM window' })
   vim.keymap.set('n', '<leader>st', M.toggle_llm_buffer, { desc = 'Toggle LLM buffer visibility' })
 end
+
+return M

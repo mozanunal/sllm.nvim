@@ -3,6 +3,7 @@ local M = {}
 -- Module vars
 M.llm_buf = nil
 M.llm_context = nil
+M.selected_model = nil
 M.continue = true
 
 -- Private functions
@@ -148,6 +149,7 @@ function M.ask_llm()
 
   -- Build the command
   local cmd = M.continue and 'llm -c ' or 'llm '
+  if M.selected_model then cmd = cmd .. '-m ' .. M.selected_model .. ' ' end
   if M.llm_context then
     for _, filename in ipairs(M.llm_context) do
       cmd = cmd .. '-f ' .. filename .. ' '
@@ -170,18 +172,37 @@ function M.ask_llm()
   append_to_llm_buffer({ '## Response', '' })
 
   -- Run `llm` asynchronously an d stream output to the buffer.
+  -- somewhere at the top of your module/file
+  local stdout_acc = ''
+
   vim.fn.jobstart(cmd, {
-    stdout_buffered = true,
+    stdout_buffered = false,
     pty = true,
     on_stdout = function(_, data, _)
-      if data then
-        for _, line in ipairs(data) do
-          -- Remove carriage returns
-          line = line:gsub('\r', '')
-          append_to_llm_buffer({ line })
+      if not data then return end
+
+      for _, chunk in ipairs(data) do
+        if chunk ~= '' then
+          -- 1) accumulate everything
+          stdout_acc = stdout_acc .. chunk
+
+          -- 2) as long as there's a '\r' in the buffer, split & flush
+          local cr_pos = stdout_acc:find('\r', 1, true)
+          while cr_pos do
+            -- the text up to (but not including) the '\r'
+            local line = stdout_acc:sub(1, cr_pos - 1)
+            append_to_llm_buffer({ line })
+
+            -- drop the flushed part + the '\r' itself
+            stdout_acc = stdout_acc:sub(cr_pos + 1)
+
+            -- look for another '\r'
+            cr_pos = stdout_acc:find('\r', 1, true)
+          end
         end
       end
     end,
+
     on_stderr = function(_, data, _)
       if data then
         for _, line in ipairs(data) do
@@ -189,8 +210,14 @@ function M.ask_llm()
         end
       end
     end,
+
     on_exit = function(_, exit_code, _)
-      -- append_to_llm_buffer({ "---" })
+      -- if there’s leftover text without a trailing '\r', you can flush it here:
+      if stdout_acc ~= '' then
+        append_to_llm_buffer({ stdout_acc })
+        stdout_acc = ''
+      end
+      -- maybe log exit_code or append a separator...
     end,
   })
 end
@@ -216,6 +243,55 @@ function M.check()
   end
 end
 
+local function extract_models()
+  local models = vim.fn.systemlist('llm models')
+  local only_models = {}
+  for _, line in ipairs(models) do
+    local model = line:match('^.-:%s*([^(%s]+)')
+    if model then table.insert(only_models, model) end
+  end
+  return only_models
+end
+
+function M.select_model()
+  local models = extract_models()
+  vim.ui.select(models, { prompt = 'Select AI model:' }, function(choice)
+    if choice then
+      M.selected_model = choice -- this is just the "model" as shown in output
+      vim.notify('Selected AI model: ' .. choice, vim.log.levels.INFO, { title = 'AI Model' })
+    else
+      vim.notify('No AI model selected', vim.log.levels.WARN, { title = 'AI Model' })
+    end
+  end)
+end
+
+function M.select_modelx()
+  local models = vim.fn.systemlist('llm models')
+  if not (models and #models > 0) then
+    vim.notify('No models found from `llm models`', vim.log.levels.ERROR, { title = 'AI Model' })
+    return
+  end
+
+  local pick = require('mini.pick')
+  pick.start({
+    source = {
+      items = models,
+      name = 'LLM Models',
+    },
+    prompt = 'Select AI model:',
+    -- Optionally, customize how items are displayed (optional)
+    -- formatter = function(item) return item end,
+    on_confirm = function(item)
+      if item then
+        M.selected_model = item
+        vim.notify('Selected AI model: ' .. item, vim.log.levels.INFO, { title = 'AI Model' })
+      else
+        vim.notify('No AI model selected', vim.log.levels.WARN, { title = 'AI Model' })
+      end
+    end,
+  })
+end
+
 -- set up user commands and the keymaps you requested.
 function M.setup()
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
@@ -225,6 +301,7 @@ function M.setup()
   vim.keymap.set('n', '<leader>sr', M.reset_context, { desc = 'Reset LLM context' }) -- Keymap for resetting context
   vim.keymap.set('n', '<leader>sf', M.focus_llm_window, { desc = 'Focus LLM window' })
   vim.keymap.set('n', '<leader>st', M.toggle_llm_buffer, { desc = 'Toggle LLM buffer visibility' })
+  vim.keymap.set('n', '<leader>sm', M.select_model, { desc = 'Select LLM model' })
 end
 
-return M
+M.setup()

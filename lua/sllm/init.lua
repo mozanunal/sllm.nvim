@@ -5,6 +5,7 @@ M.llm_buf = nil
 M.llm_context = nil
 M.selected_model = nil
 M.continue = true
+M.show_usage = false
 
 -- Private functions
 local function buf_is_valid(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
@@ -21,8 +22,8 @@ local function get_llm_buffer()
   if not buf_is_valid(M.llm_buf) then
     -- Create new buffer
     M.llm_buf = vim.api.nvim_create_buf(false, true) -- unlisted scratch buffer
-    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = M.llm_buf })
-    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = M.llm_buf })
+    vim.bo[M.llm_buf].bufhidden = 'hide'
+    vim.bo[M.llm_buf].filetype = 'markdown'
   end
   return M.llm_buf
 end
@@ -99,7 +100,7 @@ function M.focus_llm_window()
     vim.api.nvim_set_current_win(llm_win)
   else
     show_llm_buffer()
-    local llm_win = find_llm_window()
+    llm_win = find_llm_window()
     vim.api.nvim_set_current_win(llm_win)
   end
 end
@@ -149,6 +150,7 @@ function M.ask_llm()
 
   -- Build the command
   local cmd = M.continue and 'llm -c ' or 'llm '
+  if M.show_usage then cmd = cmd .. '-u ' end
   if M.selected_model then cmd = cmd .. '-m ' .. M.selected_model .. ' ' end
   if M.llm_context then
     for _, filename in ipairs(M.llm_context) do
@@ -255,20 +257,8 @@ end
 
 function M.select_model()
   local models = extract_models()
-  vim.ui.select(models, { prompt = 'Select AI model:' }, function(choice)
-    if choice then
-      M.selected_model = choice -- this is just the "model" as shown in output
-      vim.notify('Selected AI model: ' .. choice, vim.log.levels.INFO, { title = 'AI Model' })
-    else
-      vim.notify('No AI model selected', vim.log.levels.WARN, { title = 'AI Model' })
-    end
-  end)
-end
-
-function M.select_modelx()
-  local models = vim.fn.systemlist('llm models')
   if not (models and #models > 0) then
-    vim.notify('No models found from `llm models`', vim.log.levels.ERROR, { title = 'AI Model' })
+    vim.notify('No models found from `llm models`', vim.log.levels.ERROR, { title = 'LLM model' })
     return
   end
 
@@ -278,15 +268,13 @@ function M.select_modelx()
       items = models,
       name = 'LLM Models',
     },
-    prompt = 'Select AI model:',
-    -- Optionally, customize how items are displayed (optional)
-    -- formatter = function(item) return item end,
+    prompt = 'Select LLM model:',
     on_confirm = function(item)
       if item then
         M.selected_model = item
-        vim.notify('Selected AI model: ' .. item, vim.log.levels.INFO, { title = 'AI Model' })
+        vim.notify('Selected LLM model: ' .. item, vim.log.levels.INFO, { title = 'LLM model' })
       else
-        vim.notify('No AI model selected', vim.log.levels.WARN, { title = 'AI Model' })
+        vim.notify('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
       end
     end,
   })
@@ -294,6 +282,7 @@ end
 
 -- set up user commands and the keymaps you requested.
 function M.setup()
+  M.show_usage = true
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('v', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
@@ -304,4 +293,4 @@ function M.setup()
   vim.keymap.set('n', '<leader>sm', M.select_model, { desc = 'Select LLM model' })
 end
 
-M.setup()
+return M

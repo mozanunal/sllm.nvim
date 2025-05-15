@@ -1,40 +1,42 @@
 local M = {}
 
 -- Module vars
-M.llm_buf = nil
-M.llm_context = nil
+local llm_buf = nil
+local llm_context = nil
 M.selected_model = nil
 M.continue = true
 M.show_usage = false
+
+local mini_notify = require("mini.notify")
 
 -- Private functions
 local function buf_is_valid(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
 
 local function find_llm_window()
-  if not buf_is_valid(M.llm_buf) then return nil end
+  if not buf_is_valid(llm_buf) then return nil end
   for _, w in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_win_get_buf(w) == M.llm_buf then return w end
+    if vim.api.nvim_win_get_buf(w) == llm_buf then return w end
   end
   return nil
 end
 
 local function get_llm_buffer()
-  if not buf_is_valid(M.llm_buf) then
+  if not buf_is_valid(llm_buf) then
     -- Create new buffer
-    M.llm_buf = vim.api.nvim_create_buf(false, true) -- unlisted scratch buffer
-    vim.bo[M.llm_buf].bufhidden = 'hide'
-    vim.bo[M.llm_buf].filetype = 'markdown'
+    llm_buf = vim.api.nvim_create_buf(false, true) -- unlisted scratch buffer
+    vim.bo[llm_buf].bufhidden = 'hide'
+    vim.bo[llm_buf].filetype = 'markdown'
   end
-  return M.llm_buf
+  return llm_buf
 end
 
 local function append_to_llm_buffer(lines)
   if lines then
-    vim.api.nvim_buf_set_lines(M.llm_buf, -1, -1, false, lines)
+    vim.api.nvim_buf_set_lines(llm_buf, -1, -1, false, lines)
     -- Set the cursor to the last line of the buffer
     local win = find_llm_window() -- Find the window associated with the LLM buffer
     if win then
-      local last_line = vim.api.nvim_buf_line_count(M.llm_buf)
+      local last_line = vim.api.nvim_buf_line_count(llm_buf)
       vim.api.nvim_win_set_cursor(win, { last_line, 0 }) -- Move cursor to the last line in the window
     end
   end
@@ -61,9 +63,9 @@ local function show_llm_buffer()
 end
 
 local function clean_llm_buffer()
-  if buf_is_valid(M.llm_buf) then
+  if buf_is_valid(llm_buf) then
     -- Replace all lines with an empty list, effectively clearing the buffer
-    vim.api.nvim_buf_set_lines(M.llm_buf, 0, -1, false, {})
+    vim.api.nvim_buf_set_lines(llm_buf, 0, -1, false, {})
   end
 end
 
@@ -116,20 +118,20 @@ function M.toggle_llm_buffer()
 end
 
 function M.add_current_file_to_context()
-  -- Initialize M.llm_context if it's nil
-  M.llm_context = M.llm_context or {}
+  -- Initialize llm_context if it's nil
+  llm_context = llm_context or {}
 
   -- Get the filenam from the active buffer
   local filename = vim.api.nvim_buf_get_name(0)
 
-  -- Also store the filename in M.llm_context
-  table.insert(M.llm_context, filename)
-  vim.notify('File added to LLM context: ' .. filename, vim.log.levels.INFO, { title = 'LLM Context' })
+  -- Also store the filename in llm_context
+  table.insert(llm_context, filename)
+  mini_notify.add('File added to LLM context: ' .. filename, vim.log.levels.INFO, { title = 'LLM Context' })
 end
 
 function M.reset_context()
-  M.llm_context = nil -- Clear the context
-  vim.notify('LLM context has been reset.', vim.log.levels.INFO, { title = 'LLM Context' })
+  llm_context = nil -- Clear the context
+  mini_notify.add('LLM context has been reset.', vim.log.levels.INFO, { title = 'LLM Context' })
 end
 
 -- prompt user for input, run `llm`, and stream output to the buffer.
@@ -152,8 +154,8 @@ function M.ask_llm()
   local cmd = M.continue and 'llm -c ' or 'llm '
   if M.show_usage then cmd = cmd .. '-u ' end
   if M.selected_model then cmd = cmd .. '-m ' .. M.selected_model .. ' ' end
-  if M.llm_context then
-    for _, filename in ipairs(M.llm_context) do
+  if llm_context then
+    for _, filename in ipairs(llm_context) do
       cmd = cmd .. '-f ' .. filename .. ' '
     end
   end
@@ -164,9 +166,9 @@ function M.ask_llm()
   append_to_llm_buffer({ '## Prompt', '' })
   append_to_llm_buffer(lines)
   append_to_llm_buffer({ '' })
-  if M.llm_context then
+  if llm_context then
     append_to_llm_buffer({ '## Context' })
-    for _, filename in ipairs(M.llm_context) do
+    for _, filename in ipairs(llm_context) do
       append_to_llm_buffer({ '- ' .. filename })
     end
     append_to_llm_buffer({ '' })
@@ -258,7 +260,7 @@ end
 function M.select_model()
   local models = extract_models()
   if not (models and #models > 0) then
-    vim.notify('No models found from `llm models`', vim.log.levels.ERROR, { title = 'LLM model' })
+    mini_notify.add('No models found from `llm models`', vim.log.levels.ERROR, { title = 'LLM model' })
     return
   end
 
@@ -272,9 +274,9 @@ function M.select_model()
     on_confirm = function(item)
       if item then
         M.selected_model = item
-        vim.notify('Selected LLM model: ' .. item, vim.log.levels.INFO, { title = 'LLM model' })
+        mini_notify.add('Selected LLM model: ' .. item, vim.log.levels.INFO, { title = 'LLM model' })
       else
-        vim.notify('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
+        mini_notify.add('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
       end
     end,
   })

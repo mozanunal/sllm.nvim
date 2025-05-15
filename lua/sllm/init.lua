@@ -10,6 +10,8 @@ local llm_buf = nil
 local llm_context = nil
 -- local notify_func = vim.notify
 local notify_func = require('mini.notify').make_notify()
+-- local pick_func = vim.ui.select
+local pick_func = require("mini.pick").ui_select
 
 -- Private functions
 local function buf_is_valid(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
@@ -58,8 +60,8 @@ local function show_llm_buffer()
     local new_win = vim.api.nvim_get_current_win()
     vim.wo[new_win].wrap = true
     vim.wo[new_win].linebreak = true
-
-    -- "wincmd p" jumps back to the previously active window
+    vim.wo[new_win].number = false
+    vim.wo[new_win].winbar = "  sllm.nvim"
     vim.cmd('wincmd p')
   end
 end
@@ -223,6 +225,7 @@ function M.ask_llm()
         append_to_llm_buffer({ stdout_acc })
         stdout_acc = ''
       end
+      append_to_llm_buffer({ "" })
       -- maybe log exit_code or append a separator...
     end,
   })
@@ -266,22 +269,14 @@ function M.select_model()
     return
   end
 
-  local pick = require('mini.pick')
-  pick.start({
-    source = {
-      items = models,
-      name = 'LLM Models',
-    },
-    prompt = 'Select LLM model:',
-    on_confirm = function(item)
-      if item then
-        M.selected_model = item
-        notify_func('Selected LLM model: ' .. item, vim.log.levels.WARN, { title = 'LLM model' })
-      else
-        notify_func('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
-      end
-    end,
-  })
+  pick_func(models, {}, function(item)
+    if item then
+      M.selected_model = item
+      notify_func('Selected LLM model: ' .. item, vim.log.levels.WARN, { title = 'LLM model' })
+    else
+      notify_func('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
+    end
+  end)
 end
 
 -- set up user commands and the keymaps you requested.
@@ -296,4 +291,5 @@ function M.setup()
   vim.keymap.set('n', '<leader>st', M.toggle_llm_buffer, { desc = 'Toggle LLM buffer visibility' })
   vim.keymap.set('n', '<leader>sm', M.select_model, { desc = 'Select LLM model' })
 end
+
 return M

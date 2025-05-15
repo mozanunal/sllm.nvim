@@ -138,9 +138,15 @@ function M.add_current_file_to_context()
     context_path = abspath
   end
 
-  table.insert(llm_context, context_path)
-  -- Also store the filename in llm_context
-  notify_func('[sllm] context + ' .. context_path, vim.log.levels.INFO)
+  -- Check if the file is already in the context
+  local is_in_context = vim.tbl_contains(llm_context, context_path)
+  if not is_in_context then
+    table.insert(llm_context, context_path)
+    -- Also store the filename in llm_context
+    notify_func('[sllm] context + ' .. context_path, vim.log.levels.INFO)
+  else
+    notify_func('[sllm] file already in context: ' .. context_path, vim.log.levels.WARN)
+  end
 end
 
 function M.reset_context()

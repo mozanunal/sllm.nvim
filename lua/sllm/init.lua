@@ -172,6 +172,11 @@ function M.ask_llm()
     notify_func('[sllm] no prompt provided.', vim.log.levels.INFO)
     return
   end
+  -- Prevent multiple LLM jobs running at once:
+  if llm_job_id then
+    notify_func('[sllm] already running, please wait.', vim.log.levels.WARN)
+    return
+  end
 
   if visual_selection then
     user_input = user_input .. '\nSelection: \n```' .. table.concat(visual_selection, '\n') .. '```\n'
@@ -205,11 +210,7 @@ function M.ask_llm()
   end
   append_to_llm_buffer({ '## Response', '' })
 
-  -- Prevent multiple LLM jobs running at once:
-  if llm_job_id then
-    notify_func('[sllm] already running, please wait.', vim.log.levels.WARN)
-    return
-  end
+
   -- Run `llm` asynchronously an d stream output to the buffer.
   -- somewhere at the top of your module/file
   local stdout_acc = ''

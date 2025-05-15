@@ -8,6 +8,7 @@ M.show_usage = false
 -- Private vars
 local llm_buf = nil
 local llm_context = nil
+local llm_job_active = false
 -- local notify_func = vim.notify
 local notify_func = require('mini.notify').make_notify()
 -- local pick_func = vim.ui.select
@@ -140,6 +141,14 @@ end
 
 -- prompt user for input, run `llm`, and stream output to the buffer.
 function M.ask_llm()
+  -- Prevent multiple LLM jobs running at once:
+  if llm_job_active then
+    notify_func('LLM is busy. Please wait for the current request to finish.', vim.log.levels.WARN,
+      { title = 'sllm.nvim' })
+    return
+  end
+  llm_job_active = true
+
   local visual_selection = get_visual_selection()
   local user_input = vim.fn.input('Prompt: ')
   if user_input == '' then
@@ -182,6 +191,7 @@ function M.ask_llm()
   -- Run `llm` asynchronously an d stream output to the buffer.
   -- somewhere at the top of your module/file
   local stdout_acc = ''
+  notify_func('LLM thinking...🤔', vim.log.levels.INFO, { title = 'LLM model' })
 
   vim.fn.jobstart(cmd, {
     stdout_buffered = false,
@@ -226,6 +236,8 @@ function M.ask_llm()
         stdout_acc = ''
       end
       append_to_llm_buffer({ "" })
+      llm_job_active = false
+      notify_func('LLM done ✅', vim.log.levels.INFO, { title = 'LLM model' })
       -- maybe log exit_code or append a separator...
     end,
   })
@@ -272,7 +284,7 @@ function M.select_model()
   pick_func(models, {}, function(item)
     if item then
       M.selected_model = item
-      notify_func('Selected LLM model: ' .. item, vim.log.levels.WARN, { title = 'LLM model' })
+      notify_func('Selected LLM model: ' .. item, vim.log.levels.INFO, { title = 'LLM model' })
     else
       notify_func('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
     end

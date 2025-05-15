@@ -8,7 +8,9 @@ M.show_usage = false
 -- Private vars
 local llm_buf = nil
 local llm_context = nil
-local llm_job_active = false
+local llm_job_id = nil
+local cwd = vim.fn.getcwd()
+
 -- local notify_func = vim.notify
 local notify_func = require('mini.notify').make_notify()
 -- local pick_func = vim.ui.select
@@ -95,7 +97,7 @@ function M.new_chat()
   M.continue = false
   clean_llm_buffer()
   show_llm_buffer()
-  append_to_llm_buffer({ 'New chat created.' })
+  notify_func('[sllm] new chat created', vim.log.levels.INFO)
   M.ask_llm()
   M.continue = true
 end
@@ -127,32 +129,41 @@ function M.add_current_file_to_context()
   llm_context = llm_context or {}
 
   -- Get the filenam from the active buffer
-  local filename = vim.api.nvim_buf_get_name(0)
+  local abspath = vim.api.nvim_buf_get_name(0)
+  local relpath = vim.fs.relpath(cwd, abspath)
+  local context_path = nil
+  if relpath then
+    context_path = relpath
+  else
+    context_path = abspath
+  end
 
+  table.insert(llm_context, context_path)
   -- Also store the filename in llm_context
-  table.insert(llm_context, filename)
-  notify_func('File added to LLM context: ' .. filename, vim.log.levels.INFO, { title = 'LLM Context' })
+  notify_func('[sllm] context + ' .. context_path, vim.log.levels.INFO)
 end
 
 function M.reset_context()
   llm_context = nil -- Clear the context
-  notify_func('LLM context has been reset.', vim.log.levels.INFO, { title = 'LLM Context' })
+  notify_func('[sllm] context reset.', vim.log.levels.INFO)
+end
+
+function M.cancel()
+  if llm_job_id then
+    vim.fn.jobstop(llm_job_id)
+    notify_func('[sllm] canceled ❌', vim.log.levels.WARN)
+    llm_job_id = nil
+  else
+    notify_func('[sllm] no active llm job', vim.log.levels.INFO)
+  end
 end
 
 -- prompt user for input, run `llm`, and stream output to the buffer.
 function M.ask_llm()
-  -- Prevent multiple LLM jobs running at once:
-  if llm_job_active then
-    notify_func('LLM is busy. Please wait for the current request to finish.', vim.log.levels.WARN,
-      { title = 'sllm.nvim' })
-    return
-  end
-  llm_job_active = true
-
   local visual_selection = get_visual_selection()
   local user_input = vim.fn.input('Prompt: ')
   if user_input == '' then
-    notify_func('No prompt provided.', vim.log.levels.INFO, { title = 'sllm.nvim' })
+    notify_func('[sllm] no prompt provided.', vim.log.levels.INFO)
     return
   end
 
@@ -188,12 +199,17 @@ function M.ask_llm()
   end
   append_to_llm_buffer({ '## Response', '' })
 
+  -- Prevent multiple LLM jobs running at once:
+  if llm_job_id then
+    notify_func('[sllm] already running, please wait.', vim.log.levels.WARN)
+    return
+  end
   -- Run `llm` asynchronously an d stream output to the buffer.
   -- somewhere at the top of your module/file
   local stdout_acc = ''
-  notify_func('LLM thinking...🤔', vim.log.levels.INFO, { title = 'LLM model' })
+  notify_func('[sllm] thinking...🤔', vim.log.levels.INFO)
 
-  vim.fn.jobstart(cmd, {
+  llm_job_id = vim.fn.jobstart(cmd, {
     stdout_buffered = false,
     pty = true,
     on_stdout = function(_, data, _)
@@ -236,8 +252,8 @@ function M.ask_llm()
         stdout_acc = ''
       end
       append_to_llm_buffer({ "" })
-      llm_job_active = false
-      notify_func('LLM done ✅', vim.log.levels.INFO, { title = 'LLM model' })
+      llm_job_id = nil
+      notify_func('[sllm] done ✅', vim.log.levels.INFO)
       -- maybe log exit_code or append a separator...
     end,
   })
@@ -277,16 +293,16 @@ end
 function M.select_model()
   local models = extract_models()
   if not (models and #models > 0) then
-    notify_func('No models found from `llm models`', vim.log.levels.ERROR, { title = 'LLM model' })
+    notify_func('[sllm] no models found.', vim.log.levels.ERROR)
     return
   end
 
   pick_func(models, {}, function(item)
     if item then
       M.selected_model = item
-      notify_func('Selected LLM model: ' .. item, vim.log.levels.INFO, { title = 'LLM model' })
+      notify_func('[sllm] selected model: ' .. item, vim.log.levels.INFO)
     else
-      notify_func('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
+      notify_func('[sllm] llm model not changed', vim.log.levels.WARN)
     end
   end)
 end
@@ -297,6 +313,7 @@ function M.setup()
   vim.keymap.set('n', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('v', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
+  vim.keymap.set('n', '<leader>sc', M.cancel, { desc = 'Cancel LLM request' })
   vim.keymap.set('n', '<leader>sa', M.add_current_file_to_context, { desc = 'Add file to llm context' })
   vim.keymap.set('n', '<leader>sr', M.reset_context, { desc = 'Reset LLM context' })
   vim.keymap.set('n', '<leader>sf', M.focus_llm_window, { desc = 'Focus LLM window' })

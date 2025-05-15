@@ -1,13 +1,15 @@
 local M = {}
 
--- Module vars
-local llm_buf = nil
-local llm_context = nil
+-- Public vars
 M.selected_model = nil
 M.continue = true
 M.show_usage = false
 
-local mini_notify = require("mini.notify")
+-- Private vars
+local llm_buf = nil
+local llm_context = nil
+-- local notify_func = vim.notify
+local notify_func = require('mini.notify').make_notify()
 
 -- Private functions
 local function buf_is_valid(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
@@ -126,12 +128,12 @@ function M.add_current_file_to_context()
 
   -- Also store the filename in llm_context
   table.insert(llm_context, filename)
-  mini_notify.add('File added to LLM context: ' .. filename, vim.log.levels.INFO, { title = 'LLM Context' })
+  notify_func('File added to LLM context: ' .. filename, vim.log.levels.INFO, { title = 'LLM Context' })
 end
 
 function M.reset_context()
   llm_context = nil -- Clear the context
-  mini_notify.add('LLM context has been reset.', vim.log.levels.INFO, { title = 'LLM Context' })
+  notify_func('LLM context has been reset.', vim.log.levels.INFO, { title = 'LLM Context' })
 end
 
 -- prompt user for input, run `llm`, and stream output to the buffer.
@@ -139,7 +141,7 @@ function M.ask_llm()
   local visual_selection = get_visual_selection()
   local user_input = vim.fn.input('Prompt: ')
   if user_input == '' then
-    print('No prompt provided.')
+    notify_func('No prompt provided.', vim.log.levels.INFO, { title = 'sllm.nvim' })
     return
   end
 
@@ -260,7 +262,7 @@ end
 function M.select_model()
   local models = extract_models()
   if not (models and #models > 0) then
-    mini_notify.add('No models found from `llm models`', vim.log.levels.ERROR, { title = 'LLM model' })
+    notify_func('No models found from `llm models`', vim.log.levels.ERROR, { title = 'LLM model' })
     return
   end
 
@@ -274,9 +276,9 @@ function M.select_model()
     on_confirm = function(item)
       if item then
         M.selected_model = item
-        mini_notify.add('Selected LLM model: ' .. item, vim.log.levels.INFO, { title = 'LLM model' })
+        notify_func('Selected LLM model: ' .. item, vim.log.levels.WARN, { title = 'LLM model' })
       else
-        mini_notify.add('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
+        notify_func('No LLM model selected', vim.log.levels.WARN, { title = 'LLM model' })
       end
     end,
   })
@@ -289,10 +291,9 @@ function M.setup()
   vim.keymap.set('v', '<leader>ss', M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set('n', '<leader>sn', M.new_chat, { desc = 'New LLM chat' })
   vim.keymap.set('n', '<leader>sa', M.add_current_file_to_context, { desc = 'Add file to llm context' })
-  vim.keymap.set('n', '<leader>sr', M.reset_context, { desc = 'Reset LLM context' }) -- Keymap for resetting context
+  vim.keymap.set('n', '<leader>sr', M.reset_context, { desc = 'Reset LLM context' })
   vim.keymap.set('n', '<leader>sf', M.focus_llm_window, { desc = 'Focus LLM window' })
   vim.keymap.set('n', '<leader>st', M.toggle_llm_buffer, { desc = 'Toggle LLM buffer visibility' })
   vim.keymap.set('n', '<leader>sm', M.select_model, { desc = 'Select LLM model' })
 end
-
 return M

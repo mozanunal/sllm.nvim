@@ -10,7 +10,7 @@ local config = {
   default_model = 'gpt-4.1',
   show_usage = true,
   on_start_new_chat = true,
-  reset_context_after_each_prompt = true,
+  reset_ctx_each_prompt = true,
   pick_func = require('mini.pick').ui_select, -- vim.notify
   notify_func = require('mini.notify').make_notify(), -- vim.ui.select
   keymaps = {
@@ -22,7 +22,7 @@ local config = {
     select_model = '<leader>sm',
     add_file_to_ctx = '<leader>sa',
     add_sel_to_ctx = '<leader>sv',
-    add_diagnostics_to_ctx = '<leader>sd',
+    add_diag_to_ctx = '<leader>sd',
     reset_context = '<leader>sr',
   },
 }
@@ -48,12 +48,7 @@ M.setup = function(user_config)
   vim.keymap.set({ 'n', 'v' }, km.toggle_llm_buffer, M.toggle_llm_buffer, { desc = 'Toggle LLM buffer' })
   vim.keymap.set({ 'n', 'v' }, km.select_model, M.select_model, { desc = 'Select LLM model' })
   vim.keymap.set({ 'n', 'v' }, km.add_file_to_ctx, M.add_file_to_ctx, { desc = 'Add file to llm context' })
-  vim.keymap.set(
-    { 'n', 'v' },
-    km.add_diagnostics_to_ctx,
-    M.add_diagnostics_to_ctx,
-    { desc = 'Add diagnostics to context' }
-  )
+  vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
   vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
@@ -102,7 +97,7 @@ M.ask_llm = function()
   JobMan.start(cmd, function(line) Ui.append_to_llm_buffer({ line }) end, function(exit_code)
     notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
     Ui.append_to_llm_buffer({ '' })
-    CtxMan.reset()
+    if config.reset_ctx_each_prompt then CtxMan.reset() end
   end)
 end
 
@@ -197,7 +192,7 @@ M.add_sel_to_ctx = function()
   notify('[sllm] Added selection to context.', vim.log.levels.INFO)
 end
 
-M.add_diagnostics_to_ctx = function()
+M.add_diag_to_ctx = function()
   local bufnr = vim.api.nvim_get_current_buf()
   local diagnostics = vim.diagnostic.get(bufnr)
   if not diagnostics or #diagnostics == 0 then

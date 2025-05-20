@@ -22,6 +22,7 @@ local config = {
     select_model = '<leader>sm',
     add_file_to_ctx = '<leader>sa',
     add_sel_to_ctx = '<leader>sv',
+    add_diagnostics_to_ctx = '<leader>sd',
     reset_context = '<leader>sr',
   },
 }
@@ -47,6 +48,12 @@ M.setup = function(user_config)
   vim.keymap.set({ 'n', 'v' }, km.toggle_llm_buffer, M.toggle_llm_buffer, { desc = 'Toggle LLM buffer' })
   vim.keymap.set({ 'n', 'v' }, km.select_model, M.select_model, { desc = 'Select LLM model' })
   vim.keymap.set({ 'n', 'v' }, km.add_file_to_ctx, M.add_file_to_ctx, { desc = 'Add file to llm context' })
+  vim.keymap.set(
+    { 'n', 'v' },
+    km.add_diagnostics_to_ctx,
+    M.add_diagnostics_to_ctx,
+    { desc = 'Add diagnostics to context' }
+  )
   vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
@@ -188,6 +195,27 @@ M.add_sel_to_ctx = function()
 
   CtxMan.add_snip(text, Utils.get_relpath(Utils.get_path_of_buffer(0)), vim.bo.filetype)
   notify('[sllm] Added selection to context.', vim.log.levels.INFO)
+end
+
+M.add_diagnostics_to_ctx = function()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local diagnostics = vim.diagnostic.get(bufnr)
+  if not diagnostics or #diagnostics == 0 then
+    notify('[sllm] No diagnostics found in this buffer.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Format diagnostics
+  local formatted = {}
+  for _, d in ipairs(diagnostics) do
+    local msg = d.message:gsub('%s+', ' '):gsub('^%s*(.-)%s*$', '%1')
+    local lnum = d.lnum and (d.lnum + 1) or '?'
+    local col = d.col and (d.col + 1) or '?'
+    table.insert(formatted, ('[L%d,C%d] %s'):format(lnum, col, msg))
+  end
+  local text = 'diagnostics:\n' .. table.concat(formatted, '\n')
+  CtxMan.add_snip(text, Utils.get_relpath(Utils.get_path_of_buffer(bufnr)), vim.bo.filetype)
+  notify('[sllm] Added diagnostics to context.', vim.log.levels.INFO)
 end
 
 M.reset_context = function()

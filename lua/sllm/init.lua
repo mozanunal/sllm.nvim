@@ -11,8 +11,8 @@ local config = {
   show_usage = true,
   on_start_new_chat = true,
   reset_ctx_each_prompt = true,
-  pick_func = require('mini.pick').ui_select, -- vim.notify
-  notify_func = require('mini.notify').make_notify(), -- vim.ui.select
+  pick_func = require('mini.pick').ui_select,
+  notify_func = require('mini.notify').make_notify(),
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -24,6 +24,7 @@ local config = {
     add_url_to_ctx = '<leader>su',
     add_sel_to_ctx = '<leader>sv',
     add_diag_to_ctx = '<leader>sd',
+    add_cmd_out_to_ctx = '<leader>sx',
     reset_context = '<leader>sr',
   },
 }
@@ -51,6 +52,7 @@ M.setup = function(user_config)
   vim.keymap.set({ 'n', 'v' }, km.add_file_to_ctx, M.add_file_to_ctx, { desc = 'Add file to llm context' })
   vim.keymap.set({ 'n', 'v' }, km.add_url_to_ctx, M.add_url_to_ctx, { desc = 'Add URL to LLM context' })
   vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
+  vim.keymap.set({ 'n', 'v' }, km.add_cmd_out_to_ctx, M.add_cmd_out_to_ctx, { desc = 'Add command output to context' })
   vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
@@ -193,6 +195,57 @@ M.add_diag_to_ctx = function()
   local text = 'diagnostics:\n' .. table.concat(formatted, '\n')
   CtxMan.add_snip(text, Utils.get_relpath(Utils.get_path_of_buffer(bufnr)), vim.bo.filetype)
   notify('[sllm] Added diagnostics to context.', vim.log.levels.INFO)
+end
+
+-- New function to add command output to context
+M.add_cmd_out_to_ctx = function()
+  local cmd_input_raw = vim.fn.input('Command: ')
+  if cmd_input_raw == '' then
+    notify('[sllm] no command provided.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Expand Vim special characters like % (current file), # (alternate file), etc.
+  local cmd_to_run = vim.fn.expandcmd(cmd_input_raw)
+
+  if cmd_to_run == '' then
+    notify('[sllm] expanded command is empty.', vim.log.levels.WARN)
+    return
+  end
+
+  notify('[sllm] running command: ' .. cmd_to_run, vim.log.levels.INFO)
+
+  vim.system({ "bash", "-c", cmd_to_run }, { text = true }, function(job_result)
+    if job_result.code ~= 0 then
+      local error_msg = '[sllm] command failed with exit code ' .. job_result.code
+      if job_result.stderr and job_result.stderr ~= '' then
+        error_msg = error_msg .. '\nStderr:\n' .. vim.trim(job_result.stderr)
+      end
+      notify(error_msg, vim.log.levels.ERROR)
+      return
+    end
+
+    local output_stdout = vim.trim(job_result.stdout or "")
+    local output_stderr = vim.trim(job_result.stderr or "")
+    local combined_output = output_stdout
+
+    if output_stderr ~= '' then
+      if combined_output ~= '' then
+        combined_output = combined_output .. "\n--- stderr ---\n" .. output_stderr
+      else
+        combined_output = "--- stderr ---\n" .. output_stderr
+      end
+    end
+
+    if combined_output == '' then
+      notify('[sllm] command produced no output.', vim.log.levels.WARN)
+      return
+    end
+
+    -- Use the raw command input for the snip "filepath" for user clarity
+    CtxMan.add_snip(combined_output, 'Command: ' .. cmd_input_raw, 'text')
+    notify('[sllm] added command output to context.', vim.log.levels.INFO)
+  end)
 end
 
 M.reset_context = function()

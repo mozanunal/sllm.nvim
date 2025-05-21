@@ -38,6 +38,8 @@ ${snippets}
 ${files}
 ]]
 
+--- @param template string
+--- @param vars table<string, any>
 local function render_template(template, vars)
   return (template:gsub('%${(.-)}', function(key) return tostring(vars[key]) or '' end))
 end

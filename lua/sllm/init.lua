@@ -13,21 +13,8 @@ local config = {
   reset_ctx_each_prompt = true,
   pick_func = require('mini.pick').ui_select,
   notify_func = require('mini.notify').make_notify(),
-  keymaps = {
-    ask_llm = '<leader>ss',
-    new_chat = '<leader>sn',
-    cancel = '<leader>sc',
-    focus_llm_buffer = '<leader>sf',
-    toggle_llm_buffer = '<leader>st',
-    select_model = '<leader>sm',
-    add_file_to_ctx = '<leader>sa',
-    add_url_to_ctx = '<leader>su',
-    add_sel_to_ctx = '<leader>sv',
-    add_diag_to_ctx = '<leader>sd',
-    add_cmd_out_to_ctx = '<leader>sx',
-    reset_context = '<leader>sr',
-  },
 }
+
 
 local state = {
   llm_job_id = nil,
@@ -41,11 +28,10 @@ local pick = vim.ui.select
 
 --- @param user_config table<string, table>
 local function set_keymaps(user_config)
-  local u = user_config or {}
-  local user_keymaps = u.keymaps or {}
+  local user_keymaps = user_config.keymaps or {}
 
-  for f, lhs in pairs(user_keymaps) do
-    vim.keymap.set({'n', 'v'}, lhs, M[f])
+  for functionality, map in pairs(user_keymaps) do
+    vim.keymap.set(map[1], map[2], M[functionality], map[3])
   end
 end
 
@@ -53,22 +39,8 @@ end
 M.setup = function(user_config)
   config = vim.tbl_deep_extend('force', {}, config, user_config or {})
 
-  set_keymaps(user_config)
-
   -- set keymaps
-  local km = config.keymaps -- local shorter alias to avoid repetition
-  -- vim.keymap.set({ 'n', 'v' }, km.ask_llm, M.ask_llm, { desc = 'Ask LLM' })
-  -- vim.keymap.set({ 'n', 'v' }, km.new_chat, M.new_chat, { desc = 'New LLM chat' })
-  -- vim.keymap.set({ 'n', 'v' }, km.cancel, M.cancel, { desc = 'Cancel LLM request' })
-  -- vim.keymap.set({ 'n', 'v' }, km.focus_llm_buffer, M.focus_llm_buffer, { desc = 'Focus LLM buffer' })
-  -- vim.keymap.set({ 'n', 'v' }, km.toggle_llm_buffer, M.toggle_llm_buffer, { desc = 'Toggle LLM buffer' })
-  -- vim.keymap.set({ 'n', 'v' }, km.select_model, M.select_model, { desc = 'Select LLM model' })
-  -- vim.keymap.set({ 'n', 'v' }, km.add_file_to_ctx, M.add_file_to_ctx, { desc = 'Add file to llm context' })
-  -- vim.keymap.set({ 'n', 'v' }, km.add_url_to_ctx, M.add_url_to_ctx, { desc = 'Add URL to LLM context' })
-  -- vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
-  -- vim.keymap.set({ 'n', 'v' }, km.add_cmd_out_to_ctx, M.add_cmd_out_to_ctx, { desc = 'Add command output to context' })
-  -- vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
-  -- vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
+  set_keymaps(user_config or {})
 
   -- set state
   if config.on_start_new_chat then

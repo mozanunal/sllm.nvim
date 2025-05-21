@@ -1,4 +1,7 @@
+
 # sllm.nvim
+
+<img src="./assets/logo.png" alt="sllm.nvim Logo" width="120"/>
 
 **sllm.nvim** is a Neovim plugin that integrates Simon Willison’s [`llm`](https://github.com/simonw/llm) CLI directly into your editor.
 Chat with large language models, stream responses in a scratch buffer, manage context files, switch models on the fly, and control everything asynchronously without leaving Neovim.
@@ -9,7 +12,7 @@ The [`llm`](https://llm.datasette.io/en/stable/) command-line tool by Simon Will
 
 I was particularly inspired by Simon's explorations into `llm`'s [fragment features for long-context LLMs](https://simonwillison.net/2025/Apr/7/long-context-llm/). It struck me how beneficial it would be to seamlessly manage and enrich this context directly within Neovim, my primary development environment.
 
-Like many developers, I found myself frequently switching to web UIs like ChatGPT, painstakingly copying and pasting code snippets, file contents, and error messages to provide the necessary context for the AI. This interruption broke my workflow and felt inefficient. `sllm.nvim` was born out of the desire to streamline this process, creating a simple yet powerful Neovim plugin to manage LLM context and chat without ever leaving the editor.
+Like many developers, I found myself frequently switching to web UIs like ChatGPT, painstakingly copying and pasting code snippets, file contents, and error messages to provide the necessary context for the AI. This interruption broke my workflow and felt inefficient. `sllm.nvim` was born out of the desire to streamline this process. Contained within around 500 lines of Lua, it aims to be a simple yet powerful Neovim plugin. The heavy lifting of LLM interaction is delegated to the robust `llm` CLI. For the user interface components, I've chosen to leverage the excellent utilities from `mini.nvim` – a library I personally use for my own Neovim configuration – and plan to continue using its modules for any future UI enhancements. The focus of `sllm.nvim` is to orchestrate these components to manage LLM context and chat without ever leaving the editor.
 
 As Simon Willison also discussed in his post on [using LLMs for code](https://simonwillison.net/2025/Mar/11/using-llms-for-code/), effective context management is key. `sllm.nvim` aims to significantly contribute to such a workflow by making context gathering and LLM interaction a native part of the Neovim experience.
 
@@ -167,6 +170,10 @@ require("sllm").setup({
 9.  Switch models interactively with `<leader>sm`.
 10. Cancel a running request with `<leader>sc`.
 
+### Visual Workflow
+
+![sllm.nvim Workflow](./assets/workflow.png)
+
 ---
 
 ## Internals
@@ -186,9 +193,9 @@ require("sllm").setup({
 
 ## Contributions & Credits
 
-- Powered by Simon Willison’s [`llm`](https://github.com/simonw/llm) CLI.
-- UI and picker powered by [echasnovski/mini.nvim](https://github.com/echasnovski/mini.nvim).
-- Created and maintained by **mozanunal**.
+- The core LLM interaction is powered by Simon Willison’s excellent [`llm`](https://github.com/simonw/llm) CLI.
+- The user interface components (notifications, pickers) are provided by the versatile [echasnovski/mini.nvim](https://github.com/echasnovski/mini.nvim) library.
+- `sllm.nvim` itself is created and maintained by **mozanunal**, focusing on integrating these tools smoothly into Neovim.
 
 ---
 

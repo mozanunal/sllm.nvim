@@ -2,6 +2,12 @@ local M = {}
 
 local llm_job_id = nil
 local stdout_acc = ''
+local ansi_escape_pattern = '[\27\155][][()#;?%][0-9;]*[A-Za-z@^_`{|}~]'
+
+--- Removes ANSI escape codes from a string.
+-- @param text string The input string possibly containing ANSI escape codes.
+-- @return string The string with ANSI escape codes removed.
+local function strip_ansi_codes(text) return text:gsub(ansi_escape_pattern, '') end
 
 M.is_busy = function()
   if llm_job_id then
@@ -27,7 +33,7 @@ M.start = function(cmd, hook_on_newline, hook_on_exit)
           while cr_pos do
             -- the text up to (but not including) the '\r'
             local line = stdout_acc:sub(1, cr_pos - 1)
-            hook_on_newline(line)
+            hook_on_newline(strip_ansi_codes(line))
 
             -- drop the flushed part + the '\r' itself
             stdout_acc = stdout_acc:sub(cr_pos + 1)
@@ -41,7 +47,7 @@ M.start = function(cmd, hook_on_newline, hook_on_exit)
     on_stderr = function(_, data, _)
       if data then
         for _, line in ipairs(data) do
-          hook_on_newline(line)
+          hook_on_newline(strip_ansi_codes(line))
         end
       end
     end,

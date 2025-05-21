@@ -1,7 +1,7 @@
 local M = {}
 
 local context = {
-  files = {},
+  fragments = {},
   snips = {},
 }
 
@@ -9,14 +9,14 @@ M.get = function() return context end
 
 M.reset = function()
   context = {
-    files = {},
+    fragments = {},
     snips = {},
   }
 end
 
-M.add_file = function(filepath)
-  local is_in_context = vim.tbl_contains(context.files, filepath)
-  if not is_in_context then table.insert(context.files, filepath) end
+M.add_fragment = function(filepath)
+  local is_in_context = vim.tbl_contains(context.fragments, filepath)
+  if not is_in_context then table.insert(context.fragments, filepath) end
 end
 
 M.add_snip = function(text, filepath, filetype)
@@ -39,7 +39,6 @@ ${files}
 ]]
 
 local function render_template(template, vars)
-  print(table.concat(vars, '\n'))
   return (template:gsub('%${(.-)}', function(key) return tostring(vars[key]) or '' end))
 end
 
@@ -48,9 +47,9 @@ M.render_template = render_template
 M.render_prompt_ui = function(user_input)
   -- Assemble files section
   local files_list = ''
-  if #context.files > 0 then
-    files_list = '\n### Files\n'
-    for _, f in ipairs(context.files) do
+  if #context.fragments > 0 then
+    files_list = '\n### Fragments\n'
+    for _, f in ipairs(context.fragments) do
       files_list = files_list .. render_template(tmpl_files, { filepath = f }) .. '\n'
     end
     files_list = files_list .. '\n'

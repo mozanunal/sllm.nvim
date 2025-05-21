@@ -1,5 +1,9 @@
 local M = {}
 
+M.print_table = function(t)
+  print(table.concat(t, "\n==="))
+end
+
 M.buf_is_valid = function(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
 
 M.is_mode_visual = function()
@@ -8,13 +12,7 @@ M.is_mode_visual = function()
 end
 
 M.get_visual_selection = function()
-  -- Check if there is a visual selection
-  if M.is_mode_visual() then
-    local _, ls, cs = unpack(vim.fn.getpos('v'))
-    local _, le, ce = unpack(vim.fn.getpos('.'))
-    return vim.api.nvim_buf_get_text(0, ls - 1, cs - 1, le - 1, ce, {})
-  end
-  return nil -- No selection
+  return table.concat(vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos(".")), "\n")
 end
 
 M.get_path_of_buffer = function(buf)
@@ -27,6 +25,7 @@ M.get_path_of_buffer = function(buf)
 end
 
 M.get_relpath = function(abspath)
+  if abspath == nil then return abspath end
   local cwd = vim.uv.cwd()
   if cwd == nil then return abspath end
   local relpath = vim.fs.relpath(cwd, abspath)

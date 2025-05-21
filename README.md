@@ -3,6 +3,16 @@
 **sllm.nvim** is a Neovim plugin that integrates Simon Willison’s [`llm`](https://github.com/simonw/llm) CLI directly into your editor.
 Chat with large language models, stream responses in a scratch buffer, manage context files, switch models on the fly, and control everything asynchronously without leaving Neovim.
 
+## Preface: Why sllm.nvim?
+
+The [`llm`](https://llm.datasette.io/en/stable/) command-line tool by Simon Willison (creator of Django, Datasette, and sqlite-utils) is a wonderfully extensible way to interact with Large Language Models. Its power lies in its simplicity and vast plugin ecosystem, allowing users to tap into numerous models directly from the terminal.
+
+I was particularly inspired by Simon's explorations into `llm`'s [fragment features for long-context LLMs](https://simonwillison.net/2025/Apr/7/long-context-llm/). It struck me how beneficial it would be to seamlessly manage and enrich this context directly within Neovim, my primary development environment.
+
+Like many developers, I found myself frequently switching to web UIs like ChatGPT, painstakingly copying and pasting code snippets, file contents, and error messages to provide the necessary context for the AI. This interruption broke my workflow and felt inefficient. `sllm.nvim` was born out of the desire to streamline this process, creating a simple yet powerful Neovim plugin to manage LLM context and chat without ever leaving the editor.
+
+As Simon Willison also discussed in his post on [using LLMs for code](https://simonwillison.net/2025/Mar/11/using-llms-for-code/), effective context management is key. `sllm.nvim` aims to significantly contribute to such a workflow by making context gathering and LLM interaction a native part of the Neovim experience.
+
 ---
 
 ## Features

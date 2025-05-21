@@ -102,6 +102,7 @@ use({
 Call `require("sllm").setup()` with an optional table:
 
 ```lua
+
 require("sllm").setup({
   default_model            = "gpt-4.1",  -- default llm model
   show_usage               = true,       -- append usage stats to responses
@@ -110,18 +111,18 @@ require("sllm").setup({
   pick_func                = require("mini.pick").ui_select, -- function for item selection (like vim.ui.select)
   notify_func              = require("mini.notify").make_notify(), -- function for notifications (like vim.notify)
   keymaps = {
-    ask_llm                  = "<leader>ss",  -- prompt the LLM
-    new_chat                 = "<leader>sn",  -- clear chat buffer
-    cancel                   = "<leader>sc",  -- cancel ongoing request
-    focus_llm_buffer         = "<leader>sf",  -- jump to LLM buffer
-    toggle_llm_buffer        = "<leader>st",  -- show/hide buffer
-    select_model             = "<leader>sm",  -- choose a model
-    add_file_to_ctx          = "<leader>sa",  -- add current file to context
-    add_url_to_ctx           = "<leader>su",  -- add a URL's content to context
-    add_sel_to_ctx           = "<leader>sv",  -- add visual selection to context
-    add_diag_to_ctx          = "<leader>sd",  -- add diagnostics to context
-    add_cmd_out_to_ctx       = "<leader>sx",  -- add shell command output to context
-    reset_context            = "<leader>sr",  -- clear all context
+    ask_llm = { { "n", "v" }, "<leader>ss", { desc = "Ask LLM" } },
+    new_chat = { { "n", "v" }, "<leader>sn", { desc = "New LLM chat" } },
+    cancel = { { "n", "v" }, "<leader>sc", { desc = "Cancel LLM request" } },
+    focus_llm_buffer = { { "n", "v" }, "<leader>sf", { desc = "Focus LLM buffer" } },
+    toggle_llm_buffer = { { "n", "v" }, "<leader>st", { desc = "Toggle LLM buffer" } },
+    select_model = { { "n", "v" }, "<leader>sm", { desc = "Select LLM model" } },
+    add_file_to_ctx = { { "n", "v" }, "<leader>sa", { desc = "Add file to llm context" } },
+    add_url_to_ctx = { { "n", "v" }, "<leader>su", { desc = "Add URL to LLM context" } },
+    add_sel_to_ctx = { { "n", "v" }, "<leader>sv", { desc = "Add diagnostics to context" } },
+    add_diag_to_ctx = { { "n", "v" }, "<leader>sd", { desc = "Add command output to context" } },
+    add_cmd_out_to_ctx = { { "n", "v" }, "<leader>sx", { desc = "Reset LLM context" } },
+    reset_context = { "v", "<leader>sr", { desc = "Add visual selection to context" } },
   },
 })
 ```

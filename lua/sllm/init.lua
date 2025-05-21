@@ -44,8 +44,8 @@ local function set_keymaps(user_config)
   local u = user_config or {}
   local user_keymaps = u.keymaps or {}
 
-  for lhs, rhs in pairs(user_config) do
-    vim.keymap.set({'n', 'v'}, lhs, M[rhs])
+  for f, lhs in pairs(user_keymaps) do
+    vim.keymap.set({'n', 'v'}, lhs, M[f])
   end
 end
 

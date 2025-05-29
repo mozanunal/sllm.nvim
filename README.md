@@ -108,8 +108,12 @@ require("sllm").setup({
   on_start_new_chat        = true, -- start fresh chat on setup
   reset_ctx_each_prompt    = true, -- clear file context each ask
   window_type              = "vertical", -- Default. Options: "vertical", "horizontal", "float"
-  pick_func                = require("mini.pick").ui_select, -- function for item selection (like vim.ui.select)
-  notify_func              = require("mini.notify").make_notify(), -- function for notifications (like vim.notify)
+  -- function for item selection (like vim.ui.select)
+  -- tested alternatives: vim.ui.select, require("mini.pick").ui_select, require("snacks.picker").select
+  pick_func                = require("mini.pick").ui_select,
+  -- function for notifications (like vim.notify)
+  -- tested alternatives: vim.notify, require("mini.notify").make_notify(), require("snacks.notifier").notify
+  notify_func              = require("mini.notify").make_notify(),
   keymaps = {
     ask_llm                  = "<leader>ss",  -- prompt the LLM
     new_chat                 = "<leader>sn",  -- clear chat buffer

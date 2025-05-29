@@ -11,6 +11,7 @@ local config = {
   show_usage = true,
   on_start_new_chat = true,
   reset_ctx_each_prompt = true,
+  window_type = 'vertical', -- or 'horizontal' or 'float'
   pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
   notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
   keymaps = {
@@ -75,7 +76,7 @@ M.ask_llm = function()
     notify('[sllm] no prompt provided.', vim.log.levels.INFO)
     return
   end
-  Ui.show_llm_buffer()
+  Ui.show_llm_buffer(config.window_type)
 
   -- Prevent multiple LLM jobs running at once:
   if JobMan.is_busy() then
@@ -116,14 +117,14 @@ end
 
 M.new_chat = function()
   state.continue = false
-  Ui.show_llm_buffer()
+  Ui.show_llm_buffer(config.window_type)
   Ui.clean_llm_buffer()
   notify('[sllm] new chat created', vim.log.levels.INFO)
 end
 
-M.focus_llm_buffer = function() Ui.focus_llm_buffer() end
+M.focus_llm_buffer = function() Ui.focus_llm_buffer(config.window_type) end
 
-M.toggle_llm_buffer = function() Ui.toggle_llm_buffer() end
+M.toggle_llm_buffer = function() Ui.toggle_llm_buffer(config.window_type) end
 
 M.select_model = function()
   local models = Backend.extract_models()

@@ -103,10 +103,11 @@ Call `require("sllm").setup()` with an optional table:
 
 ```lua
 require("sllm").setup({
-  default_model            = "gpt-4.1",  -- default llm model
-  show_usage               = true,       -- append usage stats to responses
-  on_start_new_chat        = true,       -- start fresh chat on setup
-  reset_ctx_each_prompt = true,  -- clear file context each ask
+  default_model            = "gpt-4.1", -- default llm model
+  show_usage               = true, -- append usage stats to responses
+  on_start_new_chat        = true, -- start fresh chat on setup
+  reset_ctx_each_prompt    = true, -- clear file context each ask
+  window_type              = "vertical", -- Default. Options: "vertical", "horizontal", "float"
   pick_func                = require("mini.pick").ui_select, -- function for item selection (like vim.ui.select)
   notify_func              = require("mini.notify").make_notify(), -- function for notifications (like vim.notify)
   keymaps = {

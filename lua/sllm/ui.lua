@@ -11,20 +11,41 @@ local ensure_llm_buffer = function()
   return llm_buf
 end
 
-local create_llm_win = function()
-  -- Create a vertical split. Neovim automatically moves you into this new window.
-  vim.cmd('vsplit')
-  -- Put the LLM buffer in the newly created window.
-  vim.api.nvim_win_set_buf(0, llm_buf)
+local create_llm_float_win_opts = function()
+  local width = math.floor(vim.o.columns * 0.7)
+  local height = math.floor(vim.o.lines * 0.7)
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+  local opts = {
+    relative = 'editor',
+    row = row > 0 and row or 0,
+    col = col > 0 and col or 0,
+    width = width,
+    height = height,
+    style = 'minimal',
+    border = 'rounded',
+    zindex = 50,
+  }
+  return opts
+end
 
-  -- Optional window-local settings
-  local new_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_set_option_value('wrap', true, { win = new_win })
-  vim.api.nvim_set_option_value('linebreak', true, { win = new_win })
-  vim.api.nvim_set_option_value('number', false, { win = new_win })
-  vim.api.nvim_set_option_value('winbar', '  sllm.nvim', { win = new_win })
-  vim.cmd('wincmd p')
-  return new_win
+local create_llm_win = function(window_type)
+  local win_opts = nil
+  ensure_llm_buffer()
+  window_type = window_type or 'vertical'
+  if window_type == 'float' then
+    win_opts = create_llm_float_win_opts()
+  elseif window_type == 'horizontal' then
+    win_opts = { split = "below" }
+  else
+    win_opts = { split = "right" }
+  end
+  local win_id = vim.api.nvim_open_win(llm_buf, false, win_opts)
+  vim.api.nvim_set_option_value('wrap', true, { win = win_id })
+  vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
+  vim.api.nvim_set_option_value('number', false, { win = win_id })
+  vim.api.nvim_set_option_value('winbar', '  sllm.nvim', { win = win_id })
+  return win_id
 end
 
 M.clean_llm_buffer = function()
@@ -34,29 +55,31 @@ M.clean_llm_buffer = function()
   end
 end
 
-M.show_llm_buffer = function()
+M.show_llm_buffer = function(window_type)
   local win = Utils.check_buffer_visible(llm_buf)
   if win then return win end
   ensure_llm_buffer()
-  create_llm_win()
+  return create_llm_win(window_type)
 end
 
-M.focus_llm_buffer = function()
+M.focus_llm_buffer = function(window_type)
   local llm_win = Utils.check_buffer_visible(llm_buf)
-  if llm_win then
+  if window_type == 'float' and floating_win_id and vim.api.nvim_win_is_valid(floating_win_id) then
+    vim.api.nvim_set_current_win(floating_win_id)
+  elseif llm_win then
     vim.api.nvim_set_current_win(llm_win)
   else
-    llm_win = M.show_llm_buffer()
+    llm_win = M.show_llm_buffer(window_type)
     vim.api.nvim_set_current_win(llm_win)
   end
 end
 
-M.toggle_llm_buffer = function()
+M.toggle_llm_buffer = function(window_type)
   local llm_win = Utils.check_buffer_visible(llm_buf)
   if llm_win then
     vim.api.nvim_win_close(llm_win, false)
   else
-    M.show_llm_buffer()
+    M.show_llm_buffer(window_type)
   end
 end
 

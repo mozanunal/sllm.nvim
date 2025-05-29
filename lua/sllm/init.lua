@@ -14,6 +14,7 @@ local config = {
   window_type = 'vertical', -- or 'horizontal' or 'float'
   pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
   notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
+  input_func = vim.ui.input,
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -38,6 +39,7 @@ local state = {
 
 local notify = vim.notify
 local pick = vim.ui.select
+local input = vim.ui.input
 
 M.setup = function(user_config)
   config = vim.tbl_deep_extend('force', {}, config, user_config or {})
@@ -72,41 +74,43 @@ M.setup = function(user_config)
   -- set functions
   notify = config.notify_func
   pick = config.pick_func
+  input = config.input_func
 end
 
 M.ask_llm = function()
-  local user_input = vim.fn.input('Prompt: ')
-  if user_input == '' then
-    notify('[sllm] no prompt provided.', vim.log.levels.INFO)
-    return
-  end
-  Ui.show_llm_buffer(config.window_type)
+  input({ prompt = 'Prompt: ' }, function(user_input)
+    if user_input == '' then
+      notify('[sllm] no prompt provided.', vim.log.levels.INFO)
+      return
+    end
+    Ui.show_llm_buffer(config.window_type)
 
-  -- Prevent multiple LLM jobs running at once:
-  if JobMan.is_busy() then
-    notify('[sllm] already running, please wait.', vim.log.levels.WARN)
-    return
-  end
+    -- Prevent multiple LLM jobs running at once:
+    if JobMan.is_busy() then
+      notify('[sllm] already running, please wait.', vim.log.levels.WARN)
+      return
+    end
 
-  -- Get context
-  local ctx = CtxMan.get()
-  -- {filepath="a.lua", filetype="lua", text="require something \nsomething.call()"}
-  local prompt = CtxMan.render_prompt_ui(user_input)
+    -- Get context
+    local ctx = CtxMan.get()
+    -- {filepath="a.lua", filetype="lua", text="require something \nsomething.call()"}
+    local prompt = CtxMan.render_prompt_ui(user_input)
 
-  local lines = vim.split(prompt, '\n', { plain = true })
-  Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' })
-  Ui.append_to_llm_buffer(lines)
-  Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
+    local lines = vim.split(prompt, '\n', { plain = true })
+    Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' })
+    Ui.append_to_llm_buffer(lines)
+    Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
 
-  -- Run Prompt
-  local cmd = Backend.llm_cmd(prompt, state.continue, config.show_usage, state.selected_model, ctx.fragments)
+    -- Run Prompt
+    local cmd = Backend.llm_cmd(prompt, state.continue, config.show_usage, state.selected_model, ctx.fragments)
 
-  notify('[sllm] thinking...🤔', vim.log.levels.INFO)
-  state.continue = true
-  JobMan.start(cmd, function(line) Ui.append_to_llm_buffer({ line }) end, function(exit_code)
-    notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
-    Ui.append_to_llm_buffer({ '' })
-    if config.reset_ctx_each_prompt then CtxMan.reset() end
+    notify('[sllm] thinking...🤔', vim.log.levels.INFO)
+    state.continue = true
+    JobMan.start(cmd, function(line) Ui.append_to_llm_buffer({ line }) end, function(exit_code)
+      notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
+      Ui.append_to_llm_buffer({ '' })
+      if config.reset_ctx_each_prompt then CtxMan.reset() end
+    end)
   end)
 end
 
@@ -158,13 +162,14 @@ M.add_file_to_ctx = function()
 end
 
 M.add_url_to_ctx = function()
-  local user_input = vim.fn.input('URL: ')
-  if user_input == '' then
-    notify('[sllm] no URL provided.', vim.log.levels.INFO)
-    return
-  end
-  CtxMan.add_fragment(user_input)
-  notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
+  input({ prompt = 'URL: ' }, function(user_input)
+    if user_input == '' then
+      notify('[sllm] no URL provided.', vim.log.levels.INFO)
+      return
+    end
+    CtxMan.add_fragment(user_input)
+    notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
+  end)
 end
 
 M.add_sel_to_ctx = function()
@@ -204,52 +209,53 @@ end
 
 -- New function to add command output to context
 M.add_cmd_out_to_ctx = function()
-  local cmd_input_raw = vim.fn.input('Command: ')
-  if cmd_input_raw == '' then
-    notify('[sllm] no command provided.', vim.log.levels.INFO)
-    return
-  end
-
-  -- Expand Vim special characters like % (current file), # (alternate file), etc.
-  local cmd_to_run = vim.fn.expandcmd(cmd_input_raw)
-
-  if cmd_to_run == '' then
-    notify('[sllm] expanded command is empty.', vim.log.levels.WARN)
-    return
-  end
-
-  notify('[sllm] running command: ' .. cmd_to_run, vim.log.levels.INFO)
-
-  vim.system({ "bash", "-c", cmd_to_run }, { text = true }, function(job_result)
-    if job_result.code ~= 0 then
-      local error_msg = '[sllm] command failed with exit code ' .. job_result.code
-      if job_result.stderr and job_result.stderr ~= '' then
-        error_msg = error_msg .. '\nStderr:\n' .. vim.trim(job_result.stderr)
-      end
-      notify(error_msg, vim.log.levels.ERROR)
+  input({ prompt = 'Command: ' }, function(cmd_input_raw)
+    if cmd_input_raw == '' then
+      notify('[sllm] no command provided.', vim.log.levels.INFO)
       return
     end
 
-    local output_stdout = vim.trim(job_result.stdout or "")
-    local output_stderr = vim.trim(job_result.stderr or "")
-    local combined_output = output_stdout
+    -- Expand Vim special characters like % (current file), # (alternate file), etc.
+    local cmd_to_run = vim.fn.expandcmd(cmd_input_raw)
 
-    if output_stderr ~= '' then
-      if combined_output ~= '' then
-        combined_output = combined_output .. "\n--- stderr ---\n" .. output_stderr
-      else
-        combined_output = "--- stderr ---\n" .. output_stderr
-      end
-    end
-
-    if combined_output == '' then
-      notify('[sllm] command produced no output.', vim.log.levels.WARN)
+    if cmd_to_run == '' then
+      notify('[sllm] expanded command is empty.', vim.log.levels.WARN)
       return
     end
 
-    -- Use the raw command input for the snip "filepath" for user clarity
-    CtxMan.add_snip(combined_output, 'Command: ' .. cmd_input_raw, 'text')
-    notify('[sllm] added command output to context.', vim.log.levels.INFO)
+    notify('[sllm] running command: ' .. cmd_to_run, vim.log.levels.INFO)
+
+    vim.system({ "bash", "-c", cmd_to_run }, { text = true }, function(job_result)
+      if job_result.code ~= 0 then
+        local error_msg = '[sllm] command failed with exit code ' .. job_result.code
+        if job_result.stderr and job_result.stderr ~= '' then
+          error_msg = error_msg .. '\nStderr:\n' .. vim.trim(job_result.stderr)
+        end
+        notify(error_msg, vim.log.levels.ERROR)
+        return
+      end
+
+      local output_stdout = vim.trim(job_result.stdout or "")
+      local output_stderr = vim.trim(job_result.stderr or "")
+      local combined_output = output_stdout
+
+      if output_stderr ~= '' then
+        if combined_output ~= '' then
+          combined_output = combined_output .. "\n--- stderr ---\n" .. output_stderr
+        else
+          combined_output = "--- stderr ---\n" .. output_stderr
+        end
+      end
+
+      if combined_output == '' then
+        notify('[sllm] command produced no output.', vim.log.levels.WARN)
+        return
+      end
+
+      -- Use the raw command input for the snip "filepath" for user clarity
+      CtxMan.add_snip(combined_output, 'Command: ' .. cmd_input_raw, 'text')
+      notify('[sllm] added command output to context.', vim.log.levels.INFO)
+    end)
   end)
 end
 

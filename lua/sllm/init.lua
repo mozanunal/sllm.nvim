@@ -27,6 +27,7 @@ local config = {
     add_sel_to_ctx = '<leader>sv',
     add_diag_to_ctx = '<leader>sd',
     add_cmd_out_to_ctx = '<leader>sx',
+    add_tool_to_ctx = '<leader>se',
     reset_context = '<leader>sr',
   },
 }
@@ -52,6 +53,7 @@ M.setup = function(user_config)
   vim.keymap.set({ 'n', 'v' }, km.focus_llm_buffer, M.focus_llm_buffer, { desc = 'Focus LLM buffer' })
   vim.keymap.set({ 'n', 'v' }, km.toggle_llm_buffer, M.toggle_llm_buffer, { desc = 'Toggle LLM buffer' })
   vim.keymap.set({ 'n', 'v' }, km.select_model, M.select_model, { desc = 'Select LLM model' })
+  vim.keymap.set({ 'n', 'v' }, km.add_tool_to_ctx, M.add_tool_to_ctx, { desc = 'Add tool to llm context' })
   vim.keymap.set({ 'n', 'v' }, km.add_file_to_ctx, M.add_file_to_ctx, { desc = 'Add file to llm context' })
   vim.keymap.set({ 'n', 'v' }, km.add_url_to_ctx, M.add_url_to_ctx, { desc = 'Add URL to LLM context' })
   vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
@@ -102,7 +104,14 @@ M.ask_llm = function()
     Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
 
     -- Run Prompt
-    local cmd = Backend.llm_cmd(prompt, state.continue, config.show_usage, state.selected_model, ctx.fragments)
+    local cmd = Backend.llm_cmd(
+      prompt,
+      state.continue,
+      config.show_usage,
+      state.selected_model,
+      ctx.fragments,
+      ctx.tools
+    )
 
     notify('[sllm] thinking...🤔', vim.log.levels.INFO)
     state.continue = true
@@ -147,6 +156,23 @@ M.select_model = function()
       notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
     else
       notify('[sllm] llm model not changed', vim.log.levels.WARN)
+    end
+  end)
+end
+
+M.add_tool_to_ctx = function()
+  local tools = Backend.extract_tools()
+  if not (tools and #tools > 0) then
+    notify('[sllm] no tools found.', vim.log.levels.ERROR)
+    return
+  end
+
+  pick(tools, {}, function(item)
+    if item then
+      CtxMan.add_tool(item)
+      notify('[sllm] tool added: ' .. item, vim.log.levels.INFO)
+    else
+      notify('[sllm] no tools added.', vim.log.levels.WARN)
     end
   end)
 end

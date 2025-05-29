@@ -4,7 +4,7 @@
 <img src="./assets/logo.png" alt="sllm.nvim Logo" width="120"/>
 
 **sllm.nvim** is a Neovim plugin that integrates Simon Willison’s [`llm`](https://github.com/simonw/llm) CLI directly into your editor.
-Chat with large language models, stream responses in a scratch buffer, manage context files, switch models on the fly, and control everything asynchronously without leaving Neovim.
+Chat with large language models, stream responses in a scratch buffer, manage context files, switch models or tool integrations on the fly, and control everything asynchronously without leaving Neovim.
 
 ## Preface: Why sllm.nvim?
 

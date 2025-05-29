@@ -103,7 +103,7 @@ Call `require("sllm").setup()` with an optional table:
 
 ```lua
 require("sllm").setup({
-  default_model            = "gpt-4.1", -- default llm model
+  default_model            = "gpt-4.1", -- default llm model (set to "default" to use llm's default model)
   show_usage               = true, -- append usage stats to responses
   on_start_new_chat        = true, -- start fresh chat on setup
   reset_ctx_each_prompt    = true, -- clear file context each ask

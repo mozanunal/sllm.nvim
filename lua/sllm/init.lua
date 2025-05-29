@@ -63,7 +63,11 @@ M.setup = function(user_config)
   else
     state.continue = true
   end
-  state.selected_model = config.default_model
+  if config.default_model == "default" then
+    state.selected_model = nil
+  else
+    state.selected_model = config.default_model
+  end
 
   -- set functions
   notify = config.notify_func

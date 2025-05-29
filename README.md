@@ -114,6 +114,9 @@ require("sllm").setup({
   -- function for notifications (like vim.notify)
   -- tested alternatives: vim.notify, require("mini.notify").make_notify(), require("snacks.notifier").notify
   notify_func              = require("mini.notify").make_notify(),
+  -- funtion for inputs (like vim.ui.input)
+  -- tested alternatives: vim.ui.input, require("snacks.input").input
+  input_func               = vim.ui.input,
   keymaps = {
     ask_llm                  = "<leader>ss",  -- prompt the LLM
     new_chat                 = "<leader>sn",  -- clear chat buffer

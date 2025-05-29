@@ -11,6 +11,7 @@ local function refresh_sllm()
     -- function for notifications (like vim.notify)
     -- tested alternatives: vim.notify, require("mini.notify").make_notify(), require("snacks.notifier").notify
     notify_func   = require("snacks.notifier").notify,
+    input_func    = require("snacks.input").input,
   })
 end
 

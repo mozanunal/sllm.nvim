@@ -14,7 +14,7 @@ M.llm_cmd = function(user_input, continue, show_usage, model, ctx_files)
   local cmd = 'llm'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end
-  cmd = cmd .. ' -m ' .. vim.fn.shellescape(model)
+  if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end
 
   if ctx_files then
     for _, filename in ipairs(ctx_files) do

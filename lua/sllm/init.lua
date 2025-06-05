@@ -27,7 +27,7 @@ local config = {
     add_sel_to_ctx = '<leader>sv',
     add_diag_to_ctx = '<leader>sd',
     add_cmd_out_to_ctx = '<leader>sx',
-    add_tool_to_ctx = '<leader>se',
+    add_tool_to_ctx = '<leader>sT',
     reset_context = '<leader>sr',
   },
 }

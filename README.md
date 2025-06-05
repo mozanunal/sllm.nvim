@@ -130,7 +130,7 @@ require("sllm").setup({
     add_diag_to_ctx          = "<leader>sd",  -- add diagnostics to context
     add_cmd_out_to_ctx       = "<leader>sx",  -- add shell command output to context
     reset_context            = "<leader>sr",  -- clear all context
-    add_tool_to_ctx          = "<leader>se", -- NEW: add tools to context
+    add_tool_to_ctx          = "<leader>sT",  -- add tools to context
   },
 })
 ```
@@ -162,7 +162,7 @@ require("sllm").setup({
 | `<leader>sv`   | v     | Add visual selection to context                |
 | `<leader>sd`   | n,v   | Add diagnostics to context                     |
 | `<leader>sx`   | n,v   | Add shell command output to context            |
-| `<leader>se`   | n,v   | **Add a tool to the LLM context** (NEW!)       |
+| `<leader>sT`   | n,v   | Add a tool to the LLM context                  |
 | `<leader>sr`   | n,v   | Reset/clear all context files                  |
 
 ---

@@ -4,6 +4,7 @@ local context = {
   fragments = {},
   snips = {},
   tools = {},
+  functions = {},
 }
 
 M.get = function() return context end
@@ -13,6 +14,7 @@ M.reset = function()
     fragments = {},
     snips = {},
     tools = {},
+    functions = {},
   }
 end
 
@@ -28,6 +30,11 @@ end
 M.add_tool = function(tool_name)
   local is_in_context = vim.tbl_contains(context.tools, tool_name)
   if not is_in_context then table.insert(context.tools, tool_name) end
+end
+
+M.add_function = function(func_str)
+  local is_in_context = vim.tbl_contains(context.functions, func_str)
+  if not is_in_context then table.insert(context.functions, func_str) end
 end
 
 local tmpl_snippet = [[From ${filepath}:

@@ -28,6 +28,7 @@ local config = {
     add_diag_to_ctx = '<leader>sd',
     add_cmd_out_to_ctx = '<leader>sx',
     add_tool_to_ctx = '<leader>sT',
+    add_func_to_ctx = '<leader>sF',
     reset_context = '<leader>sr',
   },
 }
@@ -59,6 +60,8 @@ M.setup = function(user_config)
   vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
   vim.keymap.set({ 'n', 'v' }, km.add_cmd_out_to_ctx, M.add_cmd_out_to_ctx, { desc = 'Add command output to context' })
   vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
+  vim.keymap.set({ 'n', 'v' }, km.add_func_to_ctx, M.add_func_to_ctx,
+    { desc = 'Add selected function or all file as tool' })
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
   -- set state
@@ -110,7 +113,8 @@ M.ask_llm = function()
       config.show_usage,
       state.selected_model,
       ctx.fragments,
-      ctx.tools
+      ctx.tools,
+      ctx.functions
     )
 
     notify('[sllm] thinking...🤔', vim.log.levels.INFO)
@@ -196,6 +200,27 @@ M.add_url_to_ctx = function()
     CtxMan.add_fragment(user_input)
     notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
   end)
+end
+
+M.add_func_to_ctx = function()
+  local text = ''
+  if Utils.is_mode_visual() then
+    text = Utils.get_visual_selection()
+    if text == '' or text:match('^%s*$') then
+      notify('[sllm] empty selection.', vim.log.levels.WARN)
+      return
+    end
+  else
+    -- Add the whole file as text
+    local bufnr = vim.api.nvim_get_current_buf()
+    text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    if text == '' or text:match('^%s*$') then
+      notify('[sllm] file is empty.', vim.log.levels.WARN)
+      return
+    end
+  end
+  CtxMan.add_function(text)
+  notify('[sllm] added function to context.', vim.log.levels.INFO)
 end
 
 M.add_sel_to_ctx = function()

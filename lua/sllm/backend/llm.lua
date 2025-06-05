@@ -34,7 +34,7 @@ M.extract_tools = function()
 end
 
 
-M.llm_cmd = function(user_input, continue, show_usage, model, ctx_files, tools)
+M.llm_cmd = function(user_input, continue, show_usage, model, ctx_files, tools, functions)
   local cmd = 'llm'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end
@@ -49,6 +49,12 @@ M.llm_cmd = function(user_input, continue, show_usage, model, ctx_files, tools)
   if tools then
     for _, tool_name in ipairs(tools) do
       cmd = cmd .. ' -T ' .. vim.fn.shellescape(tool_name) .. ' '
+    end
+  end
+
+  if functions then
+    for _, func_str in ipairs(functions) do
+      cmd = cmd .. ' --functions ' .. vim.fn.shellescape(func_str) .. ' '
     end
   end
 

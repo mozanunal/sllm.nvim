@@ -34,7 +34,7 @@ local config = {
 }
 
 local state = {
-  llm_job_id = nil,
+  llm_job_id = nil, -- Note: JobMan now manages job IDs internally, this might be legacy
   continue = nil,
   selected_model = nil,
 }
@@ -46,8 +46,7 @@ local input = vim.ui.input
 M.setup = function(user_config)
   config = vim.tbl_deep_extend('force', {}, config, user_config or {})
 
-  -- set keymaps
-  local km = config.keymaps -- local shorter alias to avoid repetition
+  local km = config.keymaps
   vim.keymap.set({ 'n', 'v' }, km.ask_llm, M.ask_llm, { desc = 'Ask LLM' })
   vim.keymap.set({ 'n', 'v' }, km.new_chat, M.new_chat, { desc = 'New LLM chat' })
   vim.keymap.set({ 'n', 'v' }, km.cancel, M.cancel, { desc = 'Cancel LLM request' })
@@ -68,19 +67,9 @@ M.setup = function(user_config)
   )
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
-  -- set state
-  if config.on_start_new_chat then
-    state.continue = false
-  else
-    state.continue = true
-  end
-  if config.default_model == 'default' then
-    state.selected_model = nil
-  else
-    state.selected_model = config.default_model
-  end
+  if config.on_start_new_chat then state.continue = false else state.continue = true end
+  if config.default_model == 'default' then state.selected_model = nil else state.selected_model = config.default_model end
 
-  -- set functions
   notify = config.notify_func
   pick = config.pick_func
   input = config.input_func
@@ -92,25 +81,23 @@ M.ask_llm = function()
       notify('[sllm] no prompt provided.', vim.log.levels.INFO)
       return
     end
-    Ui.show_llm_buffer(config.window_type)
+    Ui.show_llm_buffer(config.window_type, state.selected_model)
 
-    -- Prevent multiple LLM jobs running at once:
     if JobMan.is_busy() then
       notify('[sllm] already running, please wait.', vim.log.levels.WARN)
       return
     end
 
-    -- Get context
     local ctx = CtxMan.get()
-    -- {filepath="a.lua", filetype="lua", text="require something \nsomething.call()"}
     local prompt = CtxMan.render_prompt_ui(user_input)
 
-    local lines = vim.split(prompt, '\n', { plain = true })
+    local prompt_lines = vim.split(prompt, '\n', { plain = true })
     Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' })
-    Ui.append_to_llm_buffer(lines)
-    Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
+    Ui.append_to_llm_buffer(prompt_lines)
+    -- Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Removed: indicator handles this transition
 
-    -- Run Prompt
+    Ui.start_loading_indicator() -- Start animation
+
     local cmd = Backend.llm_cmd(
       prompt,
       state.continue,
@@ -121,35 +108,63 @@ M.ask_llm = function()
       ctx.functions
     )
 
-    notify('[sllm] thinking...🤔', vim.log.levels.INFO)
+    -- The vim.notify "thinking" can be kept or removed based on preference.
+    -- notify('[sllm] thinking...🤔', vim.log.levels.INFO)
     state.continue = true
-    JobMan.start(cmd, function(line) Ui.append_to_llm_buffer({ line }) end, function(exit_code)
-      notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
-      Ui.append_to_llm_buffer({ '' })
-      if config.reset_ctx_each_prompt then CtxMan.reset() end
-    end)
+    local first_line_received = false
+
+    JobMan.start(cmd,
+      function(line) -- on_stdout
+        if not first_line_received then
+          Ui.stop_loading_indicator({ '> 🤖 Response', '' }) -- Replace loading indicator with header
+          first_line_received = true
+        end
+        Ui.append_to_llm_buffer({ line })
+      end,
+      function(exit_code) -- on_exit
+        if not first_line_received then
+          -- Job ended before any stdout (empty response, error, or cancellation)
+          local end_message
+          if exit_code == 0 then
+            end_message = { '> 🤖 Response', '', '(empty response)' }
+          else
+            end_message = { '> 🤖 Response', '', string.format('(request failed or cancelled: exit %d)', exit_code) }
+          end
+          Ui.stop_loading_indicator(end_message)
+        end
+        -- If first_line_received is true, stop_loading_indicator was already called by on_stdout.
+        notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
+        Ui.append_to_llm_buffer({ '' }) -- Final empty line for spacing
+        if config.reset_ctx_each_prompt then CtxMan.reset() end
+      end
+    )
   end)
 end
 
 M.cancel = function()
   if JobMan.is_busy() then
-    JobMan.stop()
-    notify('[sllm] canceled ❌', vim.log.levels.WARN)
+    JobMan.stop() -- This will trigger the on_exit callback of the current job
+    notify('[sllm] canceling request...', vim.log.levels.WARN)
+    -- The on_exit handler in M.ask_llm will update the UI buffer appropriately.
   else
     notify('[sllm] no active llm job', vim.log.levels.INFO)
   end
 end
 
 M.new_chat = function()
+  if JobMan.is_busy() then
+    JobMan.stop() -- Cancel existing job; its on_exit will handle UI for that job
+    notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
+  end
   state.continue = false
-  Ui.show_llm_buffer(config.window_type)
-  Ui.clean_llm_buffer()
+  -- Ensure buffer is visible before cleaning, especially if it was toggled off
+  Ui.show_llm_buffer(config.window_type, state.selected_model)
+  Ui.clean_llm_buffer() -- This will also stop any active loading animation
   notify('[sllm] new chat created', vim.log.levels.INFO)
 end
 
-M.focus_llm_buffer = function() Ui.focus_llm_buffer(config.window_type) end
-
-M.toggle_llm_buffer = function() Ui.toggle_llm_buffer(config.window_type) end
+M.focus_llm_buffer = function() Ui.focus_llm_buffer(config.window_type, state.selected_model) end
+M.toggle_llm_buffer = function() Ui.toggle_llm_buffer(config.window_type, state.selected_model) end
 
 M.select_model = function()
   local models = Backend.extract_models()
@@ -162,6 +177,7 @@ M.select_model = function()
     if item then
       state.selected_model = item
       notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
+      Ui.update_llm_win_title(state.selected_model)
     else
       notify('[sllm] llm model not changed', vim.log.levels.WARN)
     end
@@ -215,7 +231,6 @@ M.add_func_to_ctx = function()
       return
     end
   else
-    -- Add the whole file as text
     local bufnr = vim.api.nvim_get_current_buf()
     text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
     if text == '' or text:match('^%s*$') then
@@ -249,7 +264,6 @@ M.add_diag_to_ctx = function()
     return
   end
 
-  -- Format diagnostics
   local formatted = {}
   for _, d in ipairs(diagnostics) do
     local msg = d.message:gsub('%s+', ' '):gsub('^%s*(.-)%s*$', '%1')
@@ -262,7 +276,6 @@ M.add_diag_to_ctx = function()
   notify('[sllm] Added diagnostics to context.', vim.log.levels.INFO)
 end
 
--- New function to add command output to context
 M.add_cmd_out_to_ctx = function()
   input({ prompt = 'Command: ' }, function(cmd_input_raw)
     if cmd_input_raw == '' then
@@ -270,16 +283,13 @@ M.add_cmd_out_to_ctx = function()
       return
     end
 
-    -- Expand Vim special characters like % (current file), # (alternate file), etc.
     local cmd_to_run = vim.fn.expandcmd(cmd_input_raw)
-
     if cmd_to_run == '' then
       notify('[sllm] expanded command is empty.', vim.log.levels.WARN)
       return
     end
 
     notify('[sllm] running command: ' .. cmd_to_run, vim.log.levels.INFO)
-
     vim.system({ 'bash', '-c', cmd_to_run }, { text = true }, function(job_result)
       if job_result.code ~= 0 then
         local error_msg = '[sllm] command failed with exit code ' .. job_result.code
@@ -293,7 +303,6 @@ M.add_cmd_out_to_ctx = function()
       local output_stdout = vim.trim(job_result.stdout or '')
       local output_stderr = vim.trim(job_result.stderr or '')
       local combined_output = output_stdout
-
       if output_stderr ~= '' then
         if combined_output ~= '' then
           combined_output = combined_output .. '\n--- stderr ---\n' .. output_stderr
@@ -307,7 +316,6 @@ M.add_cmd_out_to_ctx = function()
         return
       end
 
-      -- Use the raw command input for the snip "filepath" for user clarity
       CtxMan.add_snip(combined_output, 'Command: ' .. cmd_input_raw, 'text')
       notify('[sllm] added command output to context.', vim.log.levels.INFO)
     end)

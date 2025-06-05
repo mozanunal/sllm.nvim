@@ -22,7 +22,7 @@ end
 -- end
 
 M.extract_tools = function()
-  local json_string = vim.fn.system("llm tools list --json")
+  local json_string = vim.fn.system('llm tools list --json')
   local spec = vim.fn.json_decode(json_string)
   local names = {}
   if spec.tools then
@@ -32,7 +32,6 @@ M.extract_tools = function()
   end
   return names
 end
-
 
 M.llm_cmd = function(user_input, continue, show_usage, model, ctx_files, tools, functions)
   local cmd = 'llm'

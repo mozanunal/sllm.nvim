@@ -60,8 +60,12 @@ M.setup = function(user_config)
   vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
   vim.keymap.set({ 'n', 'v' }, km.add_cmd_out_to_ctx, M.add_cmd_out_to_ctx, { desc = 'Add command output to context' })
   vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
-  vim.keymap.set({ 'n', 'v' }, km.add_func_to_ctx, M.add_func_to_ctx,
-    { desc = 'Add selected function or all file as tool' })
+  vim.keymap.set(
+    { 'n', 'v' },
+    km.add_func_to_ctx,
+    M.add_func_to_ctx,
+    { desc = 'Add selected function or all file as tool' }
+  )
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
   -- set state
@@ -70,7 +74,7 @@ M.setup = function(user_config)
   else
     state.continue = true
   end
-  if config.default_model == "default" then
+  if config.default_model == 'default' then
     state.selected_model = nil
   else
     state.selected_model = config.default_model
@@ -203,7 +207,7 @@ M.add_url_to_ctx = function()
 end
 
 M.add_func_to_ctx = function()
-  local text = ''
+  local text
   if Utils.is_mode_visual() then
     text = Utils.get_visual_selection()
     if text == '' or text:match('^%s*$') then
@@ -213,7 +217,7 @@ M.add_func_to_ctx = function()
   else
     -- Add the whole file as text
     local bufnr = vim.api.nvim_get_current_buf()
-    text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
     if text == '' or text:match('^%s*$') then
       notify('[sllm] file is empty.', vim.log.levels.WARN)
       return
@@ -276,7 +280,7 @@ M.add_cmd_out_to_ctx = function()
 
     notify('[sllm] running command: ' .. cmd_to_run, vim.log.levels.INFO)
 
-    vim.system({ "bash", "-c", cmd_to_run }, { text = true }, function(job_result)
+    vim.system({ 'bash', '-c', cmd_to_run }, { text = true }, function(job_result)
       if job_result.code ~= 0 then
         local error_msg = '[sllm] command failed with exit code ' .. job_result.code
         if job_result.stderr and job_result.stderr ~= '' then
@@ -286,15 +290,15 @@ M.add_cmd_out_to_ctx = function()
         return
       end
 
-      local output_stdout = vim.trim(job_result.stdout or "")
-      local output_stderr = vim.trim(job_result.stderr or "")
+      local output_stdout = vim.trim(job_result.stdout or '')
+      local output_stderr = vim.trim(job_result.stderr or '')
       local combined_output = output_stdout
 
       if output_stderr ~= '' then
         if combined_output ~= '' then
-          combined_output = combined_output .. "\n--- stderr ---\n" .. output_stderr
+          combined_output = combined_output .. '\n--- stderr ---\n' .. output_stderr
         else
-          combined_output = "--- stderr ---\n" .. output_stderr
+          combined_output = '--- stderr ---\n' .. output_stderr
         end
       end
 

@@ -1,8 +1,6 @@
 local M = {}
 
-M.print_table = function(t)
-  print(table.concat(t, "\n==="))
-end
+M.print_table = function(t) print(table.concat(t, '\n===')) end
 
 M.buf_is_valid = function(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
 
@@ -12,7 +10,8 @@ M.is_mode_visual = function()
 end
 
 M.get_visual_selection = function()
-  return table.concat(vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos(".")), "\n")
+  local selection = table.concat(vim.fn.getregion(vim.fn.getpos('v'), vim.fn.getpos('.')), '\n')
+  return selection
 end
 
 M.get_path_of_buffer = function(buf)

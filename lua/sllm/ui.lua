@@ -30,15 +30,15 @@ local create_llm_float_win_opts = function()
 end
 
 local create_llm_win = function(window_type)
-  local win_opts = nil
+  local win_opts
   ensure_llm_buffer()
   window_type = window_type or 'vertical'
   if window_type == 'float' then
     win_opts = create_llm_float_win_opts()
   elseif window_type == 'horizontal' then
-    win_opts = { split = "below" }
+    win_opts = { split = 'below' }
   else
-    win_opts = { split = "right" }
+    win_opts = { split = 'right' }
   end
   local win_id = vim.api.nvim_open_win(llm_buf, false, win_opts)
   vim.api.nvim_set_option_value('wrap', true, { win = win_id })
@@ -64,8 +64,8 @@ end
 
 M.focus_llm_buffer = function(window_type)
   local llm_win = Utils.check_buffer_visible(llm_buf)
-  if window_type == 'float' and floating_win_id and vim.api.nvim_win_is_valid(floating_win_id) then
-    vim.api.nvim_set_current_win(floating_win_id)
+  if window_type == 'float' and llm_win and vim.api.nvim_win_is_valid(llm_win) then
+    vim.api.nvim_set_current_win(llm_win)
   elseif llm_win then
     vim.api.nvim_set_current_win(llm_win)
   else

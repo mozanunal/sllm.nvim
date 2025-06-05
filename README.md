@@ -23,9 +23,11 @@ As Simon Willison also discussed in his post on [using LLMs for code](https://si
 - **Interactive Chat**
   Send prompts to any installed LLM backend, streaming replies line by line.
 - **Context Management**
-  Add or reset files, URLs, shell command outputs, selections, diagnostics, **or LLM tools** in the context so the model can reference your code, web content, command results, or issues.
+  Add or reset files, URLs, shell command outputs, selections, diagnostics, installed LLM tools, or **on-the-fly Python functions** in the context so the model can reference your code, web content, command results, or issues.
 - **Model and Tool Selection**
   Browse and pick from your installed `llm` models **and tools** interactively and add selected tools to your context.
+- **On-the-fly Function Tools**
+  Define Python functions as tools for the LLM directly from your current buffer or a visual selection.
 - **Asynchronous & Non-blocking**
   Requests run in the background, so you can keep editing.
 - **Split Buffer UI**
@@ -130,7 +132,8 @@ require("sllm").setup({
     add_diag_to_ctx          = "<leader>sd",  -- add diagnostics to context
     add_cmd_out_to_ctx       = "<leader>sx",  -- add shell command output to context
     reset_context            = "<leader>sr",  -- clear all context
-    add_tool_to_ctx          = "<leader>sT",  -- add tools to context
+    add_tool_to_ctx          = "<leader>sT",  -- add installed tools to context
+    add_func_to_ctx          = "<leader>sF",  -- add a Python function as a tool
   },
 })
 ```
@@ -149,21 +152,22 @@ require("sllm").setup({
 
 ## Keybindings & Commands
 
-| Keymap         | Mode  | Action                                         |
-|----------------|-------|------------------------------------------------|
-| `<leader>ss`   | n,v   | Prompt the LLM with an input box               |
-| `<leader>sn`   | n,v   | Start a new chat (clears buffer)               |
-| `<leader>sc`   | n,v   | Cancel current request                         |
-| `<leader>sf`   | n,v   | Focus the LLM output buffer                    |
-| `<leader>st`   | n,v   | Toggle LLM buffer visibility                   |
-| `<leader>sm`   | n,v   | Pick a different LLM model                     |
-| `<leader>sa`   | n,v   | Add current file to context                    |
-| `<leader>su`   | n,v   | Add content of a URL to context                |
-| `<leader>sv`   | v     | Add visual selection to context                |
-| `<leader>sd`   | n,v   | Add diagnostics to context                     |
-| `<leader>sx`   | n,v   | Add shell command output to context            |
-| `<leader>sT`   | n,v   | Add a tool to the LLM context                  |
-| `<leader>sr`   | n,v   | Reset/clear all context files                  |
+| Keymap         | Mode  | Action                                                     |
+|----------------|-------|------------------------------------------------------------|
+| `<leader>ss`   | n,v   | Prompt the LLM with an input box                           |
+| `<leader>sn`   | n,v   | Start a new chat (clears buffer)                           |
+| `<leader>sc`   | n,v   | Cancel current request                                     |
+| `<leader>sf`   | n,v   | Focus the LLM output buffer                                |
+| `<leader>st`   | n,v   | Toggle LLM buffer visibility                               |
+| `<leader>sm`   | n,v   | Pick a different LLM model                                 |
+| `<leader>sa`   | n,v   | Add current file to context                                |
+| `<leader>su`   | n,v   | Add content of a URL to context                            |
+| `<leader>sv`   | v     | Add visual selection to context                            |
+| `<leader>sd`   | n,v   | Add diagnostics to context                                 |
+| `<leader>sx`   | n,v   | Add shell command output to context                        |
+| `<leader>sT`   | n,v   | Add an installed tool to context                           |
+| `<leader>sF`   | n,v   | Add Python function from buffer/selection as a tool        |
+| `<leader>sr`   | n,v   | Reset/clear all context files                              |
 
 ---
 
@@ -175,10 +179,11 @@ require("sllm").setup({
 4. Add diagnostics: `<leader>sd`.
 5. Add the content of a URL: `<leader>su`.
 6. Add a shell command output: `<leader>sx`.
-7. **Add a tool to the context:** `<leader>se`, then pick from the list.
-8. Reset context: `<leader>sr`.
-9. Switch models: `<leader>sm`.
-10. Cancel a running request: `<leader>sc`.
+7. **Add an installed tool to the context:** `<leader>sT`, then pick from the list.
+8. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a selection, or normal mode for the whole file).
+9. Reset context: `<leader>sr`.
+10. Switch models: `<leader>sm`.
+11. Cancel a running request: `<leader>sc`.
 
 ### Visual Workflow
 
@@ -189,9 +194,9 @@ require("sllm").setup({
 ## Internals
 
 - **Context Manager** (`sllm.context_manager`)
-  Tracks a list of file paths, text snippets, **and tool names** to include in subsequent prompts.
+  Tracks a list of file paths, text snippets, tool names, **and function definitions** to include in subsequent prompts.
 - **Backend** (`sllm.backend.llm`)
-  Builds and executes the `llm` CLI command, optionally adding `-T <tool>` for each active tool.
+  Builds and executes the `llm` CLI command, optionally adding `-T <tool>` for each active tool or `--functions <py_function>` for ad-hoc functions.
 - **Job Manager** (`sllm.job_manager`)
   Spawns a Neovim job for the CLI, streams stdout line-by-line.
 - **UI** (`sllm.ui`)

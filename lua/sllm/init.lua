@@ -94,9 +94,8 @@ M.ask_llm = function()
     local prompt_lines = vim.split(prompt, '\n', { plain = true })
     Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' })
     Ui.append_to_llm_buffer(prompt_lines)
-    -- Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Removed: indicator handles this transition
 
-    Ui.start_loading_indicator() -- Start animation
+    Ui.start_loading_indicator() -- Start winbar animation
 
     local cmd = Backend.llm_cmd(
       prompt,
@@ -108,31 +107,32 @@ M.ask_llm = function()
       ctx.functions
     )
 
-    -- The vim.notify "thinking" can be kept or removed based on preference.
-    -- notify('[sllm] thinking...🤔', vim.log.levels.INFO)
     state.continue = true
     local first_line_received = false
 
     JobMan.start(cmd,
       function(line) -- on_stdout
         if not first_line_received then
-          Ui.stop_loading_indicator({ '> 🤖 Response', '' }) -- Replace loading indicator with header
+          Ui.stop_loading_indicator() -- Restore winbar
+          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Append header now that we have output
           first_line_received = true
         end
         Ui.append_to_llm_buffer({ line })
       end,
-      function(exit_code) -- on_exit
+      function(exit_code)           -- on_exit
+        Ui.stop_loading_indicator() -- Always ensure indicator is stopped on exit. It's idempotent.
+
         if not first_line_received then
           -- Job ended before any stdout (empty response, error, or cancellation)
+          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Add header
           local end_message
           if exit_code == 0 then
-            end_message = { '> 🤖 Response', '', '(empty response)' }
+            end_message = '(empty response)'
           else
-            end_message = { '> 🤖 Response', '', string.format('(request failed or cancelled: exit %d)', exit_code) }
+            end_message = string.format('(request failed or cancelled: exit %d)', exit_code)
           end
-          Ui.stop_loading_indicator(end_message)
+          Ui.append_to_llm_buffer({ end_message })
         end
-        -- If first_line_received is true, stop_loading_indicator was already called by on_stdout.
         notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
         Ui.append_to_llm_buffer({ '' }) -- Final empty line for spacing
         if config.reset_ctx_each_prompt then CtxMan.reset() end

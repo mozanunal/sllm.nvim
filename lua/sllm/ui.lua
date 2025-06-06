@@ -1,4 +1,3 @@
--- lua/sllm/ui.lua
 local M = {}
 local Utils = require('sllm.utils')
 local llm_buf = nil
@@ -8,14 +7,15 @@ local animation_timer = nil
 -- Braille spinner frames are often good for terminals
 local animation_frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 local current_animation_frame_idx = 1
-local loading_indicator_line_num = -1 -- Buffer line number (0-indexed) of the "Thinking..." text
 local is_loading_active = false
+local original_winbar_text = '' -- Store the winbar text before animation
 
 local ensure_llm_buffer = function()
   if not Utils.buf_is_valid(llm_buf) then
     llm_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = llm_buf })
     vim.api.nvim_set_option_value('filetype', 'markdown', { buf = llm_buf })
+    vim.api.nvim_buf_set_name(llm_buf, 'sllm://chat')
   end
   return llm_buf
 end
@@ -38,6 +38,14 @@ local create_llm_float_win_opts = function()
   return opts
 end
 
+-- Helper to update the winbar of the llm window if it exists.
+local update_winbar = function(text)
+  local llm_win = Utils.check_buffer_visible(llm_buf)
+  if llm_win and vim.api.nvim_win_is_valid(llm_win) then
+    vim.api.nvim_set_option_value('winbar', text, { win = llm_win })
+  end
+end
+
 local create_llm_win = function(window_type, model_name)
   local win_opts
   ensure_llm_buffer()
@@ -54,33 +62,24 @@ local create_llm_win = function(window_type, model_name)
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  local model_display = model_name and model_name or '(default)'
-  local winbar_text = string.format('  sllm.nvim | Model: %s', model_display)
-  vim.api.nvim_set_option_value('winbar', winbar_text, { win = win_id })
+  M.update_llm_win_title(model_name) -- Use the central function to set the title
 
   return win_id
-end
-
--- Helper to set a specific line in the buffer
-local set_buffer_line = function(bufnr, lnum, text)
-  if Utils.buf_is_valid(bufnr) and lnum >= 0 and lnum < vim.api.nvim_buf_line_count(bufnr) then
-    vim.api.nvim_buf_set_lines(bufnr, lnum, lnum + 1, false, { text })
-  end
 end
 
 M.start_loading_indicator = function()
   if is_loading_active then return end -- Don't start if already active
 
-  ensure_llm_buffer()
+  local llm_win = Utils.check_buffer_visible(llm_buf)
+  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
+
   is_loading_active = true
   current_animation_frame_idx = 1
 
-  local placeholder_text = animation_frames[current_animation_frame_idx] .. " Thinking..."
-  -- Append an empty line then the placeholder. The indicator will be on the second new line.
-  vim.api.nvim_buf_set_lines(llm_buf, -1, -1, false, { "", placeholder_text })
-  loading_indicator_line_num = vim.api.nvim_buf_line_count(llm_buf) - 1 -- 0-indexed line number
+  -- Store the current winbar text to restore it later
+  original_winbar_text = vim.api.nvim_get_option_value('winbar', { win = llm_win })
 
-  if animation_timer then animation_timer:close() end -- Close previous timer if any (defensive)
+  if animation_timer then animation_timer:close() end -- Defensive
   animation_timer = vim.loop.new_timer()
 
   animation_timer:start(0, 150, vim.schedule_wrap(function()
@@ -93,60 +92,50 @@ M.start_loading_indicator = function()
       return
     end
 
-    if not Utils.buf_is_valid(llm_buf) or loading_indicator_line_num < 0
-        or loading_indicator_line_num >= vim.api.nvim_buf_line_count(llm_buf) then
-      -- Buffer state is unexpected (e.g., cleared, line deleted externally)
+    local llm_win_check = Utils.check_buffer_visible(llm_buf)
+    if not (llm_win_check and vim.api.nvim_win_is_valid(llm_win_check)) then
+      -- Window was closed during animation
       M.stop_loading_indicator() -- Clean up
       return
     end
 
     current_animation_frame_idx = (current_animation_frame_idx % #animation_frames) + 1
-    local new_text = animation_frames[current_animation_frame_idx] .. " Thinking..."
-    set_buffer_line(llm_buf, loading_indicator_line_num, new_text)
+    local frame = animation_frames[current_animation_frame_idx]
+    local new_winbar_text = string.format('%s %s', frame, original_winbar_text)
+    update_winbar(new_winbar_text)
   end))
 end
 
-M.stop_loading_indicator = function(replacement_lines)
+M.stop_loading_indicator = function()
   if not is_loading_active then return end
 
-  is_loading_active = false -- Signal the timer callback to stop and prevent new starts
+  is_loading_active = false -- Signal the timer callback to stop
   if animation_timer then
     animation_timer:stop()
     animation_timer:close()
     animation_timer = nil
   end
 
-  if Utils.buf_is_valid(llm_buf) and loading_indicator_line_num >= 0
-      and loading_indicator_line_num < vim.api.nvim_buf_line_count(llm_buf) then
-    -- The loading indicator was preceded by an empty line.
-    -- So we operate on `loading_indicator_line_num - 1` and `loading_indicator_line_num`.
-    local start_replace_line = loading_indicator_line_num - 1
-    if start_replace_line < 0 then start_replace_line = 0 end -- Should not happen with current logic
-
-    if replacement_lines then
-      vim.api.nvim_buf_set_lines(llm_buf, start_replace_line, loading_indicator_line_num + 1, false, replacement_lines)
-    else
-      -- No replacement: delete the loading indicator and its preceding empty line
-      vim.api.nvim_buf_set_lines(llm_buf, start_replace_line, loading_indicator_line_num + 1, false, {})
-    end
+  -- Restore the original winbar text
+  if original_winbar_text ~= '' then
+    update_winbar(original_winbar_text)
   end
-  loading_indicator_line_num = -1 -- Reset line number
+  original_winbar_text = '' -- Clear the stored text
 end
 
 M.clean_llm_buffer = function()
   if is_loading_active then
-    M.stop_loading_indicator() -- Stop animation and clear its lines (using nil for replacement_lines)
+    M.stop_loading_indicator() -- Stop animation and restore the original title
   end
   if Utils.buf_is_valid(llm_buf) then
     vim.api.nvim_buf_set_lines(llm_buf, 0, -1, false, {})
   end
-  -- loading_indicator_line_num is reset by stop_loading_indicator
 end
 
 M.show_llm_buffer = function(window_type, model_name)
   local win = Utils.check_buffer_visible(llm_buf)
   if win then return win end
-  ensure_llm_buffer()
+  -- Buffer doesn't exist or isn't in a window, create it.
   return create_llm_win(window_type, model_name)
 end
 
@@ -184,11 +173,15 @@ M.append_to_llm_buffer = function(lines)
 end
 
 M.update_llm_win_title = function(model_name)
-  local llm_win = Utils.check_buffer_visible(llm_buf)
-  if llm_win and vim.api.nvim_win_is_valid(llm_win) then
-    local model_display = model_name and model_name or '(default)'
-    local winbar_text = string.format('  sllm.nvim | Model: %s', model_display)
-    vim.api.nvim_set_option_value('winbar', winbar_text, { win = llm_win })
+  local model_display = model_name and model_name or '(default)'
+  local winbar_text = string.format('  sllm.nvim | Model: %s', model_display)
+
+  if is_loading_active then
+    -- Animation is running, so we update the text that will be restored later.
+    original_winbar_text = winbar_text
+  else
+    -- Not loading, so we can update the winbar directly.
+    update_winbar(winbar_text)
   end
 end
 

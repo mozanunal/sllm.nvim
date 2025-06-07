@@ -9,7 +9,6 @@ format:
 	@echo "------------------ format  -------------------------"
 	stylua lua/ tests/
 
-# New target for CI to check formatting without changing files
 format-check:
 	@echo "------------------ format-check --------------------"
 	stylua --check lua/ tests/

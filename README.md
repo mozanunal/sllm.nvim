@@ -1,4 +1,3 @@
-
 # sllm.nvim
 
 <img src="./assets/logo.png" alt="sllm.nvim Logo" width="120"/>

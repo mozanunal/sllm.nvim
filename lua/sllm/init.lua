@@ -118,9 +118,7 @@ end
 --- Ask the LLM with a prompt from the user.
 ---@return nil
 function M.ask_llm()
-  if Utils.is_mode_visual() then
-    M.add_sel_to_ctx()
-  end
+  if Utils.is_mode_visual() then M.add_sel_to_ctx() end
   input({ prompt = 'Prompt: ' }, function(user_input)
     if user_input == '' then
       notify('[sllm] no prompt provided.', vim.log.levels.INFO)

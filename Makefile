@@ -1,4 +1,4 @@
-all: dev_install format lint unit_tests print_loc
+all: dev_install format-check lint unit_tests print_loc
 precommit: all
 
 dev_install:
@@ -8,6 +8,11 @@ dev_install:
 format:
 	@echo "------------------ format  -------------------------"
 	stylua lua/ tests/
+
+# New target for CI to check formatting without changing files
+format-check:
+	@echo "------------------ format-check --------------------"
+	stylua --check lua/ tests/
 
 lint:
 	@echo "------------------ lint  ---------------------------"

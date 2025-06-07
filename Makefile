@@ -30,3 +30,8 @@ print_loc:
 	@echo "--> lua folder"
 	@tokei lua
 
+gif:
+	@echo "------------------ make_gif  -----------------------"
+	@vhs < ./assets/tapes/main.tape
+	@open -R ./assets/workflow.gif
+

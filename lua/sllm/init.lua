@@ -216,7 +216,7 @@ function M.select_model()
     notify('[sllm] no models found.', vim.log.levels.ERROR)
     return
   end
-  pick(models, nil, function(item)
+  pick(models, {}, function(item)
     if item then
       state.selected_model = item
       notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
@@ -235,7 +235,7 @@ function M.add_tool_to_ctx()
     notify('[sllm] no tools found.', vim.log.levels.ERROR)
     return
   end
-  pick(tools, nil, function(item)
+  pick(tools, {}, function(item)
     if item then
       CtxMan.add_tool(item)
       notify('[sllm] tool added: ' .. item, vim.log.levels.INFO)

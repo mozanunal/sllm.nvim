@@ -1,6 +1,7 @@
 # sllm.nvim
 
-<img src="./assets/logo.png" alt="sllm.nvim Logo" width="120"/>
+<img src="./assets/logo.png" alt="" width="120"/>
+<img src="./assets/workflow.gif" alt="sllm.nvim Workflow"/>
 
 [![CI](https://github.com/mozanunal/sllm.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/mozanunal/sllm.nvim/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/v/release/mozanunal/sllm.nvim?include_prereleases)](https://github.com/mozanunal/sllm.nvim/releases)

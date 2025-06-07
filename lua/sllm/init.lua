@@ -34,7 +34,6 @@ local config = {
 }
 
 local state = {
-  llm_job_id = nil, -- Note: JobMan now manages job IDs internally, this might be legacy
   continue = nil,
   selected_model = nil,
 }
@@ -67,8 +66,16 @@ M.setup = function(user_config)
   )
   vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
 
-  if config.on_start_new_chat then state.continue = false else state.continue = true end
-  if config.default_model == 'default' then state.selected_model = nil else state.selected_model = config.default_model end
+  if config.on_start_new_chat then
+    state.continue = false
+  else
+    state.continue = true
+  end
+  if config.default_model == 'default' then
+    state.selected_model = nil
+  else
+    state.selected_model = config.default_model
+  end
 
   notify = config.notify_func
   pick = config.pick_func
@@ -110,42 +117,38 @@ M.ask_llm = function()
     state.continue = true
     local first_line_received = false
 
-    JobMan.start(cmd,
-      function(line) -- on_stdout
-        if not first_line_received then
-          Ui.stop_loading_indicator() -- Restore winbar
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Append header now that we have output
-          first_line_received = true
-        end
-        Ui.append_to_llm_buffer({ line })
-      end,
-      function(exit_code)           -- on_exit
-        Ui.stop_loading_indicator() -- Always ensure indicator is stopped on exit. It's idempotent.
-
-        if not first_line_received then
-          -- Job ended before any stdout (empty response, error, or cancellation)
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Add header
-          local end_message
-          if exit_code == 0 then
-            end_message = '(empty response)'
-          else
-            end_message = string.format('(request failed or cancelled: exit %d)', exit_code)
-          end
-          Ui.append_to_llm_buffer({ end_message })
-        end
-        notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
-        Ui.append_to_llm_buffer({ '' }) -- Final empty line for spacing
-        if config.reset_ctx_each_prompt then CtxMan.reset() end
+    JobMan.start(cmd, function(line)
+      if not first_line_received then
+        Ui.stop_loading_indicator()
+        Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
+        first_line_received = true
       end
-    )
+      Ui.append_to_llm_buffer({ line })
+    end, function(exit_code) -- on_exit
+      Ui.stop_loading_indicator() -- Always ensure indicator is stopped on exit. It's idempotent.
+
+      if not first_line_received then
+        -- Job ended before any stdout (empty response, error, or cancellation)
+        Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }) -- Add header
+        local end_message
+        if exit_code == 0 then
+          end_message = '(empty response)'
+        else
+          end_message = string.format('(request failed or cancelled: exit %d)', exit_code)
+        end
+        Ui.append_to_llm_buffer({ end_message })
+      end
+      notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
+      Ui.append_to_llm_buffer({ '' }) -- Final empty line for spacing
+      if config.reset_ctx_each_prompt then CtxMan.reset() end
+    end)
   end)
 end
 
 M.cancel = function()
   if JobMan.is_busy() then
-    JobMan.stop() -- This will trigger the on_exit callback of the current job
+    JobMan.stop()
     notify('[sllm] canceling request...', vim.log.levels.WARN)
-    -- The on_exit handler in M.ask_llm will update the UI buffer appropriately.
   else
     notify('[sllm] no active llm job', vim.log.levels.INFO)
   end
@@ -153,11 +156,10 @@ end
 
 M.new_chat = function()
   if JobMan.is_busy() then
-    JobMan.stop() -- Cancel existing job; its on_exit will handle UI for that job
+    JobMan.stop()
     notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
   state.continue = false
-  -- Ensure buffer is visible before cleaning, especially if it was toggled off
   Ui.show_llm_buffer(config.window_type, state.selected_model)
   Ui.clean_llm_buffer() -- This will also stop any active loading animation
   notify('[sllm] new chat created', vim.log.levels.INFO)

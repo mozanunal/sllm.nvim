@@ -8,16 +8,21 @@ local animation_timer = nil
 local animation_frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 local current_animation_frame_idx = 1
 local is_loading_active = false
-local original_winbar_text = '' -- Store the winbar text before animation
+local original_winbar_text = ''
 
+--- Ensures the llm buffer exists and returns its handle.
+--- Never returns nil.
+---@return integer bufnr
 local ensure_llm_buffer = function()
-  if not Utils.buf_is_valid(llm_buf) then
+  if llm_buf and Utils.buf_is_valid(llm_buf) then
+    return llm_buf
+  else
     llm_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = llm_buf })
     vim.api.nvim_set_option_value('filetype', 'markdown', { buf = llm_buf })
     vim.api.nvim_buf_set_name(llm_buf, 'sllm://chat')
+    return llm_buf
   end
-  return llm_buf
 end
 
 local create_llm_float_win_opts = function()
@@ -48,7 +53,7 @@ end
 
 local create_llm_win = function(window_type, model_name)
   local win_opts
-  ensure_llm_buffer()
+  local valid_llm_buf = ensure_llm_buffer()
   window_type = window_type or 'vertical'
   if window_type == 'float' then
     win_opts = create_llm_float_win_opts()
@@ -57,18 +62,18 @@ local create_llm_win = function(window_type, model_name)
   else
     win_opts = { split = 'right' }
   end
-  local win_id = vim.api.nvim_open_win(llm_buf, false, win_opts)
+  local win_id = vim.api.nvim_open_win(valid_llm_buf, false, win_opts)
   vim.api.nvim_set_option_value('wrap', true, { win = win_id })
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  M.update_llm_win_title(model_name) -- Use the central function to set the title
+  M.update_llm_win_title(model_name)
 
   return win_id
 end
 
 M.start_loading_indicator = function()
-  if is_loading_active then return end -- Don't start if already active
+  if is_loading_active then return end
 
   local llm_win = Utils.check_buffer_visible(llm_buf)
   if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
@@ -82,28 +87,32 @@ M.start_loading_indicator = function()
   if animation_timer then animation_timer:close() end -- Defensive
   animation_timer = vim.loop.new_timer()
 
-  animation_timer:start(0, 150, vim.schedule_wrap(function()
-    if not is_loading_active then -- Animation was stopped externally
-      if animation_timer then
-        animation_timer:stop()
-        animation_timer:close()
-        animation_timer = nil
+  animation_timer:start(
+    0,
+    150,
+    vim.schedule_wrap(function()
+      if not is_loading_active then -- Animation was stopped externally
+        if animation_timer then
+          animation_timer:stop()
+          animation_timer:close()
+          animation_timer = nil
+        end
+        return
       end
-      return
-    end
 
-    local llm_win_check = Utils.check_buffer_visible(llm_buf)
-    if not (llm_win_check and vim.api.nvim_win_is_valid(llm_win_check)) then
-      -- Window was closed during animation
-      M.stop_loading_indicator() -- Clean up
-      return
-    end
+      local llm_win_check = Utils.check_buffer_visible(llm_buf)
+      if not (llm_win_check and vim.api.nvim_win_is_valid(llm_win_check)) then
+        -- Window was closed during animation
+        M.stop_loading_indicator() -- Clean up
+        return
+      end
 
-    current_animation_frame_idx = (current_animation_frame_idx % #animation_frames) + 1
-    local frame = animation_frames[current_animation_frame_idx]
-    local new_winbar_text = string.format('%s %s', frame, original_winbar_text)
-    update_winbar(new_winbar_text)
-  end))
+      current_animation_frame_idx = (current_animation_frame_idx % #animation_frames) + 1
+      local frame = animation_frames[current_animation_frame_idx]
+      local new_winbar_text = string.format('%s %s', frame, original_winbar_text)
+      update_winbar(new_winbar_text)
+    end)
+  )
 end
 
 M.stop_loading_indicator = function()
@@ -117,9 +126,7 @@ M.stop_loading_indicator = function()
   end
 
   -- Restore the original winbar text
-  if original_winbar_text ~= '' then
-    update_winbar(original_winbar_text)
-  end
+  if original_winbar_text ~= '' then update_winbar(original_winbar_text) end
   original_winbar_text = '' -- Clear the stored text
 end
 
@@ -127,8 +134,8 @@ M.clean_llm_buffer = function()
   if is_loading_active then
     M.stop_loading_indicator() -- Stop animation and restore the original title
   end
-  if Utils.buf_is_valid(llm_buf) then
-    vim.api.nvim_buf_set_lines(llm_buf, 0, -1, false, {})
+  if llm_buf then
+    if Utils.buf_is_valid(llm_buf) then vim.api.nvim_buf_set_lines(llm_buf, 0, -1, false, {}) end
   end
 end
 
@@ -162,11 +169,11 @@ end
 
 M.append_to_llm_buffer = function(lines)
   if lines then
-    ensure_llm_buffer()
-    vim.api.nvim_buf_set_lines(llm_buf, -1, -1, false, lines)
-    local llm_win = Utils.check_buffer_visible(llm_buf)
+    local valid_llm_buf = ensure_llm_buffer()
+    vim.api.nvim_buf_set_lines(valid_llm_buf, -1, -1, false, lines)
+    local llm_win = Utils.check_buffer_visible(valid_llm_buf)
     if llm_win then
-      local last_line = vim.api.nvim_buf_line_count(llm_buf)
+      local last_line = vim.api.nvim_buf_line_count(valid_llm_buf)
       vim.api.nvim_win_set_cursor(llm_win, { last_line, 0 })
     end
   end

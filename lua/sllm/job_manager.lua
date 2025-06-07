@@ -1,23 +1,30 @@
+---@module "sllm.job_manager"
 local M = {}
 
 local llm_job_id = nil
 local stdout_acc = ''
 local ansi_escape_pattern = '[\27\155][][()#;?%][0-9;]*[A-Za-z@^_`{|}~]'
 
---- Removes ANSI escape codes from a string.
--- @param text string The input string possibly containing ANSI escape codes.
--- @return string The string with ANSI escape codes removed.
+--- Remove ANSI escape codes from a string.
+---@param text string The input string possibly containing ANSI escape codes.
+---@return string The string with ANSI escape codes removed.
 local function strip_ansi_codes(text) return text:gsub(ansi_escape_pattern, '') end
 
-M.is_busy = function()
-  if llm_job_id then
-    return true
-  else
-    return false
-  end
-end
+--- Check if a job is currently running.
+---@return boolean `true` if a job is active, `false` otherwise.
+function M.is_busy() return llm_job_id ~= nil end
 
-M.start = function(cmd, hook_on_newline, hook_on_exit)
+--- Start a new job and stream its output line by line.
+---
+--- Splits on `'\r'` in the stdout buffer, strips ANSI codes, and calls
+--- `hook_on_newline` for each line. Once the job exits, it flushes any
+--- leftover, clears state, and calls `hook_on_exit`.
+---
+---@param cmd string|string[]                 Command or command-plus-args for `vim.fn.jobstart`.
+---@param hook_on_newline fun(line: string)   Callback invoked on each decoded line.
+---@param hook_on_exit fun(exit_code: integer) Callback invoked when the job exits.
+---@return nil
+function M.start(cmd, hook_on_newline, hook_on_exit)
   llm_job_id = vim.fn.jobstart(cmd, {
     stdout_buffer = false,
     pty = true,
@@ -25,20 +32,15 @@ M.start = function(cmd, hook_on_newline, hook_on_exit)
       if not data then return end
       for _, chunk in ipairs(data) do
         if chunk ~= '' then
-          -- 1) accumulate everything
+          -- 1) Accumulate chunks
           stdout_acc = stdout_acc .. chunk
 
-          -- 2) as long as there's a '\r' in the buffer, split & flush
+          -- 2) Split on '\r' and flush each line
           local cr_pos = stdout_acc:find('\r', 1, true)
           while cr_pos do
-            -- the text up to (but not including) the '\r'
             local line = stdout_acc:sub(1, cr_pos - 1)
             hook_on_newline(strip_ansi_codes(line))
-
-            -- drop the flushed part + the '\r' itself
             stdout_acc = stdout_acc:sub(cr_pos + 1)
-
-            -- look for another '\r'
             cr_pos = stdout_acc:find('\r', 1, true)
           end
         end
@@ -52,7 +54,7 @@ M.start = function(cmd, hook_on_newline, hook_on_exit)
       end
     end,
     on_exit = function(_, exit_code, _)
-      -- if there’s leftover text without a trailing '\r', you can flush it here:
+      -- Flush leftover text without a trailing '\r'
       if stdout_acc ~= '' then
         hook_on_newline(stdout_acc)
         stdout_acc = ''
@@ -63,7 +65,9 @@ M.start = function(cmd, hook_on_newline, hook_on_exit)
   })
 end
 
-M.stop = function()
+--- Stop the currently running job, if any, and reset state.
+---@return nil
+function M.stop()
   if llm_job_id then
     vim.fn.jobstop(llm_job_id)
     llm_job_id = nil

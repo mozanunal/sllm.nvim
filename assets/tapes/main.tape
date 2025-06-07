@@ -1,4 +1,4 @@
-Output assets/workflow.mp4
+Output assets/workflow.gif
 
 ### Global appearance
 Set Shell "bash"
@@ -46,21 +46,22 @@ Sleep 7000ms Hide Sleep 30000ms Show Sleep 1000ms
 Type " sm" Sleep 1000ms
 Type "4o-mini" Sleep 300ms Enter Sleep 300ms
 Type " ss" Sleep 300ms
-Type " let's try it with thinking model, check this fix the warnings" Sleep 300ms Enter
+Type "let's try it with thinking model, check this fix the warnings" Sleep 300ms Enter
 Sleep 7000ms Hide Sleep 30000ms Show Sleep 1000ms
 
-
+Type " sm" Sleep 1000ms
+Type "4.1" Sleep 300ms Enter Sleep 300ms
 Type " sn" Sleep 1000ms
 Type " sT" Sleep 1000ms
 Type "quic" Sleep 300ms Enter Sleep 1000ms
 Type " ss" Sleep 300ms
-Type " Calculate 12+5x-12=98x+1231232 using tools" Sleep 300ms Enter
+Type "Calculate 12+5x-12=98x+1231232 using tools" Sleep 300ms Enter
 Sleep 7000ms Hide Sleep 30000ms Show Sleep 1000ms
 
 Type " sn" Sleep 1000ms
 Type ":e tools.py" Sleep 1000ms Enter Sleep 1000ms
 Type " sF" Sleep 1000ms
 Type " ss" Sleep 300ms
-Type " Explore the steps in github CI using the tools, cat and ls (you can use 5 times max)" Sleep 300ms Enter
+Type "Explore what this project using as CI" Sleep 300ms Enter
 Sleep 7000ms Hide Sleep 30000ms Show Sleep 1000ms
 Type ":qa!" Sleep 1000ms

@@ -39,7 +39,7 @@ end
 ---@param functions    string[]?          Pass `--functions <func>` for each function signature.
 ---@return string                      The assembled shell command.
 function M.llm_cmd(user_input, continue, show_usage, model, ctx_files, tools, functions)
-  local cmd = 'llm'
+  local cmd = 'llm --td'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end
   if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end

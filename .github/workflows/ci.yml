@@ -1,0 +1,50 @@
+name: CI
+
+# Triggers the workflow on push or pull request events for the main branch
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  lint-and-test:
+    # Use a macOS runner, which aligns with the Makefile's use of 'brew'
+    runs-on: macos-latest
+
+    steps:
+      # 1. Check out the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Neovim (stable version)
+      - name: Setup Neovim
+        run: brew install neovim
+
+      # 3. Install tooling dependencies using the Makefile target
+      - name: Install dependencies (luacheck, stylua, tokei)
+        run: make dev_install
+
+      # 4. Install Neovim plugin dependencies (e.g., MiniTest)
+      # This command starts Neovim headlessly, which should trigger your plugin
+      # manager (like lazy.nvim) to install the necessary testing plugins.
+      - name: Install Neovim plugins
+        run: nvim --headless -u scripts/minimal_init.lua -c 'q'
+
+      # 5. Run the linter
+      - name: Run linter (luacheck)
+        run: make lint
+
+      # 6. Check formatting (using the new 'format-check' target)
+      - name: Check formatting (stylua)
+        run: make format-check
+
+      # 7. Run the unit tests
+      - name: Run unit tests (MiniTest)
+        run: make unit_tests
+
+      # 8. (Optional) Print lines of code for stats
+      - name: Print lines of code (tokei)
+        run: make print_loc
+
+

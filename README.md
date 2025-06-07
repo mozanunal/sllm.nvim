@@ -1,10 +1,9 @@
 # sllm.nvim
 
-<img src="./assets/logo.png" alt="" width="120"/>
-<img src="./assets/workflow.gif" alt="sllm.nvim Workflow"/>
-
 [![CI](https://github.com/mozanunal/sllm.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/mozanunal/sllm.nvim/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/v/release/mozanunal/sllm.nvim?include_prereleases)](https://github.com/mozanunal/sllm.nvim/releases)
+
+<img src="./assets/workflow.gif" alt="sllm.nvim Workflow"/>
 
 **sllm.nvim** is a Neovim plugin that integrates Simon Willison’s [`llm`](https://github.com/simonw/llm) CLI directly into your editor.
 Chat with large language models, stream responses in a scratch buffer, manage context files, switch models or tool integrations on the fly, and control everything asynchronously without leaving Neovim.

@@ -5,3 +5,5 @@ exclude_files = {
 read_globals = {
   "vim",
 }
+
+max_line_length = 122

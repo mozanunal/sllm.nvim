@@ -1,4 +1,4 @@
-all: dev_install format-check lint unit_tests print_loc
+all: dev_install format lint unit_tests print_loc
 precommit: all
 
 dev_install:

@@ -1,10 +1,12 @@
+
 ---@module "sllm.backend.llm"
 local M = {}
 
 ---Run `llm models` and parse out just the model names.
+---@param llm_cmd string Command to run the LLM CLI.
 ---@return string[]  List of available model names.
-function M.extract_models()
-  local models = vim.fn.systemlist('llm models')
+function M.extract_models(llm_cmd)
+  local models = vim.fn.systemlist(llm_cmd .. ' models')
   local only_models = {}
   for _, line in ipairs(models) do
     -- lines look like "0: model-name (description…)"
@@ -15,9 +17,10 @@ function M.extract_models()
 end
 
 ---Run `llm tools list --json` and extract tool names.
+---@param llm_cmd string Command to run the LLM CLI.
 ---@return string[]  List of tool names.
-function M.extract_tools()
-  local json_string = vim.fn.system('llm tools list --json')
+function M.extract_tools(llm_cmd)
+  local json_string = vim.fn.system(llm_cmd .. ' tools list --json')
   local spec = vim.fn.json_decode(json_string)
   local names = {}
   if spec.tools then
@@ -30,6 +33,7 @@ end
 
 ---Construct the full `llm` command with provided options.
 ---
+---@param llm_cmd      string             The base command to run `llm`.
 ---@param user_input   string             The prompt text to send to LLM.
 ---@param continue     boolean?           Pass `-c` to continue a previous session.
 ---@param show_usage   boolean?           Pass `-u` to show usage examples.
@@ -38,8 +42,8 @@ end
 ---@param tools        string[]?          Pass `-T <tool>` for each tool.
 ---@param functions    string[]?          Pass `--functions <func>` for each function signature.
 ---@return string                      The assembled shell command.
-function M.llm_cmd(user_input, continue, show_usage, model, ctx_files, tools, functions)
-  local cmd = 'llm --td'
+function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, tools, functions)
+  local cmd = llm_cmd .. ' --td'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end
   if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end

@@ -1,20 +1,20 @@
 ---@module "sllm"
 
 ---@class SllmKeymaps
----@field ask_llm string             Keymap for asking the LLM.
----@field new_chat string            Keymap for starting a new chat.
----@field cancel string              Keymap for canceling a request.
----@field focus_llm_buffer string    Keymap for focusing the LLM window.
----@field toggle_llm_buffer string   Keymap for toggling the LLM window.
----@field select_model string        Keymap for selecting an LLM model.
----@field add_file_to_ctx string     Keymap for adding current file to context.
----@field add_url_to_ctx string      Keymap for adding a URL to context.
----@field add_sel_to_ctx string      Keymap for adding visual selection.
----@field add_diag_to_ctx string     Keymap for adding diagnostics.
----@field add_cmd_out_to_ctx string  Keymap for adding command output.
----@field add_tool_to_ctx string     Keymap for adding a tool.
----@field add_func_to_ctx string     Keymap for adding a function.
----@field reset_context string       Keymap for resetting the context.
+---@field ask_llm string|false|nil             Keymap for asking the LLM.
+---@field new_chat string|false|nil            Keymap for starting a new chat.
+---@field cancel string|false|nil              Keymap for canceling a request.
+---@field focus_llm_buffer string|false|nil    Keymap for focusing the LLM window.
+---@field toggle_llm_buffer string|false|nil   Keymap for toggling the LLM window.
+---@field select_model string|false|nil        Keymap for selecting an LLM model.
+---@field add_file_to_ctx string|false|nil     Keymap for adding current file to context.
+---@field add_url_to_ctx string|false|nil      Keymap for adding a URL to context.
+---@field add_sel_to_ctx string|false|nil      Keymap for adding visual selection.
+---@field add_diag_to_ctx string|false|nil     Keymap for adding diagnostics.
+---@field add_cmd_out_to_ctx string|false|nil  Keymap for adding command output.
+---@field add_tool_to_ctx string|false|nil     Keymap for adding a tool.
+---@field add_func_to_ctx string|false|nil     Keymap for adding a function.
+---@field reset_context string|false|nil       Keymap for resetting the context.
 
 ---@class SllmConfig
 ---@field llm_cmd string                     Command to run the LLM CLI.
@@ -26,12 +26,7 @@
 ---@field pick_func fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))  Selector UI.
 ---@field notify_func fun(msg: string, level?: number)      Notification function.
 ---@field input_func fun(opts: table, on_confirm: fun(input: string?))  Input prompt function.
----@field keymaps SllmKeymaps            Collection of keybindings.
-
----@class SllmState
----@field continue boolean?           Whether next prompt continues the conversation.
----@field selected_model string?      Currently selected model name.
-
+---@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -94,20 +89,29 @@ function M.setup(user_config)
   config = vim.tbl_deep_extend('force', {}, config, user_config or {})
 
   local km = config.keymaps
-  vim.keymap.set({ 'n', 'v' }, km.ask_llm, M.ask_llm, { desc = 'Ask LLM' })
-  vim.keymap.set({ 'n', 'v' }, km.new_chat, M.new_chat, { desc = 'New LLM chat' })
-  vim.keymap.set({ 'n', 'v' }, km.cancel, M.cancel, { desc = 'Cancel LLM request' })
-  vim.keymap.set({ 'n', 'v' }, km.focus_llm_buffer, M.focus_llm_buffer, { desc = 'Focus LLM buffer' })
-  vim.keymap.set({ 'n', 'v' }, km.toggle_llm_buffer, M.toggle_llm_buffer, { desc = 'Toggle LLM buffer' })
-  vim.keymap.set({ 'n', 'v' }, km.select_model, M.select_model, { desc = 'Select LLM model' })
-  vim.keymap.set({ 'n', 'v' }, km.add_tool_to_ctx, M.add_tool_to_ctx, { desc = 'Add tool to context' })
-  vim.keymap.set({ 'n', 'v' }, km.add_file_to_ctx, M.add_file_to_ctx, { desc = 'Add file to context' })
-  vim.keymap.set({ 'n', 'v' }, km.add_url_to_ctx, M.add_url_to_ctx, { desc = 'Add URL to context' })
-  vim.keymap.set({ 'n', 'v' }, km.add_diag_to_ctx, M.add_diag_to_ctx, { desc = 'Add diagnostics to context' })
-  vim.keymap.set({ 'n', 'v' }, km.add_cmd_out_to_ctx, M.add_cmd_out_to_ctx, { desc = 'Add command output to context' })
-  vim.keymap.set({ 'n', 'v' }, km.reset_context, M.reset_context, { desc = 'Reset LLM context' })
-  vim.keymap.set('v', km.add_sel_to_ctx, M.add_sel_to_ctx, { desc = 'Add visual selection to context' })
-  vim.keymap.set('n', km.add_func_to_ctx, M.add_func_to_ctx, { desc = 'Add selected function to context' })
+  if km then
+    local keymap_defs = {
+      ask_llm = { modes = { 'n', 'v' }, func = M.ask_llm, desc = 'Ask LLM' },
+      new_chat = { modes = { 'n', 'v' }, func = M.new_chat, desc = 'New LLM chat' },
+      cancel = { modes = { 'n', 'v' }, func = M.cancel, desc = 'Cancel LLM request' },
+      focus_llm_buffer = { modes = { 'n', 'v' }, func = M.focus_llm_buffer, desc = 'Focus LLM buffer' },
+      toggle_llm_buffer = { modes = { 'n', 'v' }, func = M.toggle_llm_buffer, desc = 'Toggle LLM buffer' },
+      select_model = { modes = { 'n', 'v' }, func = M.select_model, desc = 'Select LLM model' },
+      add_tool_to_ctx = { modes = { 'n', 'v' }, func = M.add_tool_to_ctx, desc = 'Add tool to context' },
+      add_file_to_ctx = { modes = { 'n', 'v' }, func = M.add_file_to_ctx, desc = 'Add file to context' },
+      add_url_to_ctx = { modes = { 'n', 'v' }, func = M.add_url_to_ctx, desc = 'Add URL to context' },
+      add_diag_to_ctx = { modes = { 'n', 'v' }, func = M.add_diag_to_ctx, desc = 'Add diagnostics to context' },
+      add_cmd_out_to_ctx = { modes = { 'n', 'v' }, func = M.add_cmd_out_to_ctx, desc = 'Add command output to context' },
+      reset_context = { modes = { 'n', 'v' }, func = M.reset_context, desc = 'Reset LLM context' },
+      add_sel_to_ctx = { modes = 'v', func = M.add_sel_to_ctx, desc = 'Add visual selection to context' },
+      add_func_to_ctx = { modes = 'n', func = M.add_func_to_ctx, desc = 'Add selected function to context' },
+    }
+
+    for name, def in pairs(keymap_defs) do
+      local key = km[name]
+      if type(key) == 'string' and key ~= '' then vim.keymap.set(def.modes, key, def.func, { desc = def.desc }) end
+    end
+  end
 
   state.continue = not config.on_start_new_chat
   state.selected_model = config.default_model ~= 'default' and config.default_model or nil

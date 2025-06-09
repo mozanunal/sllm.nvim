@@ -98,7 +98,7 @@ use({
 
 ## Configuration
 
-Call `require("sllm").setup()` with an optional table:
+Call `require("sllm").setup()` with an optional table of overrides:
 
 ```lua
 require("sllm").setup({
@@ -109,49 +109,38 @@ require("sllm").setup({
   reset_ctx_each_prompt    = true, -- clear file context each ask
   window_type              = "vertical", -- Default. Options: "vertical", "horizontal", "float"
   -- function for item selection (like vim.ui.select)
-  -- tested alternatives: vim.ui.select, require("mini.pick").ui_select, require("snacks.picker").select
   pick_func                = require("mini.pick").ui_select,
   -- function for notifications (like vim.notify)
-  -- tested alternatives: vim.notify, require("mini.notify").make_notify(), require("snacks.notifier").notify
   notify_func              = require("mini.notify").make_notify(),
-  -- funtion for inputs (like vim.ui.input)
-  -- tested alternatives: vim.ui.input, require("snacks.input").input
+  -- function for inputs (like vim.ui.input)
   input_func               = vim.ui.input,
+  -- See the "Customizing Keymaps" section for more details
   keymaps = {
-    ask_llm                  = "<leader>ss",  -- prompt the LLM
-    new_chat                 = "<leader>sn",  -- clear chat buffer
-    cancel                   = "<leader>sc",  -- cancel ongoing request
-    focus_llm_buffer         = "<leader>sf",  -- jump to LLM buffer
-    toggle_llm_buffer        = "<leader>st",  -- show/hide buffer
-    select_model             = "<leader>sm",  -- choose a model
-    add_file_to_ctx          = "<leader>sa",  -- add current file to context
-    add_url_to_ctx           = "<leader>su",  -- add a URL's content to context
-    add_sel_to_ctx           = "<leader>sv",  -- add visual selection to context
-    add_diag_to_ctx          = "<leader>sd",  -- add diagnostics to context
-    add_cmd_out_to_ctx       = "<leader>sx",  -- add shell command output to context
-    reset_context            = "<leader>sr",  -- clear all context
-    add_tool_to_ctx          = "<leader>sT",  -- add installed tools to context
-    add_func_to_ctx          = "<leader>sF",  -- add a Python function as a tool
+    -- Change a default keymap
+    ask_llm = "<leader>a",
+    -- Disable a default keymap
+    add_url_to_ctx = false,
+    -- Other keymaps will use their default values
   },
 })
 ```
 
-| Option                          | Type    | Default     | Description                                                      |
-|---------------------------------|---------|-------------|------------------------------------------------------------------|
-| `llm_cmd`                       | string  | `"llm"`                                  | Command or path for the `llm` CLI tool.                            |
-| `default_model`                 | string  | `"gpt-4.1"`                              | Model to use on startup                                          |
-| `show_usage`                    | boolean | `true`                                   | Include token usage summary in responses. If `true`, you'll see details after each interaction. |
-| `on_start_new_chat`             | boolean | `true`                                   | Begin with a fresh chat buffer on plugin setup                   |
-| `reset_ctx_each_prompt`         | boolean | `true`                                 | Automatically clear file context after every prompt (if `true`) |
-| `window_type`                   | string  | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.       |
-| `pick_func`                     | function| `require('mini.pick').ui_select`         | UI function for interactive model selection                     |
-| `notify_func`                   | function| `require('mini.notify').make_notify()`   | Notification function                                           |
-| `input_func`                    | function| `vim.ui.input`                         | Input prompt function.                                          |
-| `keymaps`                       | table   | (see default config example)             | Custom keybindings                                              |
-
----
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `llm_cmd` | string | `"llm"` | Command or path for the `llm` CLI tool. |
+| `default_model` | string | `"gpt-4.1"` | Model to use on startup |
+| `show_usage` | boolean | `true` | Include token usage summary in responses. If `true`, you'll see details after each interaction. |
+| `on_start_new_chat` | boolean | `true` | Begin with a fresh chat buffer on plugin setup |
+| `reset_ctx_each_prompt` | boolean | `true` | Automatically clear file context after every prompt (if `true`) |
+| `window_type` | string | `"vertical"` | Window style: `"vertical"`, `"horizontal"`, or `"float"`. |
+| `pick_func` | function| `require('mini.pick').ui_select` | UI function for interactive model selection |
+| `notify_func` | function| `require('mini.notify').make_notify()` | Notification function |
+| `input_func` | function| `vim.ui.input` | Input prompt function. |
+| `keymaps` | table/false | (see defaults) | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
 ## Keybindings & Commands
+
+The following table lists the **default** keybindings. All of them can be changed or disabled in your `setup` configuration (see [Customizing Keymaps](#customizing-keymaps)).
 
 | Keymap         | Mode  | Action                                                     |
 |----------------|-------|------------------------------------------------------------|
@@ -170,6 +159,45 @@ require("sllm").setup({
 | `<leader>sF`   | n,v   | Add Python function from buffer/selection as a tool        |
 | `<leader>sr`   | n,v   | Reset/clear all context files                              |
 
+---
+
+### Customizing Keymaps
+
+You have full control over the keybindings. Here are the common scenarios:
+
+#### 1. Use the Defaults
+If you are happy with the default keymaps, you don't need to pass a `keymaps` table at all. Just call `setup()` with no arguments or with other options.
+
+#### 2. Change Some, Disable Others
+To override specific keymaps, provide your new binding. To disable a keymap you don't use, set its value to `false` or `nil`. Any keymaps you don't specify will keep their default values.
+
+```lua
+-- In your setup() call:
+require("sllm").setup({
+  keymaps = {
+    -- CHANGE: Use <leader>a for asking the LLM instead of <leader>ss
+    ask_llm = "<leader>a",
+
+    -- DISABLE: I don't use the "add URL" or "add tool" features
+    add_url_to_ctx = false,
+    add_tool_to_ctx = nil, -- `nil` also works for disabling
+  },
+})
+```
+
+#### 3. Disable All Default Keymaps
+If you prefer to set up all keybindings manually, you can disable all defaults by passing `false` or an empty table `{}`.
+
+```lua
+-- In your setup() call:
+require("sllm").setup({
+  keymaps = false,
+})
+
+-- Now you can define your own from scratch
+local sllm = require("sllm")
+vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
+```
 ---
 
 ## Workflow Example
@@ -219,5 +247,4 @@ require("sllm").setup({
 
 Apache 2.0 — see [LICENSE](./LICENSE).
 `llm` and its extensions are copyright Simon Willison.
-```
 

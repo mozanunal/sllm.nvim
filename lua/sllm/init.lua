@@ -17,6 +17,7 @@
 ---@field reset_context string       Keymap for resetting the context.
 
 ---@class SllmConfig
+---@field llm_cmd string                     Command to run the LLM CLI.
 ---@field default_model string               Default model name or `"default"`.
 ---@field show_usage boolean                 Show usage examples flag.
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
@@ -42,6 +43,7 @@ local Ui = require('sllm.ui')
 --- Module configuration (with defaults).
 ---@type SllmConfig
 local config = {
+  llm_cmd = 'llm',
   default_model = 'gpt-4.1',
   show_usage = true,
   on_start_new_chat = true,
@@ -138,6 +140,7 @@ function M.ask_llm()
     Ui.start_loading_indicator()
 
     local cmd = Backend.llm_cmd(
+      config.llm_cmd,
       prompt,
       state.continue,
       config.show_usage,
@@ -211,7 +214,7 @@ function M.toggle_llm_buffer() Ui.toggle_llm_buffer(config.window_type, state.se
 --- Prompt user to select an LLM model.
 ---@return nil
 function M.select_model()
-  local models = Backend.extract_models()
+  local models = Backend.extract_models(config.llm_cmd)
   if not (models and #models > 0) then
     notify('[sllm] no models found.', vim.log.levels.ERROR)
     return
@@ -230,7 +233,7 @@ end
 --- Add a tool to the current context.
 ---@return nil
 function M.add_tool_to_ctx()
-  local tools = Backend.extract_tools()
+  local tools = Backend.extract_tools(config.llm_cmd)
   if not (tools and #tools > 0) then
     notify('[sllm] no tools found.', vim.log.levels.ERROR)
     return

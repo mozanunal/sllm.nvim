@@ -40,6 +40,7 @@ The landscape of AI plugins for Neovim is growing. To understand the philosophy 
 1.  **Install the `llm` CLI**
     Follow instructions at https://github.com/simonw/llm
     e.g. `brew install llm` or `pip install llm`.
+    > 💡 If `llm` is not in your system's `PATH`, you can set the full path in the configuration via the `llm_cmd` option.
 
 2.  **Install one or more `llm` extensions**
     -   `llm install llm-openai`
@@ -101,6 +102,7 @@ Call `require("sllm").setup()` with an optional table:
 
 ```lua
 require("sllm").setup({
+  llm_cmd                  = "llm", -- command or path for the llm CLI
   default_model            = "gpt-4.1", -- default llm model (set to "default" to use llm's default model)
   show_usage               = true, -- append usage stats to responses
   on_start_new_chat        = true, -- start fresh chat on setup
@@ -136,12 +138,15 @@ require("sllm").setup({
 
 | Option                          | Type    | Default     | Description                                                      |
 |---------------------------------|---------|-------------|------------------------------------------------------------------|
+| `llm_cmd`                       | string  | `"llm"`                                  | Command or path for the `llm` CLI tool.                            |
 | `default_model`                 | string  | `"gpt-4.1"`                              | Model to use on startup                                          |
 | `show_usage`                    | boolean | `true`                                   | Include token usage summary in responses. If `true`, you'll see details after each interaction. |
 | `on_start_new_chat`             | boolean | `true`                                   | Begin with a fresh chat buffer on plugin setup                   |
-| `reset_ctx_each_prompt` | boolean | `true`                                 | Automatically clear file context after every prompt (if `true`) |
+| `reset_ctx_each_prompt`         | boolean | `true`                                 | Automatically clear file context after every prompt (if `true`) |
+| `window_type`                   | string  | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.       |
 | `pick_func`                     | function| `require('mini.pick').ui_select`         | UI function for interactive model selection                     |
 | `notify_func`                   | function| `require('mini.notify').make_notify()`   | Notification function                                           |
+| `input_func`                    | function| `vim.ui.input`                         | Input prompt function.                                          |
 | `keymaps`                       | table   | (see default config example)             | Custom keybindings                                              |
 
 ---
@@ -214,4 +219,5 @@ require("sllm").setup({
 
 Apache 2.0 — see [LICENSE](./LICENSE).
 `llm` and its extensions are copyright Simon Willison.
+```
 

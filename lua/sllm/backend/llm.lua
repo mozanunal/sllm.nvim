@@ -70,4 +70,20 @@ function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, 
   return cmd
 end
 
+---Construct the `llm` command for completion.
+---
+---@param llm_cmd      string             The base command to run `llm`.
+---@param user_input   string             The prompt text to send to LLM.
+---@param model        string?            Pass `-m <model>` to select a model.
+---@return string                      The assembled shell command.
+function M.llm_completion_cmd(llm_cmd, user_input, model)
+  local cmd = llm_cmd .. ' --xl'
+  if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end
+
+  -- Always append the user's input prompt at the end
+  user_input = 'CONTINUE FROM HERE ONLY OUTPUT THE NEW CODE\n' .. user_input
+  cmd = cmd .. ' ' ..  vim.fn.shellescape(user_input)
+  return cmd
+end
+
 return M

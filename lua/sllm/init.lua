@@ -4,6 +4,7 @@
 ---@field ask_llm string|false|nil             Keymap for asking the LLM.
 ---@field new_chat string|false|nil            Keymap for starting a new chat.
 ---@field cancel string|false|nil              Keymap for canceling a request.
+---@field complete_at_cursor string|false|nil  Keymap for completing at cursor.
 ---@field focus_llm_buffer string|false|nil    Keymap for focusing the LLM window.
 ---@field toggle_llm_buffer string|false|nil   Keymap for toggling the LLM window.
 ---@field select_model string|false|nil        Keymap for selecting an LLM model.
@@ -19,6 +20,7 @@
 ---@class SllmConfig
 ---@field llm_cmd string                     Command to run the LLM CLI.
 ---@field default_model string               Default model name or `"default"`.
+---@field completion_model string|nil|false    Model for inline completion. Falls back to `default_model`.
 ---@field show_usage boolean                 Show usage examples flag.
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
 ---@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
@@ -40,6 +42,7 @@ local Ui = require('sllm.ui')
 local config = {
   llm_cmd = 'llm',
   default_model = 'gpt-4.1',
+  completion_model = nil,
   show_usage = true,
   on_start_new_chat = true,
   reset_ctx_each_prompt = true,
@@ -50,7 +53,8 @@ local config = {
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
-    cancel = '<leader>sc',
+    cancel = '<leader>sk',
+    complete_at_cursor = '<leader>sc',
     focus_llm_buffer = '<leader>sf',
     toggle_llm_buffer = '<leader>st',
     select_model = '<leader>sm',
@@ -94,6 +98,7 @@ function M.setup(user_config)
       ask_llm = { modes = { 'n', 'v' }, func = M.ask_llm, desc = 'Ask LLM' },
       new_chat = { modes = { 'n', 'v' }, func = M.new_chat, desc = 'New LLM chat' },
       cancel = { modes = { 'n', 'v' }, func = M.cancel, desc = 'Cancel LLM request' },
+      complete_at_cursor = { modes = { 'n', 'i' }, func = M.complete_at_cursor, desc = 'Complete at cursor' },
       focus_llm_buffer = { modes = { 'n', 'v' }, func = M.focus_llm_buffer, desc = 'Focus LLM buffer' },
       toggle_llm_buffer = { modes = { 'n', 'v' }, func = M.toggle_llm_buffer, desc = 'Toggle LLM buffer' },
       select_model = { modes = { 'n', 'v' }, func = M.select_model, desc = 'Select LLM model' },
@@ -181,6 +186,69 @@ function M.ask_llm()
       end
     )
   end)
+end
+
+--- Complete code at the current cursor position.
+---@return nil
+function M.complete_at_cursor()
+  if JobMan.is_busy() then
+    notify('[sllm] already running, please wait.', vim.log.levels.WARN)
+    return
+  end
+
+  local cur_buf = vim.api.nvim_get_current_buf()
+  local start_pos_list = vim.fn.getpos('.')
+  local start_row, start_col = start_pos_list[2] - 1, start_pos_list[3] - 1
+
+  local lines = vim.api.nvim_buf_get_lines(cur_buf, 0, start_row + 1, false)
+  lines[#lines] = lines[#lines]:sub(1, start_col)
+  local prompt = table.concat(lines, '\n')
+
+  if prompt:match('^%s*$') then
+    notify('[sllm] empty prompt for completion.', vim.log.levels.INFO)
+    return
+  end
+
+  notify('[sllm] generating completion...', vim.log.levels.INFO)
+
+  local model_to_use =
+    config.completion_model or state.selected_model or (config.default_model ~= 'default' and config.default_model or nil)
+
+  local cmd = Backend.llm_completion_cmd(config.llm_cmd, prompt, model_to_use)
+
+  local cur_win = vim.api.nvim_get_current_win()
+  vim.cmd('undojoin | silent! undobreak')
+
+  local total_inserted = ''
+  JobMan.start(cmd, ---@param chunk string
+    function(chunk)
+      if chunk == nil or chunk == '' then return end
+
+      local old_lines = vim.split(total_inserted, '\n', { plain = true })
+      total_inserted = total_inserted .. chunk
+      local new_lines = vim.split(total_inserted, '\n', { plain = true })
+
+      local end_row = start_row + #old_lines - 1
+      local end_col
+      if #old_lines == 1 then
+        end_col = start_col + #old_lines[1]
+      else
+        end_col = #old_lines[#old_lines]
+      end
+
+      vim.api.nvim_buf_set_text(cur_buf, start_row, start_col, end_row, end_col, new_lines)
+
+      local new_end_row = start_row + #new_lines - 1
+      vim.api.nvim_win_set_cursor(cur_win, { new_end_row + 1, 999999 })
+    end, ---@param exit_code integer
+    function(exit_code)
+      vim.cmd('silent! undobreak')
+      if exit_code == 0 then
+        notify('[sllm] completion done ✅', vim.log.levels.INFO)
+      else
+        notify(('[sllm] completion failed or canceled: exit %d'):format(exit_code), vim.log.levels.WARN)
+      end
+    end)
 end
 
 --- Cancel the in-flight LLM request, if any.

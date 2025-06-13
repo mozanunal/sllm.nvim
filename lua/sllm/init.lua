@@ -255,10 +255,10 @@ end
 --- Add the current file (or URL) path to the context.
 ---@return nil
 function M.add_file_to_ctx()
-  local buf_path = Utils.get_relpath(Utils.get_path_of_buffer(0))
+  local buf_path = Utils.get_path_of_buffer(0)
   if buf_path then
     CtxMan.add_fragment(buf_path)
-    notify('[sllm] context +' .. buf_path, vim.log.levels.INFO)
+    notify('[sllm] context +' .. Utils.get_relpath(buf_path), vim.log.levels.INFO)
   else
     notify('[sllm] buffer does not have a path.', vim.log.levels.WARN)
   end

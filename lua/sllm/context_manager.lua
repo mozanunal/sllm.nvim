@@ -13,6 +13,8 @@
 
 local M = {}
 
+local Utils = require('sllm.utils')
+
 ---@type SllmContext
 local context = {
   fragments = {},
@@ -92,7 +94,7 @@ function M.render_prompt_ui(user_input)
   if #context.fragments > 0 then
     files_list = '\n### Fragments\n'
     for _, f in ipairs(context.fragments) do
-      files_list = files_list .. render_template('- ${filepath}', { filepath = f }) .. '\n'
+      files_list = files_list .. render_template('- ${filepath}', { filepath = Utils.get_relpath(f) }) .. '\n'
     end
     files_list = files_list .. '\n'
   end

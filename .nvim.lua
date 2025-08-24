@@ -4,7 +4,7 @@ local function refresh_sllm()
   local m = dofile("lua/sllm/init.lua")
   m.setup({
     window_type   = "vertical",
-    -- default_model = "default",
+    default_model = "o3",
     -- function for item selection (like vim.ui.select)
     -- tested alternatives: vim.ui.select, require("mini.pick").ui_select, require("snacks.picker").select
     -- pick_func     = require("snacks.picker").select,

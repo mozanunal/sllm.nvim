@@ -130,6 +130,10 @@ function M.ask_llm()
       notify('[sllm] no prompt provided.', vim.log.levels.INFO)
       return
     end
+    if user_input == nil then
+      notify('[sllm] prompt canceled.', vim.log.levels.INFO)
+      return
+    end
 
     Ui.show_llm_buffer(config.window_type, state.selected_model)
     if JobMan.is_busy() then

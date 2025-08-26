@@ -116,7 +116,9 @@ function M.setup(user_config)
 
   state.continue = not config.on_start_new_chat
   state.selected_model = config.default_model ~= 'default' and config.default_model or nil
-  Backend = require("sllm.backends."..config.backend)
+  Backend = require('sllm.backends.' .. config.backend)
+  notify('[sllm] the backend is loaded.'..'sllm.backends.' .. config.backend, vim.log.levels.INFO)
+
 
   notify = config.notify_func
   pick = config.pick_func

@@ -5,6 +5,8 @@ local function refresh_sllm()
   m.setup({
     window_type   = "vertical",
     default_model = "o3",
+    backend = "opencode",
+    llm_cmd = "opencode"
     -- function for item selection (like vim.ui.select)
     -- tested alternatives: vim.ui.select, require("mini.pick").ui_select, require("snacks.picker").select
     -- pick_func     = require("snacks.picker").select,

@@ -30,7 +30,7 @@
 local M = {}
 
 local Utils = require('sllm.utils')
-local Backend = require('sllm.backend.llm')
+local Backend = require('sllm.backends.llm')
 local CtxMan = require('sllm.context_manager')
 local JobMan = require('sllm.job_manager')
 local Ui = require('sllm.ui')
@@ -38,6 +38,7 @@ local Ui = require('sllm.ui')
 --- Module configuration (with defaults).
 ---@type SllmConfig
 local config = {
+  backend = 'llm',
   llm_cmd = 'llm',
   default_model = 'gpt-4.1',
   show_usage = true,
@@ -115,6 +116,7 @@ function M.setup(user_config)
 
   state.continue = not config.on_start_new_chat
   state.selected_model = config.default_model ~= 'default' and config.default_model or nil
+  Backend = require("sllm.backends."..config.backend)
 
   notify = config.notify_func
   pick = config.pick_func

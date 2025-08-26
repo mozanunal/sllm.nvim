@@ -92,7 +92,7 @@ function M.render_prompt_ui(user_input)
   -- Assemble files section
   local files_list = ''
   if #context.fragments > 0 then
-    files_list = '\n### Fragments\n'
+    files_list = '\n### Files\n'
     for _, f in ipairs(context.fragments) do
       files_list = files_list .. render_template('- ${filepath}', { filepath = Utils.get_relpath(f) }) .. '\n'
     end
@@ -118,9 +118,10 @@ function M.render_prompt_ui(user_input)
   local tmpl_prompt = [[
 ${user_input}
 
+${files}
+
 ${snippets}
 
-${files}
 ]]
   local prompt = render_template(tmpl_prompt, {
     user_input = user_input or '',

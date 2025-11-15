@@ -1,38 +1,40 @@
 -- Example configuration showing how to use pre_hooks and post_hooks
--- This example demonstrates using context-vacuum to generate context
+-- This demonstrates using context-vacuum to dynamically generate context
 
 require("sllm").setup({
   -- Your existing configuration options
   llm_cmd = "llm",
-  default_model = "gpt-4.1",
+  default_model = "claude-sonnet-4.5",
   show_usage = true,
 
   -- Pre-hooks: Run before each LLM query
+  -- Stdout is automatically captured to temp files when add_to_context = true
   pre_hooks = {
     -- Example 1: Use context-vacuum to generate dynamic context
     {
       command = "context-vacuum generate",
-      add_to_context = true,  -- Captures stdout and adds to context automatically
+      add_to_context = true,  -- Captures stdout to temp file and adds to context
     },
 
     -- Example 2: Get git context (optional, can have multiple pre-hooks)
     -- {
-    --   command = "git log --oneline -5 && git status",
+    --   command = "git log --oneline -5 && echo '' && git status",
     --   add_to_context = true,
     -- },
 
-    -- Example 3: Run a command without adding to context (just for side effects)
+    -- Example 3: Run a command without adding to context (logging, etc.)
     -- {
-    --   command = "echo 'Starting LLM query...' >> /tmp/sllm_log.txt",
-    --   add_to_context = false,
+    --   command = "echo $(date): Starting query >> ~/.sllm_log",
+    --   add_to_context = false,  -- Just runs command, doesn't add output to context
     -- },
   },
 
   -- Post-hooks: Run after LLM response completes
+  -- Temp files are automatically cleaned up after these run
   post_hooks = {
-    -- Example: Clean up or log completion
+    -- Example: Log completion timestamp
     {
-      command = "echo 'LLM query completed' >> /tmp/sllm_log.txt",
+      command = "echo $(date): Query completed >> ~/.sllm_log",
     },
   },
 })

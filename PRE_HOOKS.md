@@ -2,35 +2,45 @@
 
 ## Overview
 
-Pre-hooks and post-hooks allow you to run shell commands before and after LLM queries. This is particularly useful for dynamically generating context files that the LLM can then use.
+Pre-hooks and post-hooks allow you to run shell commands before and after LLM queries. This is particularly useful for dynamically generating context that the LLM can then use, without any manual file management.
+
+**Key Feature**: When `add_to_context = true`, stdout from your command is automatically captured to a temporary file, added to context, and cleaned up after the query completes - no manual file paths or cleanup needed!
 
 ## Use Cases
 
-- **Dynamic Context Generation**: Generate project context, file trees, or summaries on-the-fly
-- **Git Context**: Automatically include recent commits, diffs, or branch information
+- **Dynamic Context Generation**: Use tools like `context-vacuum` to generate project-specific context automatically
+- **Git Context**: Automatically include recent commits, diffs, or branch status
 - **Build/Test Output**: Capture compiler errors or test failures
-- **Environment Setup**: Prepare temporary files or gather system information
-- **Cleanup**: Remove temporary files or log query completion
+- **Project Structure**: Generate file trees or dependency graphs
+- **Logging**: Track query history or completion events
 
 ## Configuration
 
-### Basic Example
+### Basic Example with context-vacuum
 
 ```lua
 require("sllm").setup({
+  -- Other config options...
+  default_model = "claude-sonnet-4.5",
+
+  -- Pre-hooks run BEFORE the LLM query
   pre_hooks = {
     {
       command = "context-vacuum generate",
-      add_to_context = true,
+      add_to_context = true,  -- Captures stdout to temp file and adds to context
     },
   },
+
+  -- Post-hooks run AFTER the LLM response (optional)
   post_hooks = {
     {
-      command = "echo 'Query completed'",
+      command = "echo 'Query completed at' $(date) >> ~/.sllm_history",
     },
   },
 })
 ```
+
+**That's it!** Now every time you ask the LLM a question, `context-vacuum generate` will run automatically, its output will be added to context, and everything will be cleaned up when done.
 
 ### Multiple Hooks
 
@@ -141,51 +151,40 @@ pre_hooks = {
 },
 ```
 
-### Example 4: Conditional Execution with Script
-
-Create a shell script `pre_hook.sh`:
-
-```bash
-#!/bin/bash
-# Only generate context if in a git repo
-if [ -d .git ]; then
-  git log --oneline -10
-  git diff --stat
-else
-  echo "Not in a git repository"
-fi
-```
-
-Then configure:
+### Example 4: Git History Context
 
 ```lua
 pre_hooks = {
   {
-    command = "./pre_hook.sh",
+    command = "git log --oneline -10 && echo '' && git status",
     add_to_context = true,
   },
 },
 ```
 
-### Example 5: Logging and Cleanup
+Automatically includes recent git history and current status in every query.
+
+### Example 5: Multiple Hooks with Logging
 
 ```lua
 pre_hooks = {
   {
-    command = "date '+%Y-%m-%d %H:%M:%S - Starting query' >> ~/.sllm_history",
+    command = "echo $(date): Query started >> ~/.sllm_log",
     add_to_context = false,  -- Just logging, not adding to context
   },
   {
     command = "context-vacuum generate",
-    add_to_context = true,
+    add_to_context = true,   -- This gets added to context
   },
 },
 post_hooks = {
   {
-    command = "date '+%Y-%m-%d %H:%M:%S - Query completed' >> ~/.sllm_history",
+    command = "echo $(date): Query completed >> ~/.sllm_log",
   },
 },
 ```
+
+This example shows using multiple hooks: one for logging (no context), one for context generation.
 
 ## Safety Features
 
@@ -206,10 +205,11 @@ The plugin handles all of this automatically using `vim.fn.tempname()`.
 
 If your pre-hooks aren't working as expected:
 
-1. **Check Command Output**: Run your command manually in the shell to verify it works
-2. **Check Notifications**: sllm will notify when pre-hooks execute
-3. **Verify add_to_context**: If you don't see the output in context, ensure `add_to_context = true`
-4. **Check for Errors**: If the command fails, check your shell for error messages
+1. **Test Command Manually**: Run your command in a terminal to verify it produces the expected output
+2. **Check Notifications**: Look for `[sllm] pre-hook executed, added to context` notification when you trigger a query
+3. **Verify Plugin Version**: Make sure you're on the `pre-hook` branch with `:Lazy sync`
+4. **Verify add_to_context**: Ensure `add_to_context = true` if you want output added to context
+5. **Check Context**: Run `:lua print(vim.inspect(require('sllm.context_manager').get()))` to see loaded context
 
 ## Performance Considerations
 
@@ -221,23 +221,6 @@ For long-running commands, consider:
 - Only enabling them when needed
 
 ## Advanced Patterns
-
-### Dynamic Commands Based on Current File
-
-You can use Neovim's Lua to make commands dynamic:
-
-```lua
--- In your config, you'd need to make this dynamic, but here's the concept:
--- This would require modifying the plugin to support command functions
-pre_hooks = {
-  {
-    command = "find . -name '*" .. vim.fn.expand('%:t:r') .. "*' -type f",
-    add_to_context = true,
-  },
-},
-```
-
-*Note: Current implementation requires static command strings. Dynamic commands would be a future enhancement.*
 
 ### Chaining Commands
 
@@ -296,8 +279,27 @@ Potential future features:
 - Per-query hook selection (choose which hooks to run)
 - Hook execution timeout and error handling
 
+## Installation
+
+To use pre-hooks and post-hooks, you need to use the `pre-hook` branch:
+
+```lua
+{
+  "brojonat/sllm.nvim",  -- or your fork
+  branch = "pre-hook",
+  dependencies = { "echasnovski/mini.nvim" },
+  config = function()
+    require("sllm").setup({
+      -- Your config with pre_hooks and post_hooks
+    })
+  end,
+}
+```
+
+After updating your config, run `:Lazy sync` to install/update.
+
 ## See Also
 
 - [Main README](./README.md) - General plugin documentation
 - [Example Configuration](./examples/pre_hook_config.lua) - Full example config
-- [context-vacuum](https://github.com/yourusername/context-vacuum) - Context generation tool
+- [Design Document](./PRE_HOOK_DESIGN.md) - Technical implementation details

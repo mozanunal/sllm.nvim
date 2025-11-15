@@ -16,6 +16,13 @@
 ---@field add_func_to_ctx string|false|nil     Keymap for adding a function.
 ---@field reset_context string|false|nil       Keymap for resetting the context.
 
+---@class PreHook
+---@field command string                     Shell command to execute.
+---@field add_to_context boolean?            Whether to capture stdout and add to context (default: false).
+
+---@class PostHook
+---@field command string                     Shell command to execute.
+
 ---@class SllmConfig
 ---@field llm_cmd string                     Command to run the LLM CLI.
 ---@field default_model string               Default model name or `"default"`.
@@ -27,6 +34,8 @@
 ---@field notify_func fun(msg: string, level?: number)      Notification function.
 ---@field input_func fun(opts: table, on_confirm: fun(input: string?))  Input prompt function.
 ---@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
+---@field pre_hooks PreHook[]?               Commands to run before llm execution.
+---@field post_hooks PostHook[]?             Commands to run after llm execution.
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -47,6 +56,8 @@ local config = {
   pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
   notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
   input_func = vim.ui.input,
+  pre_hooks = nil,
+  post_hooks = nil,
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -70,6 +81,7 @@ local config = {
 local state = {
   continue = nil,
   selected_model = nil,
+  temp_hook_files = {},  -- Track temp files created by pre-hooks for cleanup
 }
 
 ---@type fun(msg: string, level?: number)
@@ -141,6 +153,22 @@ function M.ask_llm()
       return
     end
 
+    -- Execute pre-hooks
+    state.temp_hook_files = {}
+    if config.pre_hooks then
+      for _, hook in ipairs(config.pre_hooks) do
+        local output = vim.fn.system(hook.command)
+        if hook.add_to_context then
+          -- Create temp file and add to context
+          local tmpfile = vim.fn.tempname()
+          vim.fn.writefile(vim.split(output, '\n', { plain = true }), tmpfile)
+          CtxMan.add_fragment(tmpfile)
+          table.insert(state.temp_hook_files, tmpfile)
+          notify('[sllm] pre-hook executed, added to context', vim.log.levels.INFO)
+        end
+      end
+    end
+
     local ctx = CtxMan.get()
     local prompt = CtxMan.render_prompt_ui(user_input)
     Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' })
@@ -181,6 +209,20 @@ function M.ask_llm()
         end
         notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
         Ui.append_to_llm_buffer({ '' })
+
+        -- Execute post-hooks
+        if config.post_hooks then
+          for _, hook in ipairs(config.post_hooks) do
+            vim.fn.system(hook.command)
+          end
+        end
+
+        -- Clean up temp files created by pre-hooks
+        for _, tmpfile in ipairs(state.temp_hook_files) do
+          vim.fn.delete(tmpfile)
+        end
+        state.temp_hook_files = {}
+
         if config.reset_ctx_each_prompt then CtxMan.reset() end
       end
     )

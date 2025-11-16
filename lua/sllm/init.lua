@@ -159,12 +159,15 @@ function M.ask_llm()
       for _, hook in ipairs(config.pre_hooks) do
         local output = vim.fn.system(hook.command)
         if hook.add_to_context then
-          -- Create temp file and add to context
-          local tmpfile = vim.fn.tempname()
-          vim.fn.writefile(vim.split(output, '\n', { plain = true }), tmpfile)
-          CtxMan.add_fragment(tmpfile)
-          table.insert(state.temp_hook_files, tmpfile)
-          notify('[sllm] pre-hook executed, added to context', vim.log.levels.INFO)
+          -- Only create temp file if output is non-empty
+          local trimmed = vim.trim(output)
+          if trimmed ~= '' then
+            local tmpfile = vim.fn.tempname()
+            vim.fn.writefile(vim.split(output, '\n', { plain = true }), tmpfile)
+            CtxMan.add_fragment(tmpfile)
+            table.insert(state.temp_hook_files, tmpfile)
+            notify('[sllm] pre-hook executed, added to context', vim.log.levels.INFO)
+          end
         end
       end
     end

@@ -122,6 +122,15 @@ require("sllm").setup({
     add_url_to_ctx = false,
     -- Other keymaps will use their default values
   },
+  -- See the "Pre-Hooks and Post-Hooks" section for more details
+  pre_hooks = {
+    -- Example: automatically include git diff in context
+    { command = "git diff HEAD", add_to_context = true },
+  },
+  post_hooks = {
+    -- Example: log completion time
+    { command = "date >> ~/.sllm_history.log" },
+  },
 })
 ```
 
@@ -137,6 +146,8 @@ require("sllm").setup({
 | `notify_func` | function| `require('mini.notify').make_notify()` | Notification function |
 | `input_func` | function| `vim.ui.input` | Input prompt function. |
 | `keymaps` | table/false | (see defaults) | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
+| `pre_hooks` | table | `nil` | Array of commands to run before each LLM execution (see [Pre-Hooks and Post-Hooks](#pre-hooks-and-post-hooks)). |
+| `post_hooks` | table | `nil` | Array of commands to run after each LLM execution (see [Pre-Hooks and Post-Hooks](#pre-hooks-and-post-hooks)). |
 
 ## Keybindings & Commands
 
@@ -198,6 +209,109 @@ require("sllm").setup({
 local sllm = require("sllm")
 vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
 ```
+---
+
+## Pre-Hooks and Post-Hooks
+
+Pre-hooks and post-hooks allow you to run shell commands automatically before and after each LLM execution, enabling dynamic context generation and custom workflows.
+
+### Pre-Hooks
+
+Pre-hooks run **before** the LLM is invoked. Each pre-hook can optionally capture its output and add it to the context.
+
+**Configuration:**
+
+```lua
+require("sllm").setup({
+  pre_hooks = {
+    {
+      command = "git diff --cached",
+      add_to_context = true,  -- Capture stdout and add to context
+    },
+    {
+      command = "echo 'Starting LLM request...'",
+      add_to_context = false,  -- Just run the command, don't capture
+    },
+  },
+})
+```
+
+**Pre-Hook Fields:**
+- `command` (string, required): Shell command to execute
+- `add_to_context` (boolean, optional): If `true`, captures the command's stdout and adds it to the context as a temporary file. Defaults to `false`.
+
+**Notes:**
+- If `add_to_context` is `true` and the output is empty, no context file is created
+- Temporary files created by pre-hooks are automatically cleaned up after the LLM response completes
+- Pre-hooks execute synchronously in the order they are defined
+
+### Post-Hooks
+
+Post-hooks run **after** the LLM execution completes (both on success and failure). They are useful for logging, cleanup, or triggering follow-up actions.
+
+**Configuration:**
+
+```lua
+require("sllm").setup({
+  post_hooks = {
+    {
+      command = "echo 'LLM request completed' >> /tmp/llm_log.txt",
+    },
+    {
+      command = "notify-send 'SLLM' 'Request completed'",
+    },
+  },
+})
+```
+
+**Post-Hook Fields:**
+- `command` (string, required): Shell command to execute
+
+**Notes:**
+- Post-hooks execute after the response is received and displayed
+- Post-hooks run regardless of whether the LLM request succeeded or failed
+- Output from post-hooks is not captured or displayed
+
+### Example Use Cases
+
+**1. Automatically include git diff in context:**
+```lua
+pre_hooks = {
+  {
+    command = "git diff HEAD",
+    add_to_context = true,
+  },
+}
+```
+
+**2. Include project-specific context:**
+```lua
+pre_hooks = {
+  {
+    command = "cat .llm-context.txt",  -- Custom context file in your project
+    add_to_context = true,
+  },
+}
+```
+
+**3. Log all LLM interactions:**
+```lua
+post_hooks = {
+  {
+    command = "date >> ~/.sllm_history.log",
+  },
+}
+```
+
+**4. Notify when long-running requests complete:**
+```lua
+post_hooks = {
+  {
+    command = "osascript -e 'display notification \"LLM request completed\" with title \"SLLM\"'",  -- macOS
+  },
+}
+```
+
 ---
 
 ## Workflow Example

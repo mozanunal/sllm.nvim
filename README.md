@@ -69,6 +69,7 @@ The landscape of AI plugins for Neovim is growing. To understand the philosophy 
 ```lua
 {
   "mozanunal/sllm.nvim",
+  -- optional: will use vim.notify and vim.ui.select as fallback
   dependencies = {
     "echasnovski/mini.notify",
     "echasnovski/mini.pick",
@@ -86,6 +87,7 @@ The landscape of AI plugins for Neovim is growing. To understand the philosophy 
 ```lua
 use({
   "mozanunal/sllm.nvim",
+  -- optional: will use vim.notify and vim.ui.select as fallback
   requires = { "echasnovski/mini.notify", "echasnovski/mini.pick" },
   config = function()
     require("sllm").setup({

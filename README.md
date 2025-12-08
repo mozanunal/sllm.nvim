@@ -142,22 +142,22 @@ require("sllm").setup({
 
 The following table lists the **default** keybindings. All of them can be changed or disabled in your `setup` configuration (see [Customizing Keymaps](#customizing-keymaps)).
 
-| Keymap         | Mode  | Action                                                     |
-|----------------|-------|------------------------------------------------------------|
-| `<leader>ss`   | n,v   | Prompt the LLM with an input box                           |
-| `<leader>sn`   | n,v   | Start a new chat (clears buffer)                           |
-| `<leader>sc`   | n,v   | Cancel current request                                     |
-| `<leader>sf`   | n,v   | Focus the LLM output buffer                                |
-| `<leader>st`   | n,v   | Toggle LLM buffer visibility                               |
-| `<leader>sm`   | n,v   | Pick a different LLM model                                 |
-| `<leader>sa`   | n,v   | Add current file to context                                |
-| `<leader>su`   | n,v   | Add content of a URL to context                            |
-| `<leader>sv`   | v     | Add visual selection to context                            |
-| `<leader>sd`   | n,v   | Add diagnostics to context                                 |
-| `<leader>sx`   | n,v   | Add shell command output to context                        |
-| `<leader>sT`   | n,v   | Add an installed tool to context                           |
-| `<leader>sF`   | n,v   | Add Python function from buffer/selection as a tool        |
-| `<leader>sr`   | n,v   | Reset/clear all context files                              |
+| Keybind        | Keymap               | Mode  | Action                                                     |
+|----------------|----------------------|-------|------------------------------------------------------------|
+| `<leader>ss`   | `ask_llm`            | n,v   | Prompt the LLM with an input box                           |
+| `<leader>sn`   | `new_chat`           | n,v   | Start a new chat (clears buffer)                           |
+| `<leader>sc`   | `cancel`             | n,v   | Cancel current request                                     |
+| `<leader>sf`   | `focus_llm_buffer`   | n,v   | Focus the LLM output buffer                                |
+| `<leader>st`   | `toggle_llm_buffer`  | n,v   | Toggle LLM buffer visibility                               |
+| `<leader>sm`   | `select_model`       | n,v   | Pick a different LLM model                                 |
+| `<leader>sa`   | `add_file_to_ctx`    | n,v   | Add current file to context                                |
+| `<leader>su`   | `add_url_to_ctx`     | n,v   | Add content of a URL to context                            |
+| `<leader>sv`   | `add_sel_to_ctx`     | v     | Add visual selection to context                            |
+| `<leader>sd`   | `add_diag_to_ctx`    | n,v   | Add diagnostics to context                                 |
+| `<leader>sx`   | `add_cmd_out_to_ctx` | n,v   | Add shell command output to context                        |
+| `<leader>sT`   | `add_tool_to_ctx`    | n,v   | Add an installed tool to context                           |
+| `<leader>sF`   | `add_func_to_ctx`    | n,v   | Add Python function from buffer/selection as a tool        |
+| `<leader>sr`   | `reset_context`      | n,v   | Reset/clear all context files                              |
 
 ---
 

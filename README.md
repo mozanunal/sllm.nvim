@@ -40,16 +40,17 @@ The landscape of AI plugins for Neovim is growing. To understand the philosophy 
 1.  **Install the `llm` CLI**
     Follow instructions at https://github.com/simonw/llm
     e.g. `brew install llm` or `pip install llm`.
+
     > 💡 If `llm` is not in your system's `PATH`, you can set the full path in the configuration via the `llm_cmd` option.
 
 2.  **Install one or more `llm` extensions**
-    -   `llm install llm-openai`
-    -   `llm install llm-openrouter`
-    -   `llm install llm-gpt4all`
-    …or any other plugin supported by `llm`.
-    > 💡 The [`llm-openrouter`](https://github.com/simonw/llm-openrouter) extension gives access to over 300 models (some free) via [OpenRouter](https://openrouter.ai/).
-    >
-    > See all available LLM plugins for the `llm` CLI at [llm.datasette.io/plugins/directory](https://llm.datasette.io/en/stable/plugins/directory.html).
+    - `llm install llm-openai`
+    - `llm install llm-openrouter`
+    - `llm install llm-gpt4all`
+      …or any other plugin supported by `llm`.
+      > 💡 The [`llm-openrouter`](https://github.com/simonw/llm-openrouter) extension gives access to over 300 models (some free) via [OpenRouter](https://openrouter.ai/).
+      >
+      > See all available LLM plugins for the `llm` CLI at [llm.datasette.io/plugins/directory](https://llm.datasette.io/en/stable/plugins/directory.html).
 
 3.  **Configure your API key(s)**
     ```sh
@@ -125,39 +126,39 @@ require("sllm").setup({
 })
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `llm_cmd` | string | `"llm"` | Command or path for the `llm` CLI tool. |
-| `default_model` | string | `"gpt-4.1"` | Model to use on startup |
-| `show_usage` | boolean | `true` | Include token usage summary in responses. If `true`, you'll see details after each interaction. |
-| `on_start_new_chat` | boolean | `true` | Begin with a fresh chat buffer on plugin setup |
-| `reset_ctx_each_prompt` | boolean | `true` | Automatically clear file context after every prompt (if `true`) |
-| `window_type` | string | `"vertical"` | Window style: `"vertical"`, `"horizontal"`, or `"float"`. |
-| `pick_func` | function| `require('mini.pick').ui_select` | UI function for interactive model selection |
-| `notify_func` | function| `require('mini.notify').make_notify()` | Notification function |
-| `input_func` | function| `vim.ui.input` | Input prompt function. |
-| `keymaps` | table/false | (see defaults) | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
+| Option                  | Type        | Default                                | Description                                                                                                                               |
+| ----------------------- | ----------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `llm_cmd`               | string      | `"llm"`                                | Command or path for the `llm` CLI tool.                                                                                                   |
+| `default_model`         | string      | `"gpt-4.1"`                            | Model to use on startup                                                                                                                   |
+| `show_usage`            | boolean     | `true`                                 | Include token usage summary in responses. If `true`, you'll see details after each interaction.                                           |
+| `on_start_new_chat`     | boolean     | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
+| `reset_ctx_each_prompt` | boolean     | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
+| `window_type`           | string      | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
+| `pick_func`             | function    | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
+| `notify_func`           | function    | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
+| `input_func`            | function    | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
+| `keymaps`               | table/false | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
 ## Keybindings & Commands
 
 The following table lists the **default** keybindings. All of them can be changed or disabled in your `setup` configuration (see [Customizing Keymaps](#customizing-keymaps)).
 
-| Keymap         | Mode  | Action                                                     |
-|----------------|-------|------------------------------------------------------------|
-| `<leader>ss`   | n,v   | Prompt the LLM with an input box                           |
-| `<leader>sn`   | n,v   | Start a new chat (clears buffer)                           |
-| `<leader>sc`   | n,v   | Cancel current request                                     |
-| `<leader>sf`   | n,v   | Focus the LLM output buffer                                |
-| `<leader>st`   | n,v   | Toggle LLM buffer visibility                               |
-| `<leader>sm`   | n,v   | Pick a different LLM model                                 |
-| `<leader>sa`   | n,v   | Add current file to context                                |
-| `<leader>su`   | n,v   | Add content of a URL to context                            |
-| `<leader>sv`   | v     | Add visual selection to context                            |
-| `<leader>sd`   | n,v   | Add diagnostics to context                                 |
-| `<leader>sx`   | n,v   | Add shell command output to context                        |
-| `<leader>sT`   | n,v   | Add an installed tool to context                           |
-| `<leader>sF`   | n,v   | Add Python function from buffer/selection as a tool        |
-| `<leader>sr`   | n,v   | Reset/clear all context files                              |
+| Keymap       | Mode | Action                                              |
+| ------------ | ---- | --------------------------------------------------- |
+| `<leader>ss` | n,v  | Prompt the LLM with an input box                    |
+| `<leader>sn` | n,v  | Start a new chat (clears buffer)                    |
+| `<leader>sc` | n,v  | Cancel current request                              |
+| `<leader>sf` | n,v  | Focus the LLM output buffer                         |
+| `<leader>st` | n,v  | Toggle LLM buffer visibility                        |
+| `<leader>sm` | n,v  | Pick a different LLM model                          |
+| `<leader>sa` | n,v  | Add current file to context                         |
+| `<leader>su` | n,v  | Add content of a URL to context                     |
+| `<leader>sv` | v    | Add visual selection to context                     |
+| `<leader>sd` | n,v  | Add diagnostics to context                          |
+| `<leader>sx` | n,v  | Add shell command output to context                 |
+| `<leader>sT` | n,v  | Add an installed tool to context                    |
+| `<leader>sF` | n,v  | Add Python function from buffer/selection as a tool |
+| `<leader>sr` | n,v  | Reset/clear all context files                       |
 
 ---
 
@@ -166,9 +167,11 @@ The following table lists the **default** keybindings. All of them can be change
 You have full control over the keybindings. Here are the common scenarios:
 
 #### 1. Use the Defaults
+
 If you are happy with the default keymaps, you don't need to pass a `keymaps` table at all. Just call `setup()` with no arguments or with other options.
 
 #### 2. Change Some, Disable Others
+
 To override specific keymaps, provide your new binding. To disable a keymap you don't use, set its value to `false` or `nil`. Any keymaps you don't specify will keep their default values.
 
 ```lua
@@ -186,6 +189,7 @@ require("sllm").setup({
 ```
 
 #### 3. Disable All Default Keymaps
+
 If you prefer to set up all keybindings manually, you can disable all defaults by passing `false` or an empty table `{}`.
 
 ```lua
@@ -198,6 +202,7 @@ require("sllm").setup({
 local sllm = require("sllm")
 vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
 ```
+
 ---
 
 ## Workflow Example
@@ -247,4 +252,3 @@ vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]
 
 Apache 2.0 — see [LICENSE](./LICENSE).
 `llm` and its extensions are copyright Simon Willison.
-

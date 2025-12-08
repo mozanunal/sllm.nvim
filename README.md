@@ -111,6 +111,7 @@ require("sllm").setup({
   on_start_new_chat        = true, -- start fresh chat on setup
   reset_ctx_each_prompt    = true, -- clear file context each ask
   window_type              = "vertical", -- Default. Options: "vertical", "horizontal", "float"
+  scroll_to_bottom         = true, -- whether to keep the cursor at the bottom of the LLM window
   -- function for item selection (like vim.ui.select)
   pick_func                = require("mini.pick").ui_select,
   -- function for notifications (like vim.notify)
@@ -136,6 +137,7 @@ require("sllm").setup({
 | `on_start_new_chat`     | boolean     | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
 | `reset_ctx_each_prompt` | boolean     | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
 | `window_type`           | string      | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
+| `scroll_to_bottom`      | boolean     | `true`                                 | Whether to keep the cursor at the bottom of the LLM window.                                                                               |
 | `pick_func`             | function    | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
 | `notify_func`           | function    | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
 | `input_func`            | function    | `vim.ui.input`                         | Input prompt function.                                                                                                                    |

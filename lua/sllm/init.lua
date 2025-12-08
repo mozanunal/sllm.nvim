@@ -23,6 +23,7 @@
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
 ---@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
 ---@field window_type "'vertical'"|"'horizontal'"|"'float'"  How to open the chat window.
+---@field scroll_to_bottom boolean           Whether to keep the cursor at the bottom of the LLM window.
 ---@field pick_func fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))  Selector UI.
 ---@field notify_func fun(msg: string, level?: number)      Notification function.
 ---@field input_func fun(opts: table, on_confirm: fun(input: string?))  Input prompt function.
@@ -44,6 +45,7 @@ local config = {
   on_start_new_chat = true,
   reset_ctx_each_prompt = true,
   window_type = 'vertical',
+  scroll_to_bottom = true,
   pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
   notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
   input_func = vim.ui.input,
@@ -143,8 +145,8 @@ function M.ask_llm()
 
     local ctx = CtxMan.get()
     local prompt = CtxMan.render_prompt_ui(user_input)
-    Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' })
-    Ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }))
+    Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' }, config.scroll_to_bottom)
+    Ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), config.scroll_to_bottom)
     Ui.start_loading_indicator()
 
     local cmd = Backend.llm_cmd(
@@ -166,21 +168,21 @@ function M.ask_llm()
       function(line)
         if not first_line then
           Ui.stop_loading_indicator()
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
+          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, config.scroll_to_bottom)
           first_line = true
         end
-        Ui.append_to_llm_buffer({ line })
+        Ui.append_to_llm_buffer({ line }, config.scroll_to_bottom)
       end,
       ---@param exit_code integer
       function(exit_code)
         Ui.stop_loading_indicator()
         if not first_line then
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' })
+          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, config.scroll_to_bottom)
           local msg = exit_code == 0 and '(empty response)' or string.format('(failed or canceled: exit %d)', exit_code)
-          Ui.append_to_llm_buffer({ msg })
+          Ui.append_to_llm_buffer({ msg }, config.scroll_to_bottom)
         end
         notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
-        Ui.append_to_llm_buffer({ '' })
+        Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)
         if config.reset_ctx_each_prompt then CtxMan.reset() end
       end
     )

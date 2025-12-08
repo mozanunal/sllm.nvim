@@ -192,13 +192,14 @@ end
 
 --- Append lines to the end of the LLM buffer and scroll to bottom.
 ---@param lines string[]  Lines to append.
+---@param scroll_to_bottom boolean  Whether or not to scroll to the bottom of the buffer
 ---@return nil
-function M.append_to_llm_buffer(lines)
+function M.append_to_llm_buffer(lines, scroll_to_bottom)
   if not lines then return end
   local buf = ensure_llm_buffer()
   vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
   local win = Utils.check_buffer_visible(buf)
-  if win then
+  if win and scroll_to_bottom then
     local last = vim.api.nvim_buf_line_count(buf)
     vim.api.nvim_win_set_cursor(win, { last, 0 })
   end

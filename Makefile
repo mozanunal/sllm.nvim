@@ -1,17 +1,18 @@
-all: dev_install format lint unit_tests print_loc
-precommit: all
+ci: dev_install format-check lint unit_tests print_loc
 
 dev_install:
 	@echo "------------------ dev_install ---------------------"
-	brew install luacheck stylua tokei
+	brew install luacheck stylua tokei deno
 
 format:
 	@echo "------------------ format  -------------------------"
 	stylua lua/ tests/
+	deno fmt *.md
 
 format-check:
 	@echo "------------------ format-check --------------------"
 	stylua --check lua/ tests/
+	deno fmt --check *.md
 
 lint:
 	@echo "------------------ lint  ---------------------------"
@@ -34,4 +35,3 @@ gif:
 	@echo "------------------ make_gif  -----------------------"
 	@vhs < ./assets/tapes/main.tape
 	@open -R ./assets/workflow.gif
-

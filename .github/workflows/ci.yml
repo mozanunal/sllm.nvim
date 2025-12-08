@@ -46,5 +46,3 @@ jobs:
       # 8. (Optional) Print lines of code for stats
       - name: Print lines of code (tokei)
         run: make print_loc
-
-

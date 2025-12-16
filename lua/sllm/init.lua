@@ -17,17 +17,22 @@
 ---@field reset_context string|false|nil       Keymap for resetting the context.
 
 ---@class SllmConfig
----@field llm_cmd string                     Command to run the LLM CLI.
----@field default_model string               Default model name or `"default"`.
----@field show_usage boolean                 Show usage examples flag.
----@field on_start_new_chat boolean          Whether to reset conversation on start.
----@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
----@field window_type "'vertical'"|"'horizontal'"|"'float'"  How to open the chat window.
----@field scroll_to_bottom boolean           Whether to keep the cursor at the bottom of the LLM window.
----@field pick_func fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))  Selector UI.
----@field notify_func fun(msg: string, level?: number)      Notification function.
----@field input_func fun(opts: table, on_confirm: fun(input: string?))  Input prompt function.
----@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
+---@field llm_cmd string?                     Command to run the LLM CLI.
+---@field default_model string?               Default model name or `"default"`.
+---@field show_usage boolean?                 Show usage examples flag.
+---@field on_start_new_chat boolean?          Whether to reset conversation on start.
+---@field reset_ctx_each_prompt boolean?      Whether to clear context after each prompt.
+---@field window_type "'vertical'"|"'horizontal'"|"'float'"?  How to open the chat window.
+---@field scroll_to_bottom boolean?           Whether to keep the cursor at the bottom of the LLM window.
+---@field pick_func fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))?  Selector UI.
+---@field notify_func fun(msg: string, level?: number)?      Notification function.
+---@field input_func fun(opts: table, on_confirm: fun(input: string?))?  Input prompt function.
+---@field keymaps SllmKeymaps|false|nil?      Collection of keybindings.
+---
+---@class SllmState
+---@field continue boolean                    Whether to pass the '-c' flag to 'llm' command
+---@field selected_model string               Currently selected model
+
 local M = {}
 
 local Utils = require('sllm.utils')

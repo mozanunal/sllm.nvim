@@ -186,7 +186,8 @@ function M.toggle_llm_buffer(window_type, model_name)
   if win then
     vim.api.nvim_win_close(win, false)
   else
-    M.show_llm_buffer(window_type, model_name)
+    win = M.show_llm_buffer(window_type, model_name)
+    vim.api.nvim_set_current_win(win)
   end
 end
 

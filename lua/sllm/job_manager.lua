@@ -14,6 +14,20 @@ local function strip_ansi_codes(text) return text:gsub(ansi_escape_pattern, '') 
 ---@return boolean `true` if a job is active, `false` otherwise.
 function M.is_busy() return llm_job_id ~= nil end
 
+---Execute a command synchronously and capture its output.
+---@param cmd_raw string Command to execute (supports vim cmd expansion)
+---@return string Combined stdout/stderr output, labeled if both present
+function M.exec_cmd_capture_output(cmd_raw)
+  local cmd = vim.fn.expandcmd(cmd_raw)
+  local result = vim.system({ 'bash', '-c', cmd }, { text = true }):wait()
+  local res_stdout = vim.trim(result.stdout or '')
+  local res_stderr = vim.trim(result.stderr or '')
+  local output = ''
+  if res_stdout ~= '' then output = output .. '\nstdout:\n' .. res_stdout end
+  if res_stderr ~= '' then output = output .. '\nstderr:\n' .. res_stderr end
+  return output
+end
+
 --- Start a new job and stream its output line by line.
 ---
 --- Splits on `'\r'` in the stdout buffer, strips ANSI codes, and calls

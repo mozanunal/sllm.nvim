@@ -115,7 +115,8 @@ Call `require("sllm").setup()` with an optional table of overrides:
 ```lua
 require("sllm").setup({
   llm_cmd                  = "llm", -- command or path for the llm CLI
-  default_model            = "gpt-4.1", -- default llm model (set to "default" to use llm's default model)
+  -- model to use on startup. This setting uses the default model set for the llm CLI
+  default_model            = "default",
   show_usage               = true, -- append usage stats to responses
   on_start_new_chat        = true, -- start fresh chat on setup
   reset_ctx_each_prompt    = true, -- clear file context each ask
@@ -140,8 +141,8 @@ require("sllm").setup({
 
 | Option                  | Type        | Default                                | Description                                                                                                                               |
 | ----------------------- | ----------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `llm_cmd`               | string      | `"llm"`                                | Command or path for the `llm` CLI tool.                                                                                                   |
-| `default_model`         | string      | `"gpt-4.1"`                            | Model to use on startup                                                                                                                   |
+| `llm_cmd`               | string      | `"llm"`                                | Command or path for the `llm` CLI.                                                                                                        |
+| `default_model`         | string      | `"default"`                            | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
 | `show_usage`            | boolean     | `true`                                 | Include token usage summary in responses. If `true`, you'll see details after each interaction.                                           |
 | `on_start_new_chat`     | boolean     | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
 | `reset_ctx_each_prompt` | boolean     | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |

@@ -15,6 +15,15 @@ function M.extract_models(llm_cmd)
   return only_models
 end
 
+---Run `llm models default` and return the default model name.
+---@param llm_cmd string Command to run the LLM CLI.
+---@return string List of available model names.
+function M.get_default_model(llm_cmd)
+  local output = vim.fn.system(llm_cmd .. ' models default')
+  -- remove trailing whitespace: the output includes a newline at its end
+  return output:match('(.-)%s*$')
+end
+
 ---Run `llm tools list --json` and extract tool names.
 ---@param llm_cmd string Command to run the LLM CLI.
 ---@return string[]  List of tool names.

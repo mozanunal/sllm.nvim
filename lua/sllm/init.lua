@@ -40,7 +40,7 @@ local Ui = require('sllm.ui')
 ---@type SllmConfig
 local config = {
   llm_cmd = 'llm',
-  default_model = 'gpt-4.1',
+  default_model = 'default',
   show_usage = true,
   on_start_new_chat = true,
   reset_ctx_each_prompt = true,
@@ -116,7 +116,8 @@ function M.setup(user_config)
   end
 
   state.continue = not config.on_start_new_chat
-  state.selected_model = config.default_model ~= 'default' and config.default_model or nil
+  state.selected_model = config.default_model ~= 'default' and config.default_model
+    or Backend.get_default_model(config.llm_cmd)
 
   notify = config.notify_func
   pick = config.pick_func

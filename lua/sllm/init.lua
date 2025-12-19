@@ -16,6 +16,13 @@
 ---@field add_func_to_ctx string|false|nil     Keymap for adding a function.
 ---@field reset_context string|false|nil       Keymap for resetting the context.
 
+---@class PreHook
+---@field command string                     Shell command to execute.
+---@field add_to_context boolean?            Whether to capture stdout and add to context (default: false).
+
+---@class PostHook
+---@field command string                     Shell command to execute.
+
 ---@class SllmConfig
 ---@field llm_cmd string                     Command to run the LLM CLI.
 ---@field default_model string               Default model name or `"default"`.
@@ -28,6 +35,8 @@
 ---@field notify_func fun(msg: string, level?: number)      Notification function.
 ---@field input_func fun(opts: table, on_confirm: fun(input: string?))  Input prompt function.
 ---@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
+---@field pre_hooks PreHook[]?               Commands to run before llm execution.
+---@field post_hooks PostHook[]?             Commands to run after llm execution.
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -49,6 +58,8 @@ local config = {
   pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
   notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
   input_func = vim.ui.input,
+  pre_hooks = nil,
+  post_hooks = nil,
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -117,7 +128,7 @@ function M.setup(user_config)
 
   state.continue = not config.on_start_new_chat
   state.selected_model = config.default_model ~= 'default' and config.default_model
-    or Backend.get_default_model(config.llm_cmd)
+      or Backend.get_default_model(config.llm_cmd)
 
   notify = config.notify_func
   pick = config.pick_func
@@ -142,6 +153,16 @@ function M.ask_llm()
     if JobMan.is_busy() then
       notify('[sllm] already running, please wait.', vim.log.levels.WARN)
       return
+    end
+
+    if config.pre_hooks then
+      for _, hook in ipairs(config.pre_hooks) do
+        local output = JobMan.exec_cmd_capture_output(hook.command)
+        if hook.add_to_context then
+          CtxMan.add_snip(output, 'Pre-hook-> ' .. hook.command, 'text')
+          notify('[sllm] pre-hook executed, added to context ' .. hook.command, vim.log.levels.INFO)
+        end
+      end
     end
 
     local ctx = CtxMan.get()
@@ -185,6 +206,11 @@ function M.ask_llm()
         notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
         Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)
         if config.reset_ctx_each_prompt then CtxMan.reset() end
+        if config.post_hooks then
+          for _, hook in ipairs(config.post_hooks) do
+            local _ = JobMan.exec_cmd_capture_output(hook.command)
+          end
+        end
       end
     )
   end)
@@ -346,39 +372,10 @@ end
 ---@return nil
 function M.add_cmd_out_to_ctx()
   input({ prompt = 'Command: ' }, function(cmd_raw)
-    if cmd_raw == '' then
-      notify('[sllm] no command provided.', vim.log.levels.INFO)
-      return
-    end
-    local cmd_to_run = vim.fn.expandcmd(cmd_raw)
-    if cmd_to_run == '' then
-      notify('[sllm] expanded command is empty.', vim.log.levels.WARN)
-      return
-    end
-
-    notify('[sllm] running command: ' .. cmd_to_run, vim.log.levels.INFO)
-    vim.system({ 'bash', '-c', cmd_to_run }, { text = true }, function(res)
-      if res.code ~= 0 then
-        local err = '[sllm] command failed (exit ' .. res.code .. ')'
-        if res.stderr and res.stderr ~= '' then err = err .. '\nStderr:\n' .. vim.trim(res.stderr) end
-        notify(err, vim.log.levels.ERROR)
-        return
-      end
-
-      local out = vim.trim(res.stdout or '')
-      local errout = vim.trim(res.stderr or '')
-      local combined = out
-      if errout ~= '' then
-        combined = (combined ~= '' and combined .. '\n--- stderr ---\n' .. errout) or ('--- stderr ---\n' .. errout)
-      end
-      if combined == '' then
-        notify('[sllm] command produced no output.', vim.log.levels.WARN)
-        return
-      end
-
-      CtxMan.add_snip(combined, 'Command: ' .. cmd_raw, 'text')
-      notify('[sllm] added command output to context.', vim.log.levels.INFO)
-    end)
+    notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
+    local res_out = JobMan.exec_cmd_capture_output(cmd_raw)
+    CtxMan.add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
+    notify('[sllm] added command output to context.', vim.log.levels.INFO)
   end)
 end
 

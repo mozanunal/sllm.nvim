@@ -105,7 +105,7 @@ function M.render_prompt_ui(user_input)
     snip_list = '\n### Snippets\n'
     for _, snip in ipairs(context.snips) do
       snip_list = snip_list
-        .. render_template('From ${filepath}:\n\n```' .. snip.filetype .. '\n${text}\n```', snip)
+        .. render_template('From ${filepath}:\n```' .. snip.filetype .. '\n${text}\n```', snip)
         .. '\n\n'
     end
   end

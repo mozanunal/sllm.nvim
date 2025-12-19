@@ -252,7 +252,7 @@ require("sllm").setup({
   pre_hooks = {
     {
       command = "git diff --cached",
-      add_to_context = true,  -- Capture stdout and add to context
+      add_to_context = true,  -- Capture stdout/stderr and add to context
     },
     {
       command = "echo 'Starting LLM request...'",
@@ -264,16 +264,17 @@ require("sllm").setup({
 
 **Pre-Hook Fields:**
 
-- `command` (string, required): Shell command to execute
+- `command` (string, required): Shell command to execute. Supports vim command
+  expansion (e.g., `%` expands to current filename).
 - `add_to_context` (boolean, optional): If `true`, captures the command's stdout
-  and adds it to the context as a temporary file. Defaults to `false`.
+  and stderr, adding them to the context as a snippet. Defaults to `false`.
 
 **Notes:**
 
-- If `add_to_context` is `true` and the output is empty, no context file is
-  created
-- Temporary files created by pre-hooks are automatically cleaned up after the
-  LLM response completes
+- Output is added as a snippet labeled `Pre-hook-> <command>` with both stdout
+  and stderr sections when present
+- Pre-hook snippets follow the same lifecycle as other context items—they are
+  cleared after each prompt if `reset_ctx_each_prompt` is `true` (the default)
 - Pre-hooks execute synchronously in the order they are defined
 
 ### Post-Hooks
@@ -298,11 +299,12 @@ require("sllm").setup({
 
 **Post-Hook Fields:**
 
-- `command` (string, required): Shell command to execute
+- `command` (string, required): Shell command to execute. Supports vim command
+  expansion.
 
 **Notes:**
 
-- Post-hooks execute after the response is received and displayed
+- Post-hooks execute after the response is fully received and displayed
 - Post-hooks run regardless of whether the LLM request succeeded or failed
 - Output from post-hooks is not captured or displayed
 
@@ -319,12 +321,12 @@ pre_hooks = {
 }
 ```
 
-**2. Include project-specific context:**
+**2. Include current file content:**
 
 ```lua
 pre_hooks = {
   {
-    command = "cat .llm-context.txt",  -- Custom context file in your project
+    command = "cat %",  -- % expands to current filename
     add_to_context = true,
   },
 }
@@ -348,7 +350,7 @@ post_hooks = {
     command = "osascript -e 'display notification \"LLM request completed\" with title \"SLLM\"'",  -- macOS
   },
 }
-```
+
 
 ---
 

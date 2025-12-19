@@ -128,7 +128,7 @@ function M.setup(user_config)
 
   state.continue = not config.on_start_new_chat
   state.selected_model = config.default_model ~= 'default' and config.default_model
-      or Backend.get_default_model(config.llm_cmd)
+    or Backend.get_default_model(config.llm_cmd)
 
   notify = config.notify_func
   pick = config.pick_func

@@ -17,17 +17,27 @@
 ---@field reset_context string|false|nil       Keymap for resetting the context.
 
 ---@class SllmConfig
----@field llm_cmd string                     Command to run the LLM CLI.
----@field default_model string               Default model name or `"default"`.
----@field show_usage boolean                 Show usage examples flag.
----@field on_start_new_chat boolean          Whether to reset conversation on start.
----@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
----@field window_type "'vertical'"|"'horizontal'"|"'float'"  How to open the chat window.
----@field scroll_to_bottom boolean           Whether to keep the cursor at the bottom of the LLM window.
----@field pick_func fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))  Selector UI.
----@field notify_func fun(msg: string, level?: number)      Notification function.
----@field input_func fun(opts: table, on_confirm: fun(input: string?))  Input prompt function.
----@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
+---@field llm_cmd string?                     Command to run the LLM CLI.
+---@field default_model string?               Default model name or `"default"`.
+---@field show_usage boolean?                 Show usage examples flag.
+---@field on_start_new_chat boolean?          Whether to reset conversation on start.
+---@field reset_ctx_each_prompt boolean?      Whether to clear context after each prompt.
+---@field window_type "'vertical'"|"'horizontal'"|"'float'"?  How to open the chat window.
+---@field scroll_to_bottom boolean?           Whether to keep the cursor at the bottom of the LLM window.
+---@field pick_func fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))?  Selector UI.
+---@field notify_func fun(msg: string, level?: number)?      Notification function.
+---@field input_func fun(opts: table, on_confirm: fun(input: string?))?  Input prompt function.
+---@field ask_llm_input_prompt string?        Prompt displayed by the ask_llm function
+---@field add_url_input_prompt string?        Prompt displayed by the add_url_to_ctx function
+---@field add_cmd_input_prompt string?        Prompt displayed by the add_cmd_out_to_ctx function
+---@field markdown_prompt_header string?      Text displayed above the user prompt
+---@field markdown_response_header string?    Text displayed above the LLM response
+---@field keymaps SllmKeymaps|false|nil?      Collection of keybindings.
+---
+---@class SllmState
+---@field continue boolean                    Whether to pass the '-c' flag to 'llm' command
+---@field selected_model string               Currently selected model
+
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -49,6 +59,11 @@ local config = {
   pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
   notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
   input_func = vim.ui.input,
+  ask_llm_input_prompt = 'Prompt: ',
+  add_url_input_prompt = 'URL: ',
+  add_cmd_input_prompt = 'Command: ',
+  markdown_prompt_header = '> 💬 Prompt:',
+  markdown_response_header = '> 🤖 Response',
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -128,7 +143,7 @@ end
 ---@return nil
 function M.ask_llm()
   if Utils.is_mode_visual() then M.add_sel_to_ctx() end
-  input({ prompt = 'Prompt: ' }, function(user_input)
+  input({ prompt = config.ask_llm_input_prompt }, function(user_input)
     if user_input == '' then
       notify('[sllm] no prompt provided.', vim.log.levels.INFO)
       return
@@ -146,7 +161,7 @@ function M.ask_llm()
 
     local ctx = CtxMan.get()
     local prompt = CtxMan.render_prompt_ui(user_input)
-    Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' }, config.scroll_to_bottom)
+    Ui.append_to_llm_buffer({ '', config.markdown_prompt_header, '' }, config.scroll_to_bottom)
     Ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), config.scroll_to_bottom)
     Ui.start_loading_indicator()
 
@@ -169,7 +184,7 @@ function M.ask_llm()
       function(line)
         if not first_line then
           Ui.stop_loading_indicator()
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, config.scroll_to_bottom)
+          Ui.append_to_llm_buffer({ '', config.markdown_response_header, '' }, config.scroll_to_bottom)
           first_line = true
         end
         Ui.append_to_llm_buffer({ line }, config.scroll_to_bottom)
@@ -178,7 +193,7 @@ function M.ask_llm()
       function(exit_code)
         Ui.stop_loading_indicator()
         if not first_line then
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, config.scroll_to_bottom)
+          Ui.append_to_llm_buffer({ '', config.markdown_response_header, '' }, config.scroll_to_bottom)
           local msg = exit_code == 0 and '(empty response)' or string.format('(failed or canceled: exit %d)', exit_code)
           Ui.append_to_llm_buffer({ msg }, config.scroll_to_bottom)
         end
@@ -274,7 +289,7 @@ end
 --- Prompt user for a URL and add it to context.
 ---@return nil
 function M.add_url_to_ctx()
-  input({ prompt = 'URL: ' }, function(user_input)
+  input({ prompt = config.add_url_input_prompt }, function(user_input)
     if user_input == '' then
       notify('[sllm] no URL provided.', vim.log.levels.INFO)
       return
@@ -345,7 +360,7 @@ end
 --- Prompt for a shell command, run it, and add its output to context.
 ---@return nil
 function M.add_cmd_out_to_ctx()
-  input({ prompt = 'Command: ' }, function(cmd_raw)
+  input({ prompt = config.add_cmd_input_prompt }, function(cmd_raw)
     if cmd_raw == '' then
       notify('[sllm] no command provided.', vim.log.levels.INFO)
       return

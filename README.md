@@ -420,26 +420,31 @@ post_hooks = {
 
 ## Online/Web Mode Toggle
 
-Some models may support an `online` option for web search capabilities. You can easily toggle this feature:
+Some models may support an `online` option for web search capabilities. You can
+easily toggle this feature:
 
 **Quick Toggle**: Press `<leader>sW` to toggle online mode on/off
 
 When enabled, you'll see a 🌐 icon in the status bar next to the model name.
 
 **Example:**
+
 ```
 Status bar shows: sllm.nvim | Model: gpt-4o 🌐    (online mode enabled)
 Status bar shows: sllm.nvim | Model: gpt-4o       (online mode disabled)
 ```
 
 **Enable by Default in Config:**
+
 ```lua
 require("sllm").setup({
   online_enabled = true,  -- Start with online mode enabled
 })
 ```
 
-**Note**: The `online` option may not be available for all models. If you get errors when using this feature, the model you're using likely doesn't support web search. Check your model provider's documentation.
+**Note**: The `online` option may not be available for all models. If you get
+errors when using this feature, the model you're using likely doesn't support
+web search. Check your model provider's documentation.
 
 ---
 
@@ -553,8 +558,11 @@ require("sllm").setup({
     `temperature`, then `0.7`.
 13. Cancel a running request: `<leader>sc`.
 11. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐 indicator).
+11. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
+    indicator).
 12. **Check available model options:** `<leader>sO` (capital O).
-13. **Set model options (e.g., temperature):** `<leader>so`, enter `temperature`, then `0.7`.
+13. **Set model options (e.g., temperature):** `<leader>so`, enter
+    `temperature`, then `0.7`.
 14. Cancel a running request: `<leader>sc`.
 
 ### Visual Workflow

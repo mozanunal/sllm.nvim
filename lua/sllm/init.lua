@@ -153,11 +153,9 @@ function M.setup(user_config)
   state.system_prompt = config.system_prompt
   state.model_options = config.model_options or {}
   state.online_enabled = config.online_enabled or false
-  
+
   -- Set online option if enabled by default
-  if state.online_enabled then
-    state.model_options.online = 1
-  end
+  if state.online_enabled then state.model_options.online = 1 end
 
   notify = config.notify_func
   pick = config.pick_func
@@ -487,7 +485,7 @@ end
 ---@return nil
 function M.toggle_online()
   state.online_enabled = not state.online_enabled
-  
+
   if state.online_enabled then
     state.model_options.online = 1
     notify('[sllm] 🌐 Online mode enabled', vim.log.levels.INFO)
@@ -495,15 +493,13 @@ function M.toggle_online()
     state.model_options.online = nil
     notify('[sllm] 📴 Online mode disabled', vim.log.levels.INFO)
   end
-  
+
   -- Update the UI title to reflect the change
   Ui.update_llm_win_title(state.selected_model, state.online_enabled)
 end
 
 --- Get online status for UI display.
 ---@return boolean
-function M.is_online_enabled()
-  return state.online_enabled
-end
+function M.is_online_enabled() return state.online_enabled end
 
 return M

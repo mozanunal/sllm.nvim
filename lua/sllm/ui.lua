@@ -85,7 +85,7 @@ local function create_llm_win(window_type, model_name)
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  M.update_llm_win_title(model_name, false)  -- online status will be updated separately
+  M.update_llm_win_title(model_name, false) -- online status will be updated separately
   return win_id
 end
 

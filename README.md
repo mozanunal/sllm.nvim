@@ -37,6 +37,8 @@ the [**PREFACE.md**](./PREFACE.md).
   wrap/linebreak enabled.
 - **Token Usage Feedback** Displays request/response token usage and estimated
   cost after each prompt (when `show_usage` is enabled).
+- **Code Block Extraction** Copy the first, last, or entire response from the
+  LLM buffer to clipboard without focusing on it.
 
 ---
 
@@ -175,26 +177,29 @@ The following table lists the **default** keybindings. All of them can be
 changed or disabled in your `setup` configuration (see
 [Customizing Keymaps](#customizing-keymaps)).
 
-| Keybind      | Keymap               | Mode | Action                                              |
-| ------------ | -------------------- | ---- | --------------------------------------------------- |
-| `<leader>ss` | `ask_llm`            | n,v  | Prompt the LLM with an input box                    |
-| `<leader>sn` | `new_chat`           | n,v  | Start a new chat (clears buffer)                    |
-| `<leader>sc` | `cancel`             | n,v  | Cancel current request                              |
-| `<leader>sf` | `focus_llm_buffer`   | n,v  | Focus the LLM output buffer                         |
-| `<leader>st` | `toggle_llm_buffer`  | n,v  | Toggle LLM buffer visibility                        |
-| `<leader>sm` | `select_model`       | n,v  | Pick a different LLM model                          |
-| `<leader>sW` | `toggle_online`      | n,v  | Toggle online/web mode (shows 🌐 in status)         |
-| `<leader>so` | `set_model_option`   | n,v  | Set a model-specific option (e.g., temperature)     |
-| `<leader>sO` | `show_model_options` | n,v  | Show available options for current model            |
-| `<leader>sa` | `add_file_to_ctx`    | n,v  | Add current file to context                         |
-| `<leader>su` | `add_url_to_ctx`     | n,v  | Add content of a URL to context                     |
-| `<leader>sv` | `add_sel_to_ctx`     | v    | Add visual selection to context                     |
-| `<leader>sd` | `add_diag_to_ctx`    | n,v  | Add diagnostics to context                          |
-| `<leader>sx` | `add_cmd_out_to_ctx` | n,v  | Add shell command output to context                 |
-| `<leader>sT` | `add_tool_to_ctx`    | n,v  | Add an installed tool to context                    |
-| `<leader>sF` | `add_func_to_ctx`    | n,v  | Add Python function from buffer/selection as a tool |
-| `<leader>sr` | `reset_context`      | n,v  | Reset/clear all context files                       |
-| `<leader>sS` | `set_system_prompt`  | n,v  | Set/update the system prompt on-the-fly             |
+| Keybind      | Keymap                  | Mode | Action                                              |
+| ------------ | ----------------------- | ---- | --------------------------------------------------- |
+| `<leader>ss` | `ask_llm`               | n,v  | Prompt the LLM with an input box                    |
+| `<leader>sn` | `new_chat`              | n,v  | Start a new chat (clears buffer)                    |
+| `<leader>sc` | `cancel`                | n,v  | Cancel current request                              |
+| `<leader>sf` | `focus_llm_buffer`      | n,v  | Focus the LLM output buffer                         |
+| `<leader>st` | `toggle_llm_buffer`     | n,v  | Toggle LLM buffer visibility                        |
+| `<leader>sm` | `select_model`          | n,v  | Pick a different LLM model                          |
+| `<leader>sW` | `toggle_online`         | n,v  | Toggle online/web mode (shows 🌐 in status)         |
+| `<leader>so` | `set_model_option`      | n,v  | Set a model-specific option (e.g., temperature)     |
+| `<leader>sO` | `show_model_options`    | n,v  | Show available options for current model            |
+| `<leader>sa` | `add_file_to_ctx`       | n,v  | Add current file to context                         |
+| `<leader>su` | `add_url_to_ctx`        | n,v  | Add content of a URL to context                     |
+| `<leader>sv` | `add_sel_to_ctx`        | v    | Add visual selection to context                     |
+| `<leader>sd` | `add_diag_to_ctx`       | n,v  | Add diagnostics to context                          |
+| `<leader>sx` | `add_cmd_out_to_ctx`    | n,v  | Add shell command output to context                 |
+| `<leader>sT` | `add_tool_to_ctx`       | n,v  | Add an installed tool to context                    |
+| `<leader>sF` | `add_func_to_ctx`       | n,v  | Add Python function from buffer/selection as a tool |
+| `<leader>sr` | `reset_context`         | n,v  | Reset/clear all context files                       |
+| `<leader>sS` | `set_system_prompt`     | n,v  | Set/update the system prompt on-the-fly             |
+| `<leader>sy` | `copy_last_code_block`  | n,v  | Copy last code block from response to clipboard     |
+| `<leader>sY` | `copy_first_code_block` | n,v  | Copy first code block from response to clipboard    |
+| `<leader>sE` | `copy_last_response`    | n,v  | Copy last LLM response to clipboard                 |
 
 ---
 
@@ -565,6 +570,10 @@ require("sllm").setup({
 17. **Set model options (e.g., temperature):** `<leader>so`, enter
     `temperature`, then `0.7`.
 18. Cancel a running request: `<leader>sc`.
+19. Cancel a running request: `<leader>sc`.
+20. **Copy code blocks from response:** Use `<leader>sy` for the last code
+    block, `<leader>sY` for the first code block, or `<leader>sE` for the entire
+    last response.
 
 ### Visual Workflow
 

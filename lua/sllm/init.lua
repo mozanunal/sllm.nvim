@@ -19,6 +19,9 @@
 ---@field set_model_option string|false|nil    Keymap for setting model options.
 ---@field show_model_options string|false|nil  Keymap for showing available model options.
 ---@field toggle_online string|false|nil       Keymap for toggling online mode.
+---@field copy_first_code_block string|false|nil  Keymap for copying the first code block.
+---@field copy_last_code_block string|false|nil   Keymap for copying the last code block.
+---@field copy_last_response string|false|nil     Keymap for copying the last response.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -89,6 +92,9 @@ If the offered change is small, return only the changed part or function, not th
     set_model_option = '<leader>so',
     show_model_options = '<leader>sO',
     toggle_online = '<leader>sW',
+    copy_first_code_block = '<leader>sY',
+    copy_last_code_block = '<leader>sy',
+    copy_last_response = '<leader>sE',
   },
 }
 
@@ -138,6 +144,9 @@ function M.setup(user_config)
       set_model_option = { modes = { 'n', 'v' }, func = M.set_model_option, desc = 'Set model option' },
       show_model_options = { modes = { 'n', 'v' }, func = M.show_model_options, desc = 'Show available model options' },
       toggle_online = { modes = { 'n', 'v' }, func = M.toggle_online, desc = 'Toggle online mode' },
+      copy_first_code_block = { modes = { 'n', 'v' }, func = M.copy_first_code_block, desc = 'Copy first code block' },
+      copy_last_code_block = { modes = { 'n', 'v' }, func = M.copy_last_code_block, desc = 'Copy last code block' },
+      copy_last_response = { modes = { 'n', 'v' }, func = M.copy_last_response, desc = 'Copy last response' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -500,5 +509,34 @@ end
 --- Get online status for UI display.
 ---@return boolean
 function M.is_online_enabled() return state.online_enabled end
+--- Copy the first code block from the LLM buffer to the clipboard.
+---@return nil
+function M.copy_first_code_block()
+  if Ui.copy_first_code_block() then
+    notify('[sllm] first code block copied to clipboard.', vim.log.levels.INFO)
+  else
+    notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
+  end
+end
+
+--- Copy the last code block from the LLM buffer to the clipboard.
+---@return nil
+function M.copy_last_code_block()
+  if Ui.copy_last_code_block() then
+    notify('[sllm] last code block copied to clipboard.', vim.log.levels.INFO)
+  else
+    notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
+  end
+end
+
+--- Copy the last response from the LLM buffer to the clipboard.
+---@return nil
+function M.copy_last_response()
+  if Ui.copy_last_response() then
+    notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
+  else
+    notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
+  end
+end
 
 return M

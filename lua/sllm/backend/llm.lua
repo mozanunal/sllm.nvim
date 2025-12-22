@@ -92,20 +92,25 @@ end
 
 ---Construct the full `llm` command with provided options.
 ---
----@param llm_cmd      string             The base command to run `llm`.
----@param user_input   string             The prompt text to send to LLM.
----@param continue     boolean?           Pass `-c` to continue a previous session.
----@param show_usage   boolean?           Pass `-u` to show usage examples.
----@param model        string?            Pass `-m <model>` to select a model.
----@param ctx_files    string[]?          Pass `-f <file>` for text files or `-a <file>` for attachments.
----@param tools        string[]?          Pass `-T <tool>` for each tool.
----@param functions    string[]?          Pass `--functions <func>` for each function signature.
----@return string                      The assembled shell command.
-function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, tools, functions)
+---@param llm_cmd        string             The base command to run `llm`.
+---@param user_input     string             The prompt text to send to LLM.
+---@param continue       boolean?           Pass `-c` to continue a previous session.
+---@param show_usage     boolean?           Pass `-u` to show usage examples.
+---@param model          string?            Pass `-m <model>` to select a model.
+---@param ctx_files      string[]?          Pass `-f <file>` for each context file.
+---@param tools          string[]?          Pass `-T <tool>` for each tool.
+---@param functions      string[]?          Pass `--functions <func>` for each function signature.
+---@param system_prompt  string?            Pass `-s <prompt>` for system prompt.
+---@return string                        The assembled shell command.
+function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, tools, functions, system_prompt)
   local cmd = llm_cmd .. ' --td'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end
   if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end
+
+  if system_prompt and system_prompt ~= '' then
+    cmd = cmd .. ' -s ' .. vim.fn.shellescape(system_prompt)
+  end
 
   if ctx_files then
     for _, filename in ipairs(ctx_files) do

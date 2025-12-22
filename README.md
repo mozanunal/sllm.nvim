@@ -136,6 +136,10 @@ require("sllm").setup({
     add_url_to_ctx = false,
     -- Other keymaps will use their default values
   },
+  -- System prompt prepended to all queries (via -s flag)
+  system_prompt = [[You are a sllm plugin living within neovim.
+Always answer with markdown.
+If the offered change is small, return only the changed part or function, not the entire file.]],
   -- See the "Pre-Hooks and Post-Hooks" section for more details
   pre_hooks = {
     -- Example: automatically include git diff in context
@@ -160,6 +164,7 @@ require("sllm").setup({
 | `pick_func`             | function    | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
 | `notify_func`           | function    | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
 | `input_func`            | function    | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
+| `system_prompt`         | string/nil  | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
 | `keymaps`               | table/false | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
 ## Keybindings & Commands
@@ -184,6 +189,7 @@ changed or disabled in your `setup` configuration (see
 | `<leader>sT` | `add_tool_to_ctx`    | n,v  | Add an installed tool to context                    |
 | `<leader>sF` | `add_func_to_ctx`    | n,v  | Add Python function from buffer/selection as a tool |
 | `<leader>sr` | `reset_context`      | n,v  | Reset/clear all context files                       |
+| `<leader>sS` | `set_system_prompt`  | n,v  | Set/update the system prompt on-the-fly             |
 
 ---
 
@@ -231,6 +237,52 @@ require("sllm").setup({
 local sllm = require("sllm")
 vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
 ```
+
+---
+
+## System Prompt
+
+The `system_prompt` option allows you to define instructions that are prepended to all LLM queries using the `-s` flag. This is useful for ensuring consistent output formatting and behavior across all interactions.
+
+### Default System Prompt
+
+```lua
+system_prompt = [[You are a sllm plugin living within neovim.
+Always answer with markdown.
+If the offered change is small, return only the changed part or function, not the entire file.]]
+```
+
+### Configuring System Prompt
+
+You can customize the system prompt in your setup configuration:
+
+```lua
+require("sllm").setup({
+  system_prompt = [[You are an expert code reviewer.
+Always provide constructive feedback.
+Format code suggestions using markdown code blocks.]],
+})
+```
+
+### On-the-fly System Prompt Updates
+
+Press `<leader>sS` (or your custom keybinding for `set_system_prompt`) to interactively update the system prompt during a session. This allows you to:
+
+- Temporarily override the default system prompt
+- Clear the system prompt by submitting an empty string
+- Adapt the LLM's behavior for different tasks without restarting Neovim
+
+**Example workflow:**
+1. Press `<leader>sS`
+2. Enter your new system prompt (or clear it with an empty string)
+3. Future queries will use the updated system prompt
+
+### Benefits
+
+- **Consistent formatting:** Ensure the LLM always responds in markdown
+- **Model-specific tuning:** Different models may benefit from different instructions
+- **Context-appropriate behavior:** For small changes, request only the modified function instead of the entire file
+- **Flexibility:** Update the prompt on-the-fly without changing your configuration
 
 ---
 

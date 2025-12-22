@@ -152,20 +152,21 @@ If the offered change is small, return only the changed part or function, not th
 })
 ```
 
-| Option                  | Type        | Default                                | Description                                                                                                                               |
-| ----------------------- | ----------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `llm_cmd`               | string      | `"llm"`                                | Command or path for the `llm` CLI.                                                                                                        |
-| `default_model`         | string      | `"default"`                            | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
-| `show_usage`            | boolean     | `true`                                 | Include token usage summary in responses. If `true`, you'll see details after each interaction.                                           |
-| `on_start_new_chat`     | boolean     | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
-| `reset_ctx_each_prompt` | boolean     | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
-| `window_type`           | string      | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
-| `scroll_to_bottom`      | boolean     | `true`                                 | Whether to keep the cursor at the bottom of the LLM window.                                                                               |
-| `pick_func`             | function    | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
-| `notify_func`           | function    | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
-| `input_func`            | function    | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
-| `system_prompt`         | string/nil  | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
-| `keymaps`               | table/false | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
+| Option                  | Type              | Default                                | Description                                                                                                                               |
+| ----------------------- | ----------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `llm_cmd`               | string            | `"llm"`                                | Command or path for the `llm` CLI.                                                                                                        |
+| `default_model`         | string            | `"default"`                            | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
+| `show_usage`            | boolean           | `true`                                 | Include token usage summary in responses. If `true`, you'll see details after each interaction.                                           |
+| `on_start_new_chat`     | boolean           | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
+| `reset_ctx_each_prompt` | boolean           | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
+| `window_type`           | string            | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
+| `scroll_to_bottom`      | boolean           | `true`                                 | Whether to keep the cursor at the bottom of the LLM window.                                                                               |
+| `pick_func`             | function          | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
+| `notify_func`           | function          | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
+| `input_func`            | function          | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
+| `model_options`         | table<string,any> | `{}`                                   | Model-specific options (e.g., `{online = 1}`). These are passed to the `llm` CLI with `-o` flags.                                         |
+| `system_prompt`         | string/nil        | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
+| `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
 ## Keybindings & Commands
 
@@ -181,6 +182,8 @@ changed or disabled in your `setup` configuration (see
 | `<leader>sf` | `focus_llm_buffer`   | n,v  | Focus the LLM output buffer                         |
 | `<leader>st` | `toggle_llm_buffer`  | n,v  | Toggle LLM buffer visibility                        |
 | `<leader>sm` | `select_model`       | n,v  | Pick a different LLM model                          |
+| `<leader>so` | `set_model_option`   | n,v  | Set a model-specific option (e.g., temperature)     |
+| `<leader>sO` | `show_model_options` | n,v  | Show available options for current model            |
 | `<leader>sa` | `add_file_to_ctx`    | n,v  | Add current file to context                         |
 | `<leader>su` | `add_url_to_ctx`     | n,v  | Add content of a URL to context                     |
 | `<leader>sv` | `add_sel_to_ctx`     | v    | Add visual selection to context                     |
@@ -413,6 +416,97 @@ post_hooks = {
 
 ---
 
+## Model Options
+
+Models support specific options that can be passed via the `-o` flag in the
+`llm` CLI. These options control various aspects of model behavior like
+temperature, max tokens, and more.
+
+### Discovering Available Options
+
+To see what options are available for your current model:
+
+1. Press `<leader>sO` (capital O) to display available options in the LLM buffer
+2. Or run `llm models --options -m <model-name>` in your terminal
+
+### Setting Model Options
+
+There are two ways to set model options:
+
+#### 1. Via Configuration (Persistent)
+
+Set options in your `setup()` call that will apply to all LLM requests:
+
+```lua
+require("sllm").setup({
+  model_options = {
+    temperature = 0.7,     -- Control randomness (0-2)
+    max_tokens = 1000,     -- Limit response length
+    -- Add other model-specific options here
+  },
+})
+```
+
+#### 2. Via Keymap (Runtime)
+
+Use the `<leader>so` keymap to set options on-the-fly:
+
+1. Press `<leader>so`
+2. Enter the option key (e.g., `temperature`)
+3. Enter the option value (e.g., `0.7`)
+
+You can also programmatically set options:
+
+```lua
+-- Show available options for current model
+require("sllm").show_model_options()
+
+-- Set an option
+require("sllm").set_model_option()
+
+-- Reset all options
+require("sllm").reset_model_options()
+```
+
+### Common Model Options
+
+- `temperature` (0-2): Controls randomness. Higher = more creative, lower = more
+  focused
+- `max_tokens`: Maximum number of tokens to generate
+- `top_p` (0-1): Nucleus sampling parameter (alternative to temperature)
+- `frequency_penalty` (-2 to 2): Penalize repeated tokens
+- `presence_penalty` (-2 to 2): Encourage talking about new topics
+- `seed`: Integer seed for deterministic sampling
+- `json_object` (boolean): Force JSON output (must mention JSON in prompt)
+- `reasoning_effort` (low/medium/high): For reasoning models like o1, o3
+  (controls thinking depth)
+- `image_detail` (low/high/auto): For vision models (controls image token usage)
+
+**Note**: Not all options are available for all models. Use `<leader>sO` to see
+what's supported by your current model.
+
+### Example Usage
+
+```lua
+-- In your config:
+require("sllm").setup({
+  model_options = {
+    temperature = 0.3,  -- More focused responses
+    max_tokens = 2000,  -- Longer responses
+  },
+})
+```
+
+```vim
+" Or at runtime:
+" 1. Press <leader>so
+" 2. Enter: temperature
+" 3. Enter: 0.8
+" Now your next prompt will use temperature 0.8
+```
+
+---
+
 ## Workflow Example
 
 1. Open any file and press `<leader>ss`; type your prompt and hit Enter.
@@ -427,7 +521,10 @@ post_hooks = {
    selection, or normal mode for the whole file).
 9. Reset context: `<leader>sr`.
 10. Switch models: `<leader>sm`.
-11. Cancel a running request: `<leader>sc`.
+11. **Check available model options:** `<leader>sO` (capital O).
+12. **Set model options (e.g., temperature):** `<leader>so`, enter
+    `temperature`, then `0.7`.
+13. Cancel a running request: `<leader>sc`.
 
 ### Visual Workflow
 

@@ -16,6 +16,8 @@
 ---@field add_func_to_ctx string|false|nil     Keymap for adding a function.
 ---@field reset_context string|false|nil       Keymap for resetting the context.
 ---@field set_system_prompt string|false|nil   Keymap for setting the system prompt.
+---@field set_model_option string|false|nil    Keymap for setting model options.
+---@field show_model_options string|false|nil  Keymap for showing available model options.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -39,6 +41,7 @@
 ---@field pre_hooks PreHook[]?               Commands to run before llm execution.
 ---@field post_hooks PostHook[]?             Commands to run after llm execution.
 ---@field system_prompt string?              System prompt to prepend to all queries.
+---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -81,6 +84,8 @@ If the offered change is small, return only the changed part or function, not th
     add_func_to_ctx = '<leader>sF',
     reset_context = '<leader>sr',
     set_system_prompt = '<leader>sS',
+    set_model_option = '<leader>so',
+    show_model_options = '<leader>sO',
   },
 }
 
@@ -90,6 +95,7 @@ local state = {
   continue = nil,
   selected_model = nil,
   system_prompt = nil,
+  model_options = {},
 }
 
 ---@type fun(msg: string, level?: number)
@@ -126,6 +132,8 @@ function M.setup(user_config)
       add_sel_to_ctx = { modes = 'v', func = M.add_sel_to_ctx, desc = 'Add visual selection to context' },
       add_func_to_ctx = { modes = 'n', func = M.add_func_to_ctx, desc = 'Add selected function to context' },
       set_system_prompt = { modes = { 'n', 'v' }, func = M.set_system_prompt, desc = 'Set system prompt' },
+      set_model_option = { modes = { 'n', 'v' }, func = M.set_model_option, desc = 'Set model option' },
+      show_model_options = { modes = { 'n', 'v' }, func = M.show_model_options, desc = 'Show available model options' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -138,6 +146,7 @@ function M.setup(user_config)
   state.selected_model = config.default_model ~= 'default' and config.default_model
     or Backend.get_default_model(config.llm_cmd)
   state.system_prompt = config.system_prompt
+  state.model_options = config.model_options or {}
 
   notify = config.notify_func
   pick = config.pick_func
@@ -190,6 +199,7 @@ function M.ask_llm()
       ctx.tools,
       ctx.functions,
       state.system_prompt
+      state.model_options
     )
     state.continue = true
 
@@ -412,6 +422,54 @@ function M.set_system_prompt()
       notify('[sllm] system prompt updated.', vim.log.levels.INFO)
     end
   end)
+end
+
+--- Show available options for the current model.
+---@return nil
+function M.show_model_options()
+  if not state.selected_model then
+    notify('[sllm] no model selected.', vim.log.levels.WARN)
+    return
+  end
+
+  -- Run `llm models --options -m <model>` to show available options
+  local cmd = config.llm_cmd .. ' models --options -m ' .. vim.fn.shellescape(state.selected_model)
+  local output = vim.fn.systemlist(cmd)
+
+  -- Display in a floating window or show in the LLM buffer
+  Ui.show_llm_buffer(config.window_type, state.selected_model)
+  Ui.append_to_llm_buffer({ '', '> 📋 Available options for ' .. state.selected_model, '' }, config.scroll_to_bottom)
+  Ui.append_to_llm_buffer(output, config.scroll_to_bottom)
+  Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)
+  notify('[sllm] showing model options', vim.log.levels.INFO)
+end
+
+--- Set or update a model option.
+---@return nil
+function M.set_model_option()
+  input({ prompt = 'Option key: ' }, function(key)
+    if not key or key == '' then
+      notify('[sllm] no key provided.', vim.log.levels.INFO)
+      return
+    end
+    input({ prompt = 'Option value for "' .. key .. '": ' }, function(value)
+      if not value or value == '' then
+        notify('[sllm] no value provided.', vim.log.levels.INFO)
+        return
+      end
+      -- Try to convert to number if it looks like a number
+      local num_value = tonumber(value)
+      state.model_options[key] = num_value or value
+      notify('[sllm] set option: ' .. key .. ' = ' .. value, vim.log.levels.INFO)
+    end)
+  end)
+end
+
+--- Reset all model options.
+---@return nil
+function M.reset_model_options()
+  state.model_options = {}
+  notify('[sllm] model options reset.', vim.log.levels.INFO)
 end
 
 return M

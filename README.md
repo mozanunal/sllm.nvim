@@ -23,6 +23,8 @@ the [**PREFACE.md**](./PREFACE.md).
 
 - **Interactive Chat** Send prompts to any installed LLM backend, streaming
   replies line by line.
+- **Code Completion** Press `<leader><Tab>` to complete code at cursor position.
+  Automatically includes current file context and inserts completion inline.
 - **Context Management** Add or reset files, URLs, shell command outputs,
   selections, diagnostics, installed LLM tools, or **on-the-fly Python
   functions** in the context so the model can reference your code, web content,
@@ -37,6 +39,8 @@ the [**PREFACE.md**](./PREFACE.md).
   wrap/linebreak enabled.
 - **Token Usage Feedback** Displays request/response token usage and estimated
   cost after each prompt (when `show_usage` is enabled).
+- **Code Block Extraction** Copy the first, last, or entire response from the
+  LLM buffer to clipboard without focusing on it.
 
 ---
 
@@ -168,22 +172,26 @@ The following table lists the **default** keybindings. All of them can be
 changed or disabled in your `setup` configuration (see
 [Customizing Keymaps](#customizing-keymaps)).
 
-| Keybind      | Keymap               | Mode | Action                                              |
-| ------------ | -------------------- | ---- | --------------------------------------------------- |
-| `<leader>ss` | `ask_llm`            | n,v  | Prompt the LLM with an input box                    |
-| `<leader>sn` | `new_chat`           | n,v  | Start a new chat (clears buffer)                    |
-| `<leader>sc` | `cancel`             | n,v  | Cancel current request                              |
-| `<leader>sf` | `focus_llm_buffer`   | n,v  | Focus the LLM output buffer                         |
-| `<leader>st` | `toggle_llm_buffer`  | n,v  | Toggle LLM buffer visibility                        |
-| `<leader>sm` | `select_model`       | n,v  | Pick a different LLM model                          |
-| `<leader>sa` | `add_file_to_ctx`    | n,v  | Add current file to context                         |
-| `<leader>su` | `add_url_to_ctx`     | n,v  | Add content of a URL to context                     |
-| `<leader>sv` | `add_sel_to_ctx`     | v    | Add visual selection to context                     |
-| `<leader>sd` | `add_diag_to_ctx`    | n,v  | Add diagnostics to context                          |
-| `<leader>sx` | `add_cmd_out_to_ctx` | n,v  | Add shell command output to context                 |
-| `<leader>sT` | `add_tool_to_ctx`    | n,v  | Add an installed tool to context                    |
-| `<leader>sF` | `add_func_to_ctx`    | n,v  | Add Python function from buffer/selection as a tool |
-| `<leader>sr` | `reset_context`      | n,v  | Reset/clear all context files                       |
+| Keybind         | Keymap                  | Mode | Action                                              |
+| --------------- | ----------------------- | ---- | --------------------------------------------------- |
+| `<leader>ss`    | `ask_llm`               | n,v  | Prompt the LLM with an input box                    |
+| `<leader>sn`    | `new_chat`              | n,v  | Start a new chat (clears buffer)                    |
+| `<leader>sc`    | `cancel`                | n,v  | Cancel current request                              |
+| `<leader>sf`    | `focus_llm_buffer`      | n,v  | Focus the LLM output buffer                         |
+| `<leader>st`    | `toggle_llm_buffer`     | n,v  | Toggle LLM buffer visibility                        |
+| `<leader>sm`    | `select_model`          | n,v  | Pick a different LLM model                          |
+| `<leader>sa`    | `add_file_to_ctx`       | n,v  | Add current file to context                         |
+| `<leader>su`    | `add_url_to_ctx`        | n,v  | Add content of a URL to context                     |
+| `<leader>sv`    | `add_sel_to_ctx`        | v    | Add visual selection to context                     |
+| `<leader>sd`    | `add_diag_to_ctx`       | n,v  | Add diagnostics to context                          |
+| `<leader>sx`    | `add_cmd_out_to_ctx`    | n,v  | Add shell command output to context                 |
+| `<leader>sT`    | `add_tool_to_ctx`       | n,v  | Add an installed tool to context                    |
+| `<leader>sF`    | `add_func_to_ctx`       | n,v  | Add Python function from buffer/selection as a tool |
+| `<leader>sr`    | `reset_context`         | n,v  | Reset/clear all context files                       |
+| `<leader>sy`    | `copy_last_code_block`  | n,v  | Copy last code block from response to clipboard     |
+| `<leader>sY`    | `copy_first_code_block` | n,v  | Copy first code block from response to clipboard    |
+| `<leader>sE`    | `copy_last_response`    | n,v  | Copy last LLM response to clipboard                 |
+| `<leader><Tab>` | `complete_code`         | n,i  | Complete code at cursor position                    |
 
 ---
 
@@ -354,21 +362,72 @@ post_hooks = {
 
 ---
 
+## Code Completion
+
+**sllm.nvim** includes a simple code completion feature. Press `<leader><Tab>`
+in normal or insert mode to complete code at your current cursor position.
+
+### How It Works
+
+1. Press `<leader><Tab>` at any point in your code
+2. The plugin automatically sends:
+   - All code **before** the cursor
+   - A `<CURSOR>` marker at your position
+   - All code **after** the cursor (for context)
+3. The LLM generates a completion with a system prompt to output only code
+4. The completion is inserted directly at your cursor position
+
+### Example
+
+```lua
+function calculate_sum(a, b)
+  -- Press <leader><Tab> here to complete the function
+```
+
+The LLM will see:
+
+```lua
+function calculate_sum(a, b)
+  <CURSOR>
+```
+
+And might generate:
+
+```lua
+return a + b
+```
+
+Which gets inserted at your cursor position automatically.
+
+### Tips
+
+- Works in both normal and insert mode
+- Automatically includes full file context (before and after cursor)
+- Uses your selected model (change with `<leader>sm`)
+- Cleans up code fences and extra formatting from LLM response
+- Supports multi-line completions
+
+---
+
 ## Workflow Example
 
 1. Open any file and press `<leader>ss`; type your prompt and hit Enter.
-2. Add the entire file to context: `<leader>sa`.
-3. Add only a visual selection: (Visual mode) `<leader>sv`.
-4. Add diagnostics: `<leader>sd`.
-5. Add the content of a URL: `<leader>su`.
-6. Add a shell command output: `<leader>sx`.
-7. **Add an installed tool to the context:** `<leader>sT`, then pick from the
+2. **Complete code at cursor:** Press `<leader><Tab>` to auto-complete code.
+3. Add the entire file to context: `<leader>sa`.
+4. Add only a visual selection: (Visual mode) `<leader>sv`.
+5. Add diagnostics: `<leader>sd`.
+6. Add the content of a URL: `<leader>su`.
+7. Add a shell command output: `<leader>sx`.
+8. **Add an installed tool to the context:** `<leader>sT`, then pick from the
    list.
-8. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a
+9. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a
    selection, or normal mode for the whole file).
-9. Reset context: `<leader>sr`.
-10. Switch models: `<leader>sm`.
-11. Cancel a running request: `<leader>sc`.
+10. Reset context: `<leader>sr`.
+11. Switch models: `<leader>sm`.
+12. Cancel a running request: `<leader>sc`.
+13. **Copy code blocks from response:** Use `<leader>sy` for the last code
+    block, `<leader>sY` for the first code block, or `<leader>sE` for the entire
+    last response.
 
 ### Visual Workflow
 
@@ -409,4 +468,6 @@ post_hooks = {
 
 Apache 2.0 — see [LICENSE](./LICENSE). `llm` and its extensions are copyright
 Simon Willison.
+
+```
 ```

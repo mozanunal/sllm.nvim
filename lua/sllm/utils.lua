@@ -72,4 +72,35 @@ function M.render(tmpl, env)
   return (tmpl:gsub('%${([%w_]+)}', env))
 end
 
+--- Extract all code blocks from buffer lines.
+---@param lines string[]  Buffer lines to parse.
+---@return string[]  List of code block contents (without fence markers).
+function M.extract_code_blocks(lines)
+  local code_blocks = {}
+  local in_code_block = false
+  local current_block = {}
+
+  for _, line in ipairs(lines) do
+    -- Check for code fence (``` or ~~~)
+    if line:match('^```') or line:match('^~~~') then
+      if in_code_block then
+        -- End of code block
+        if #current_block > 0 then table.insert(code_blocks, table.concat(current_block, '\n')) end
+        current_block = {}
+        in_code_block = false
+      else
+        -- Start of code block
+        in_code_block = true
+      end
+    elseif in_code_block then
+      table.insert(current_block, line)
+    end
+  end
+
+  -- Handle unclosed code block
+  if in_code_block and #current_block > 0 then table.insert(code_blocks, table.concat(current_block, '\n')) end
+
+  return code_blocks
+end
+
 return M

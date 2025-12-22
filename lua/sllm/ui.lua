@@ -219,4 +219,76 @@ function M.update_llm_win_title(model_name)
   end
 end
 
+--- Copy the first code block from the LLM buffer to the clipboard.
+---@return boolean  `true` if a code block was found and copied; `false` otherwise.
+function M.copy_first_code_block()
+  local buf = ensure_llm_buffer()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local code_blocks = Utils.extract_code_blocks(lines)
+
+  if #code_blocks == 0 then return false end
+
+  vim.fn.setreg('+', code_blocks[1])
+  vim.fn.setreg('"', code_blocks[1])
+  return true
+end
+
+--- Copy the last code block from the LLM buffer to the clipboard.
+---@return boolean  `true` if a code block was found and copied; `false` otherwise.
+function M.copy_last_code_block()
+  local buf = ensure_llm_buffer()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local code_blocks = Utils.extract_code_blocks(lines)
+
+  if #code_blocks == 0 then return false end
+
+  vim.fn.setreg('+', code_blocks[#code_blocks])
+  vim.fn.setreg('"', code_blocks[#code_blocks])
+  return true
+end
+
+--- Copy the last response from the LLM buffer to the clipboard.
+--- Extracts content from the last "🤖 Response" marker to the end.
+---@return boolean  `true` if content was copied; `false` if no response found.
+function M.copy_last_response()
+  local buf = ensure_llm_buffer()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+  if #lines == 0 then return false end
+
+  -- Find the last occurrence of the response marker
+  local last_response_idx = nil
+  for i = #lines, 1, -1 do
+    if lines[i]:match('^> 🤖 Response') then
+      last_response_idx = i
+      break
+    end
+  end
+
+  if not last_response_idx then return false end
+
+  -- Extract from the response marker to the end (skip the marker line and empty lines)
+  local response_lines = {}
+  for i = last_response_idx + 1, #lines do
+    table.insert(response_lines, lines[i])
+  end
+
+  -- Remove leading empty lines
+  while #response_lines > 0 and response_lines[1]:match('^%s*$') do
+    table.remove(response_lines, 1)
+  end
+
+  -- Remove trailing empty lines
+  while #response_lines > 0 and response_lines[#response_lines]:match('^%s*$') do
+    table.remove(response_lines)
+  end
+
+  if #response_lines == 0 then return false end
+
+  local content = table.concat(response_lines, '\n')
+  vim.fn.setreg('+', content)
+  vim.fn.setreg('"', content)
+  return true
+end
+
 return M

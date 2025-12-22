@@ -15,6 +15,10 @@
 ---@field add_tool_to_ctx string|false|nil     Keymap for adding a tool.
 ---@field add_func_to_ctx string|false|nil     Keymap for adding a function.
 ---@field reset_context string|false|nil       Keymap for resetting the context.
+---@field copy_first_code_block string|false|nil  Keymap for copying the first code block.
+---@field copy_last_code_block string|false|nil   Keymap for copying the last code block.
+---@field copy_last_response string|false|nil     Keymap for copying the last response.
+---@field complete_code string|false|nil          Keymap for triggering code completion at cursor.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -75,6 +79,10 @@ local config = {
     add_tool_to_ctx = '<leader>sT',
     add_func_to_ctx = '<leader>sF',
     reset_context = '<leader>sr',
+    copy_first_code_block = '<leader>sY',
+    copy_last_code_block = '<leader>sy',
+    copy_last_response = '<leader>sE',
+    complete_code = '<leader><Tab>',
   },
 }
 
@@ -118,6 +126,10 @@ function M.setup(user_config)
       reset_context = { modes = { 'n', 'v' }, func = M.reset_context, desc = 'Reset LLM context' },
       add_sel_to_ctx = { modes = 'v', func = M.add_sel_to_ctx, desc = 'Add visual selection to context' },
       add_func_to_ctx = { modes = 'n', func = M.add_func_to_ctx, desc = 'Add selected function to context' },
+      copy_first_code_block = { modes = { 'n', 'v' }, func = M.copy_first_code_block, desc = 'Copy first code block' },
+      copy_last_code_block = { modes = { 'n', 'v' }, func = M.copy_last_code_block, desc = 'Copy last code block' },
+      copy_last_response = { modes = { 'n', 'v' }, func = M.copy_last_response, desc = 'Copy last response' },
+      complete_code = { modes = { 'n', 'i' }, func = M.complete_code, desc = 'Complete code at cursor' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -384,6 +396,141 @@ end
 function M.reset_context()
   CtxMan.reset()
   notify('[sllm] context reset.', vim.log.levels.INFO)
+end
+
+--- Copy the first code block from the LLM buffer to the clipboard.
+---@return nil
+function M.copy_first_code_block()
+  if Ui.copy_first_code_block() then
+    notify('[sllm] first code block copied to clipboard.', vim.log.levels.INFO)
+  else
+    notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
+  end
+end
+
+--- Copy the last code block from the LLM buffer to the clipboard.
+---@return nil
+function M.copy_last_code_block()
+  if Ui.copy_last_code_block() then
+    notify('[sllm] last code block copied to clipboard.', vim.log.levels.INFO)
+  else
+    notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
+  end
+end
+
+--- Copy the last response from the LLM buffer to the clipboard.
+---@return nil
+function M.copy_last_response()
+  if Ui.copy_last_response() then
+    notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
+  else
+    notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
+  end
+end
+
+--- Complete code at cursor position.
+---@return nil
+function M.complete_code()
+  if JobMan.is_busy() then
+    notify('[sllm] already running, please wait.', vim.log.levels.WARN)
+    return
+  end
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local row = cursor_pos[1]
+  local col = cursor_pos[2]
+
+  -- Get all lines in the buffer
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+  -- Split at cursor: before and after
+  local before_lines = {}
+  local after_lines = {}
+
+  for i = 1, #lines do
+    if i < row then
+      table.insert(before_lines, lines[i])
+    elseif i == row then
+      -- Split the current line at cursor position
+      local line = lines[i]
+      table.insert(before_lines, line:sub(1, col))
+      if col < #line then table.insert(after_lines, line:sub(col + 1)) end
+    else
+      table.insert(after_lines, lines[i])
+    end
+  end
+
+  local before_text = table.concat(before_lines, '\n')
+  local after_text = table.concat(after_lines, '\n')
+
+  -- Build the completion prompt with cursor marker
+  local prompt =
+    'Complete the code at the cursor position marked with <CURSOR>. Output ONLY the completion code, no explanations, no markdown formatting.\n\n'
+  prompt = prompt .. before_text .. '<CURSOR>'
+  if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
+
+  -- Build LLM command - no continuation, no usage stats for cleaner output
+  local cmd = config.llm_cmd .. ' --no-stream'
+  if state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(state.selected_model) end
+  cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+
+  notify('[sllm] requesting completion...', vim.log.levels.INFO)
+
+  -- Collect the completion output
+  local completion_output = {}
+
+  JobMan.start(cmd, function(line)
+    if line ~= '' then table.insert(completion_output, line) end
+  end, function(exit_code)
+    if exit_code == 0 and #completion_output > 0 then
+      -- Join all output lines
+      local completion = table.concat(completion_output, '\n')
+
+      -- Clean up common LLM formatting
+      completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
+      completion = completion:gsub('\n```$', '') -- Remove closing code fence
+      completion = vim.trim(completion)
+
+      if completion ~= '' then
+        -- Insert the completion at cursor position
+        local completion_lines = vim.split(completion, '\n', { plain = true })
+
+        -- Get the current line and rebuild it with the completion
+        local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+        local line_before = current_line:sub(1, col)
+        local line_after = current_line:sub(col + 1)
+
+        -- Build the new lines to insert
+        local new_lines = {}
+        if #completion_lines == 1 then
+          -- Single line completion
+          table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
+        else
+          -- Multi-line completion
+          table.insert(new_lines, line_before .. completion_lines[1])
+          for i = 2, #completion_lines - 1 do
+            table.insert(new_lines, completion_lines[i])
+          end
+          table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
+        end
+
+        -- Replace the current line with new lines
+        vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
+
+        -- Move cursor to end of completion
+        local new_row = row + #new_lines - 1
+        local new_col = #new_lines[#new_lines] - #line_after
+        vim.api.nvim_win_set_cursor(0, { new_row, new_col })
+
+        notify('[sllm] completion inserted', vim.log.levels.INFO)
+      else
+        notify('[sllm] received empty completion', vim.log.levels.WARN)
+      end
+    else
+      notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+    end
+  end)
 end
 
 return M

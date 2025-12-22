@@ -108,9 +108,7 @@ function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, 
   if show_usage then cmd = cmd .. ' -u' end
   if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end
 
-  if system_prompt and system_prompt ~= '' then
-    cmd = cmd .. ' -s ' .. vim.fn.shellescape(system_prompt)
-  end
+  if system_prompt and system_prompt ~= '' then cmd = cmd .. ' -s ' .. vim.fn.shellescape(system_prompt) end
 
   if ctx_files then
     for _, filename in ipairs(ctx_files) do

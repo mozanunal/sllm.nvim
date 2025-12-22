@@ -242,7 +242,9 @@ vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]
 
 ## System Prompt
 
-The `system_prompt` option allows you to define instructions that are prepended to all LLM queries using the `-s` flag. This is useful for ensuring consistent output formatting and behavior across all interactions.
+The `system_prompt` option allows you to define instructions that are prepended
+to all LLM queries using the `-s` flag. This is useful for ensuring consistent
+output formatting and behavior across all interactions.
 
 ### Default System Prompt
 
@@ -266,13 +268,15 @@ Format code suggestions using markdown code blocks.]],
 
 ### On-the-fly System Prompt Updates
 
-Press `<leader>sS` (or your custom keybinding for `set_system_prompt`) to interactively update the system prompt during a session. This allows you to:
+Press `<leader>sS` (or your custom keybinding for `set_system_prompt`) to
+interactively update the system prompt during a session. This allows you to:
 
 - Temporarily override the default system prompt
 - Clear the system prompt by submitting an empty string
 - Adapt the LLM's behavior for different tasks without restarting Neovim
 
 **Example workflow:**
+
 1. Press `<leader>sS`
 2. Enter your new system prompt (or clear it with an empty string)
 3. Future queries will use the updated system prompt
@@ -280,9 +284,12 @@ Press `<leader>sS` (or your custom keybinding for `set_system_prompt`) to intera
 ### Benefits
 
 - **Consistent formatting:** Ensure the LLM always responds in markdown
-- **Model-specific tuning:** Different models may benefit from different instructions
-- **Context-appropriate behavior:** For small changes, request only the modified function instead of the entire file
-- **Flexibility:** Update the prompt on-the-fly without changing your configuration
+- **Model-specific tuning:** Different models may benefit from different
+  instructions
+- **Context-appropriate behavior:** For small changes, request only the modified
+  function instead of the entire file
+- **Flexibility:** Update the prompt on-the-fly without changing your
+  configuration
 
 ---
 

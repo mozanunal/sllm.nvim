@@ -165,6 +165,7 @@ If the offered change is small, return only the changed part or function, not th
 | `notify_func`           | function          | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
 | `input_func`            | function          | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
 | `model_options`         | table<string,any> | `{}`                                   | Model-specific options (e.g., `{online = 1}`). These are passed to the `llm` CLI with `-o` flags.                                         |
+| `online_enabled`        | boolean                 | `false`                                | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
 | `system_prompt`         | string/nil        | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
 | `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
@@ -182,6 +183,7 @@ changed or disabled in your `setup` configuration (see
 | `<leader>sf` | `focus_llm_buffer`   | n,v  | Focus the LLM output buffer                         |
 | `<leader>st` | `toggle_llm_buffer`  | n,v  | Toggle LLM buffer visibility                        |
 | `<leader>sm` | `select_model`       | n,v  | Pick a different LLM model                          |
+| `<leader>sW` | `toggle_online`      | n,v  | Toggle online/web mode (shows 🌐 in status)         |
 | `<leader>so` | `set_model_option`   | n,v  | Set a model-specific option (e.g., temperature)     |
 | `<leader>sO` | `show_model_options` | n,v  | Show available options for current model            |
 | `<leader>sa` | `add_file_to_ctx`    | n,v  | Add current file to context                         |
@@ -416,6 +418,31 @@ post_hooks = {
 
 ---
 
+## Online/Web Mode Toggle
+
+Some models may support an `online` option for web search capabilities. You can easily toggle this feature:
+
+**Quick Toggle**: Press `<leader>sW` to toggle online mode on/off
+
+When enabled, you'll see a 🌐 icon in the status bar next to the model name.
+
+**Example:**
+```
+Status bar shows: sllm.nvim | Model: gpt-4o 🌐    (online mode enabled)
+Status bar shows: sllm.nvim | Model: gpt-4o       (online mode disabled)
+```
+
+**Enable by Default in Config:**
+```lua
+require("sllm").setup({
+  online_enabled = true,  -- Start with online mode enabled
+})
+```
+
+**Note**: The `online` option may not be available for all models. If you get errors when using this feature, the model you're using likely doesn't support web search. Check your model provider's documentation.
+
+---
+
 ## Model Options
 
 Models support specific options that can be passed via the `-o` flag in the
@@ -525,6 +552,10 @@ require("sllm").setup({
 12. **Set model options (e.g., temperature):** `<leader>so`, enter
     `temperature`, then `0.7`.
 13. Cancel a running request: `<leader>sc`.
+11. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐 indicator).
+12. **Check available model options:** `<leader>sO` (capital O).
+13. **Set model options (e.g., temperature):** `<leader>so`, enter `temperature`, then `0.7`.
+14. Cancel a running request: `<leader>sc`.
 
 ### Visual Workflow
 

@@ -85,7 +85,7 @@ local function create_llm_win(window_type, model_name)
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  M.update_llm_win_title(model_name)
+  M.update_llm_win_title(model_name, false)  -- online status will be updated separately
   return win_id
 end
 
@@ -208,10 +208,12 @@ end
 
 --- Update the LLM window's title (winbar) with the given model name.
 ---@param model_name? string  Name of the model, or `nil` for default.
+---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return nil
-function M.update_llm_win_title(model_name)
+function M.update_llm_win_title(model_name, online_enabled)
   local display = model_name or '(default)'
-  local title = string.format('  sllm.nvim | Model: %s', display)
+  local online_indicator = online_enabled and ' 🌐' or ''
+  local title = string.format('  sllm.nvim | Model: %s%s', display, online_indicator)
   if is_loading_active then
     original_winbar_text = title
   else

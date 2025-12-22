@@ -18,6 +18,7 @@
 ---@field set_system_prompt string|false|nil   Keymap for setting the system prompt.
 ---@field set_model_option string|false|nil    Keymap for setting model options.
 ---@field show_model_options string|false|nil  Keymap for showing available model options.
+---@field toggle_online string|false|nil       Keymap for toggling online mode.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -42,6 +43,7 @@
 ---@field post_hooks PostHook[]?             Commands to run after llm execution.
 ---@field system_prompt string?              System prompt to prepend to all queries.
 ---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
+---@field online_enabled boolean?            Enable online/web mode by default.
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -86,6 +88,7 @@ If the offered change is small, return only the changed part or function, not th
     set_system_prompt = '<leader>sS',
     set_model_option = '<leader>so',
     show_model_options = '<leader>sO',
+    toggle_online = '<leader>sW',
   },
 }
 
@@ -96,6 +99,7 @@ local state = {
   selected_model = nil,
   system_prompt = nil,
   model_options = {},
+  online_enabled = false,
 }
 
 ---@type fun(msg: string, level?: number)
@@ -134,6 +138,7 @@ function M.setup(user_config)
       set_system_prompt = { modes = { 'n', 'v' }, func = M.set_system_prompt, desc = 'Set system prompt' },
       set_model_option = { modes = { 'n', 'v' }, func = M.set_model_option, desc = 'Set model option' },
       show_model_options = { modes = { 'n', 'v' }, func = M.show_model_options, desc = 'Show available model options' },
+      toggle_online = { modes = { 'n', 'v' }, func = M.toggle_online, desc = 'Toggle online mode' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -147,6 +152,12 @@ function M.setup(user_config)
     or Backend.get_default_model(config.llm_cmd)
   state.system_prompt = config.system_prompt
   state.model_options = config.model_options or {}
+  state.online_enabled = config.online_enabled or false
+  
+  -- Set online option if enabled by default
+  if state.online_enabled then
+    state.model_options.online = 1
+  end
 
   notify = config.notify_func
   pick = config.pick_func
@@ -280,7 +291,7 @@ function M.select_model()
     if item then
       state.selected_model = item
       notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
-      Ui.update_llm_win_title(state.selected_model)
+      Ui.update_llm_win_title(state.selected_model, state.online_enabled)
     else
       notify('[sllm] llm model not changed', vim.log.levels.WARN)
     end
@@ -470,6 +481,29 @@ end
 function M.reset_model_options()
   state.model_options = {}
   notify('[sllm] model options reset.', vim.log.levels.INFO)
+end
+
+--- Toggle the online feature (adds/removes online=1 option).
+---@return nil
+function M.toggle_online()
+  state.online_enabled = not state.online_enabled
+  
+  if state.online_enabled then
+    state.model_options.online = 1
+    notify('[sllm] 🌐 Online mode enabled', vim.log.levels.INFO)
+  else
+    state.model_options.online = nil
+    notify('[sllm] 📴 Online mode disabled', vim.log.levels.INFO)
+  end
+  
+  -- Update the UI title to reflect the change
+  Ui.update_llm_win_title(state.selected_model, state.online_enabled)
+end
+
+--- Get online status for UI display.
+---@return boolean
+function M.is_online_enabled()
+  return state.online_enabled
 end
 
 return M

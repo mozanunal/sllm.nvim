@@ -39,6 +39,57 @@ function M.extract_tools(llm_cmd)
   return names
 end
 
+---Check if a file should be treated as an attachment (image, PDF, etc.)
+---@param filename string File path to check.
+---@return boolean True if the file should use `-a`, false if it should use `-f`.
+local function is_attachment(filename)
+  local attachment_extensions = {
+    -- Images
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'bmp',
+    'webp',
+    'svg',
+    'ico',
+    'tiff',
+    'tif',
+    -- Documents
+    'pdf',
+    'doc',
+    'docx',
+    'xls',
+    'xlsx',
+    'ppt',
+    'pptx',
+    -- Audio/Video
+    'mp3',
+    'mp4',
+    'wav',
+    'avi',
+    'mov',
+    'mkv',
+    'flac',
+    'ogg',
+    -- Archives
+    'zip',
+    'tar',
+    'gz',
+    'rar',
+    '7z',
+  }
+
+  local ext = filename:match('%.([^%.]+)$')
+  if ext then
+    ext = ext:lower()
+    for _, attach_ext in ipairs(attachment_extensions) do
+      if ext == attach_ext then return true end
+    end
+  end
+  return false
+end
+
 ---Construct the full `llm` command with provided options.
 ---
 ---@param llm_cmd      string             The base command to run `llm`.
@@ -46,7 +97,7 @@ end
 ---@param continue     boolean?           Pass `-c` to continue a previous session.
 ---@param show_usage   boolean?           Pass `-u` to show usage examples.
 ---@param model        string?            Pass `-m <model>` to select a model.
----@param ctx_files    string[]?          Pass `-f <file>` for each context file.
+---@param ctx_files    string[]?          Pass `-f <file>` for text files or `-a <file>` for attachments.
 ---@param tools        string[]?          Pass `-T <tool>` for each tool.
 ---@param functions    string[]?          Pass `--functions <func>` for each function signature.
 ---@return string                      The assembled shell command.
@@ -58,7 +109,9 @@ function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, 
 
   if ctx_files then
     for _, filename in ipairs(ctx_files) do
-      cmd = cmd .. ' -f ' .. vim.fn.shellescape(filename) .. ' '
+      -- Use -a for attachments (images, PDFs, etc.), -f for text files
+      local flag = is_attachment(filename) and '-a' or '-f'
+      cmd = cmd .. ' ' .. flag .. ' ' .. vim.fn.shellescape(filename) .. ' '
     end
   end
 

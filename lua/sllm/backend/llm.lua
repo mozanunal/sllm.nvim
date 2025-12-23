@@ -101,8 +101,20 @@ end
 ---@param tools          string[]?          Pass `-T <tool>` for each tool.
 ---@param functions      string[]?          Pass `--functions <func>` for each function signature.
 ---@param system_prompt  string?            Pass `-s <prompt>` for system prompt.
+---@param model_options table<string,any>? Pass `-o <key> <value>` for each model option.
 ---@return string                        The assembled shell command.
-function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, tools, functions, system_prompt)
+function M.llm_cmd(
+  llm_cmd,
+  user_input,
+  continue,
+  show_usage,
+  model,
+  ctx_files,
+  tools,
+  functions,
+  system_prompt,
+  model_options
+)
   local cmd = llm_cmd .. ' --td'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end
@@ -127,6 +139,12 @@ function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, 
   if functions then
     for _, func_str in ipairs(functions) do
       cmd = cmd .. ' --functions ' .. vim.fn.shellescape(func_str) .. ' '
+    end
+  end
+
+  if model_options then
+    for key, value in pairs(model_options) do
+      cmd = cmd .. ' -o ' .. vim.fn.shellescape(key) .. ' ' .. vim.fn.shellescape(tostring(value)) .. ' '
     end
   end
 

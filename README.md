@@ -559,15 +559,15 @@ require("sllm").setup({
    list.
 9. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a
    selection, or normal mode for the whole file).
-9. Reset context: `<leader>sr`.
-10. Switch models: `<leader>sm`.
-11. **Check available model options:** `<leader>sO` (capital O).
-12. **Set model options (e.g., temperature):** `<leader>so`, enter
+10. Reset context: `<leader>sr`.
+11. Switch models: `<leader>sm`.
+12. **Check available model options:** `<leader>sO` (capital O).
+13. **Set model options (e.g., temperature):** `<leader>so`, enter
     `temperature`, then `0.7`.
-13. Cancel a running request: `<leader>sc`.
-14. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
+14. Cancel a running request: `<leader>sc`.
+15. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
     indicator).
-15. **Copy code blocks from response:** Use `<leader>sy` for the last code
+16. **Copy code blocks from response:** Use `<leader>sy` for the last code
     block, `<leader>sY` for the first code block, or `<leader>sE` for the entire
     last response.
 

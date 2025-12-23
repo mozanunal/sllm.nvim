@@ -149,7 +149,7 @@ function M.setup(user_config)
       copy_first_code_block = { modes = { 'n', 'v' }, func = M.copy_first_code_block, desc = 'Copy first code block' },
       copy_last_code_block = { modes = { 'n', 'v' }, func = M.copy_last_code_block, desc = 'Copy last code block' },
       copy_last_response = { modes = { 'n', 'v' }, func = M.copy_last_response, desc = 'Copy last response' },
-      complete_code = { modes = { 'n', 'i' }, func = M.complete_code, desc = 'Complete code at cursor' },
+      complete_code = { modes = { 'n', 'v' }, func = M.complete_code, desc = 'Complete code at cursor' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -580,8 +580,10 @@ function M.complete_code()
   local after_text = table.concat(after_lines, '\n')
 
   -- Build the completion prompt with cursor marker
-  local prompt =
-    'Complete the code at the cursor position marked with <CURSOR>. Output ONLY the completion code, no explanations, no markdown formatting.\n\n'
+  local prompt = [[
+    Complete the code at the cursor position marked with <CURSOR>.
+    Output ONLY the completion code, no explanations, no markdown formatting.'
+  ]]
   prompt = prompt .. before_text .. '<CURSOR>'
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 

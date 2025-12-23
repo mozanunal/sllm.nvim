@@ -1,0 +1,614 @@
+*sllm.txt*         Integrate Simon Willison's llm CLI into Neovim
+
+Author:  mozanunal
+License: Apache 2.0
+
+==============================================================================
+INTRODUCTION                                                    *sllm* *sllm.nvim*
+
+sllm.nvim is a Neovim plugin that integrates Simon Willison's `llm` CLI
+directly into your editor. Chat with large language models, stream responses
+in a scratch buffer, manage context files, switch models or tool integrations
+on the fly, and control everything asynchronously without leaving Neovim.
+
+Features:
+  • Interactive chat with streaming responses
+  • Code completion at cursor position
+  • Context management (files, URLs, selections, diagnostics, etc.)
+  • Model and tool selection
+  • On-the-fly Python function tools
+  • Asynchronous, non-blocking requests
+  • Split buffer UI with markdown rendering
+  • Token usage feedback
+  • Code block extraction
+
+For philosophy and comparison with other AI plugins, see PREFACE.md in the
+repository.
+
+==============================================================================
+REQUIREMENTS                                                 *sllm-requirements*
+
+1. The `llm` CLI must be installed:
+   https://github.com/simonw/llm
+
+   Installation: >
+     brew install llm
+     # or
+     pip install llm
+<
+2. At least one `llm` extension:
+   >
+     llm install llm-openai
+     llm install llm-openrouter
+     llm install llm-gpt4all
+<
+3. Configure API keys:
+   >
+     llm keys set openai
+     llm keys set openrouter
+     # or set environment variables like OPENAI_API_KEY
+<
+==============================================================================
+INSTALLATION                                                 *sllm-installation*
+
+Using lazy.nvim: >lua
+  {
+    "mozanunal/sllm.nvim",
+    dependencies = {
+      "echasnovski/mini.notify",  -- optional
+      "echasnovski/mini.pick",    -- optional
+    },
+    config = function()
+      require("sllm").setup({
+        -- your custom options here
+      })
+    end,
+  }
+<
+Using packer.nvim: >lua
+  use({
+    "mozanunal/sllm.nvim",
+    requires = { "echasnovski/mini.notify", "echasnovski/mini.pick" },
+    config = function()
+      require("sllm").setup({
+        -- your custom options here
+      })
+    end,
+  })
+<
+==============================================================================
+CONFIGURATION                                               *sllm-configuration*
+                                                                  *sllm.setup()*
+
+Call `require("sllm").setup()` with an optional configuration table.
+
+Default configuration: >lua
+  require("sllm").setup({
+    llm_cmd = "llm",              -- command or path for the llm CLI
+    default_model = "default",     -- model to use on startup
+    show_usage = true,             -- append usage stats to responses
+    on_start_new_chat = true,      -- start fresh chat on setup
+    reset_ctx_each_prompt = true,  -- clear file context each ask
+    window_type = "vertical",      -- "vertical", "horizontal", or "float"
+    scroll_to_bottom = true,       -- keep cursor at bottom of LLM window
+    pick_func = require("mini.pick").ui_select,
+    notify_func = require("mini.notify").make_notify(),
+    input_func = vim.ui.input,
+    keymaps = { ... },             -- see |sllm-keymaps|
+    system_prompt = [[...]],       -- system prompt prepended to queries
+    pre_hooks = nil,               -- commands to run before LLM execution
+    post_hooks = nil,              -- commands to run after LLM execution
+    model_options = {},            -- model-specific options (e.g., temperature)
+    online_enabled = false,        -- enable online/web mode by default
+  })
+<
+                                                          *sllm-config-options*
+
+`llm_cmd`                 (string, default: "llm")
+    Command or path for the `llm` CLI. If `llm` is not in your PATH, set the
+    full path here.
+
+`default_model`           (string, default: "default")
+    Model to use on startup. If "default", uses the default model set for the
+    `llm` CLI.
+
+`show_usage`              (boolean, default: true)
+    Include token usage summary in responses. If true, you'll see details
+    after each interaction.
+
+`on_start_new_chat`       (boolean, default: true)
+    Begin with a fresh chat buffer on plugin setup.
+
+`reset_ctx_each_prompt`   (boolean, default: true)
+    Automatically clear file context after every prompt.
+
+`window_type`             (string, default: "vertical")
+    Window style: "vertical", "horizontal", or "float".
+
+`scroll_to_bottom`        (boolean, default: true)
+    Whether to keep the cursor at the bottom of the LLM window.
+
+`pick_func`               (function, default: mini.pick.ui_select)
+    UI function for interactive model/tool selection.
+
+`notify_func`             (function, default: mini.notify.make_notify())
+    Notification function.
+
+`input_func`              (function, default: vim.ui.input)
+    Input prompt function.
+
+`keymaps`                 (table|false, default: see |sllm-keymaps|)
+    A table of keybindings. Set any key to `false` or `nil` to disable it.
+    Set the whole `keymaps` option to `false` to disable all defaults.
+
+`system_prompt`           (string|nil)
+    System prompt prepended to all queries via `-s` flag. Can be updated
+    on-the-fly with |sllm.set_system_prompt()|.
+
+`pre_hooks`               (PreHook[]|nil)
+    List of shell commands to run before LLM execution. See |sllm-hooks|.
+
+`post_hooks`              (PostHook[]|nil)
+    List of shell commands to run after LLM execution. See |sllm-hooks|.
+
+`model_options`           (table<string,any>, default: {})
+    Model-specific options (e.g., `{temperature = 0.7}`). These are passed
+    to the `llm` CLI with `-o` flags.
+
+`online_enabled`          (boolean, default: false)
+    Enable online/web mode by default (shows 🌐 in status bar).
+
+==============================================================================
+KEYMAPS                                                          *sllm-keymaps*
+
+Default keybindings (all customizable via `keymaps` option):
+
+  Normal/Visual mode:
+    <leader>ss    |sllm.ask_llm()|              Ask the LLM with a prompt
+    <leader>sn    |sllm.new_chat()|             Start a new chat
+    <leader>sc    |sllm.cancel()|               Cancel current request
+    <leader>sf    |sllm.focus_llm_buffer()|     Focus the LLM output buffer
+    <leader>st    |sllm.toggle_llm_buffer()|    Toggle LLM buffer visibility
+    <leader>sm    |sllm.select_model()|         Select a different LLM model
+    <leader>sW    |sllm.toggle_online()|        Toggle online/web mode
+    <leader>so    |sllm.set_model_option()|     Set a model option
+    <leader>sO    |sllm.show_model_options()|   Show available model options
+    <leader>sa    |sllm.add_file_to_ctx()|      Add current file to context
+    <leader>su    |sllm.add_url_to_ctx()|       Add URL to context
+    <leader>sv    |sllm.add_sel_to_ctx()|       Add visual selection (Visual)
+    <leader>sd    |sllm.add_diag_to_ctx()|      Add diagnostics to context
+    <leader>sx    |sllm.add_cmd_out_to_ctx()|   Add shell command output
+    <leader>sT    |sllm.add_tool_to_ctx()|      Add an installed tool
+    <leader>sF    |sllm.add_func_to_ctx()|      Add Python function as tool
+    <leader>sr    |sllm.reset_context()|        Reset/clear all context
+    <leader>sS    |sllm.set_system_prompt()|    Set/update system prompt
+    <leader>sy    |sllm.copy_last_code_block()| Copy last code block
+    <leader>sY    |sllm.copy_first_code_block()| Copy first code block
+    <leader>sE    |sllm.copy_last_response()|   Copy last LLM response
+    <leader><Tab> |sllm.complete_code()|        Complete code at cursor
+
+                                                       *sllm-keymaps-customize*
+
+To customize keymaps, provide a `keymaps` table in your setup configuration:
+>lua
+  require("sllm").setup({
+    keymaps = {
+      -- Change a default keymap
+      ask_llm = "<leader>a",
+      -- Disable a default keymap
+      add_url_to_ctx = false,
+      -- Other keymaps will use their default values
+    },
+  })
+<
+To disable all default keymaps and define your own:
+>lua
+  require("sllm").setup({
+    keymaps = false,
+  })
+
+  local sllm = require("sllm")
+  vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM" })
+<
+==============================================================================
+COMMANDS                                                        *sllm-commands*
+
+sllm.nvim provides Lua functions rather than Vim commands. All functionality
+is accessed through the module API. See |sllm-functions| for the full list.
+
+==============================================================================
+FUNCTIONS                                                      *sllm-functions*
+
+Core Functions ~
+
+                                                              *sllm.ask_llm()*
+sllm.ask_llm()
+    Prompt the LLM with user input. If in visual mode, automatically adds
+    the selection to context before prompting.
+
+                                                             *sllm.new_chat()*
+sllm.new_chat()
+    Start a new chat session. Clears the buffer and resets conversation
+    state. Cancels any running request.
+
+                                                               *sllm.cancel()*
+sllm.cancel()
+    Cancel the current in-flight LLM request.
+
+                                                       *sllm.complete_code()*
+sllm.complete_code()
+    Complete code at the cursor position. Automatically includes current
+    file context and inserts completion inline.
+
+Buffer Management ~
+
+                                                      *sllm.focus_llm_buffer()*
+sllm.focus_llm_buffer()
+    Focus the LLM output buffer, creating the window if it doesn't exist.
+
+                                                     *sllm.toggle_llm_buffer()*
+sllm.toggle_llm_buffer()
+    Toggle the visibility of the LLM output buffer.
+
+Model & Tool Management ~
+
+                                                         *sllm.select_model()*
+sllm.select_model()
+    Interactively select an LLM model from available models.
+
+                                                       *sllm.add_tool_to_ctx()*
+sllm.add_tool_to_ctx()
+    Add an installed `llm` tool to the current context. Tools are passed to
+    the LLM with `-T <tool>` flag.
+
+                                                       *sllm.toggle_online()*
+sllm.toggle_online()
+    Toggle online/web mode. When enabled, shows 🌐 in the status bar.
+
+                                                    *sllm.set_model_option()*
+sllm.set_model_option()
+    Set a model-specific option (e.g., temperature, max_tokens) at runtime.
+
+                                                   *sllm.show_model_options()*
+sllm.show_model_options()
+    Display available options for the current model in the LLM buffer.
+
+                                                  *sllm.reset_model_options()*
+sllm.reset_model_options()
+    Reset all model options to default.
+
+Context Management ~
+
+                                                      *sllm.add_file_to_ctx()*
+sllm.add_file_to_ctx()
+    Add the current file to the context. The file path is passed to `llm`
+    with `-f <path>` flag.
+
+                                                       *sllm.add_url_to_ctx()*
+sllm.add_url_to_ctx()
+    Prompt for a URL and add it to the context.
+
+                                                       *sllm.add_sel_to_ctx()*
+sllm.add_sel_to_ctx()
+    Add the current visual selection to the context as a code snippet.
+
+                                                      *sllm.add_diag_to_ctx()*
+sllm.add_diag_to_ctx()
+    Add current buffer diagnostics to the context as a snippet.
+
+                                                  *sllm.add_cmd_out_to_ctx()*
+sllm.add_cmd_out_to_ctx()
+    Prompt for a shell command, execute it, and add its output to context.
+
+                                                      *sllm.add_func_to_ctx()*
+sllm.add_func_to_ctx()
+    Add a Python function from the current buffer or visual selection as a
+    tool. The function is passed to `llm` with `--functions` flag.
+
+                                                        *sllm.reset_context()*
+sllm.reset_context()
+    Reset/clear all context (files, snippets, tools, functions).
+
+System Prompt ~
+
+                                                    *sllm.set_system_prompt()*
+sllm.set_system_prompt()
+    Set or update the system prompt on-the-fly. The system prompt is
+    prepended to all queries via the `-s` flag.
+
+Code Extraction ~
+
+                                                 *sllm.copy_first_code_block()*
+sllm.copy_first_code_block()
+    Extract and copy the first code block from the LLM response to the
+    clipboard (both `+` and `"` registers).
+
+                                                  *sllm.copy_last_code_block()*
+sllm.copy_last_code_block()
+    Extract and copy the last code block from the LLM response to the
+    clipboard (both `+` and `"` registers).
+
+                                                   *sllm.copy_last_response()*
+sllm.copy_last_response()
+    Copy the entire last LLM response to the clipboard.
+
+==============================================================================
+HOOKS                                                              *sllm-hooks*
+
+Pre-hooks and post-hooks allow you to run shell commands automatically before
+and after each LLM execution.
+
+Pre-Hooks ~
+                                                                *sllm-pre-hooks*
+
+Pre-hooks run before the LLM is invoked. Each pre-hook can optionally capture
+its output and add it to the context.
+
+Configuration example: >lua
+  require("sllm").setup({
+    pre_hooks = {
+      {
+        command = "git diff --cached",
+        add_to_context = true,  -- Capture output and add to context
+      },
+      {
+        command = "echo 'Starting LLM request...'",
+        add_to_context = false,  -- Just run, don't capture
+      },
+    },
+  })
+<
+PreHook fields:
+  • command (string, required): Shell command to execute. Supports vim
+    command expansion (e.g., `%` expands to current filename).
+  • add_to_context (boolean, optional): If true, captures stdout and stderr
+    and adds them to context as a snippet. Defaults to false.
+
+Notes:
+  • Output is added as a snippet labeled "Pre-hook-> <command>"
+  • Pre-hook snippets are cleared after each prompt if `reset_ctx_each_prompt`
+    is true (the default)
+  • Pre-hooks execute synchronously in the order they are defined
+
+Post-Hooks ~
+                                                               *sllm-post-hooks*
+
+Post-hooks run after the LLM execution completes (both on success and
+failure). Useful for logging, cleanup, or triggering follow-up actions.
+
+Configuration example: >lua
+  require("sllm").setup({
+    post_hooks = {
+      {
+        command = "echo 'LLM request completed' >> /tmp/llm_log.txt",
+      },
+      {
+        command = "notify-send 'SLLM' 'Request completed'",
+      },
+    },
+  })
+<
+PostHook fields:
+  • command (string, required): Shell command to execute. Supports vim
+    command expansion.
+
+Notes:
+  • Post-hooks execute after the response is fully received and displayed
+  • Post-hooks run regardless of success or failure
+  • Output from post-hooks is not captured or displayed
+
+Example use cases:
+  • Automatically include git diff in context
+  • Include current file content
+  • Log all LLM interactions
+  • Notify when long-running requests complete
+
+==============================================================================
+SYSTEM PROMPT                                              *sllm-system-prompt*
+
+The `system_prompt` option allows you to define instructions prepended to all
+LLM queries using the `-s` flag.
+
+Default system prompt: >
+  You are a sllm plugin living within neovim.
+  Always answer with markdown.
+  If the offered change is small, return only the changed part or function,
+  not the entire file.
+<
+Customize in configuration: >lua
+  require("sllm").setup({
+    system_prompt = [[You are an expert code reviewer.
+  Always provide constructive feedback.
+  Format code suggestions using markdown code blocks.]],
+  })
+<
+Update on-the-fly:
+  Press `<leader>sS` (or your custom keybinding) to interactively update the
+  system prompt during a session. Submit an empty string to clear it.
+
+Benefits:
+  • Consistent formatting across all responses
+  • Model-specific tuning
+  • Context-appropriate behavior
+  • Flexibility to update without configuration changes
+
+==============================================================================
+MODEL OPTIONS                                              *sllm-model-options*
+
+Models support specific options that can be passed via the `-o` flag in the
+`llm` CLI. These options control various aspects of model behavior.
+
+Discovering Available Options ~
+
+To see what options are available for your current model:
+  1. Press `<leader>sO` (capital O) to display available options
+  2. Or run `llm models --options -m <model-name>` in your terminal
+
+Setting Model Options ~
+
+Via configuration (persistent): >lua
+  require("sllm").setup({
+    model_options = {
+      temperature = 0.7,     -- Control randomness (0-2)
+      max_tokens = 1000,     -- Limit response length
+    },
+  })
+<
+Via keymap (runtime):
+  1. Press `<leader>so`
+  2. Enter the option key (e.g., "temperature")
+  3. Enter the option value (e.g., "0.7")
+
+Common model options:
+  • temperature (0-2): Controls randomness. Higher = more creative, lower =
+    more focused
+  • max_tokens: Maximum number of tokens to generate
+  • top_p (0-1): Nucleus sampling parameter (alternative to temperature)
+  • frequency_penalty (-2 to 2): Penalize repeated tokens
+  • presence_penalty (-2 to 2): Encourage talking about new topics
+  • seed: Integer seed for deterministic sampling
+  • json_object (boolean): Force JSON output (must mention JSON in prompt)
+  • reasoning_effort (low/medium/high): For reasoning models like o1, o3
+  • image_detail (low/high/auto): For vision models
+
+Note: Not all options are available for all models. Use `<leader>sO` to see
+what's supported by your current model.
+
+==============================================================================
+ONLINE MODE                                                  *sllm-online-mode*
+
+Some models support an `online` option for web search capabilities.
+
+Quick toggle:
+  Press `<leader>sW` to toggle online mode on/off
+
+When enabled, you'll see a 🌐 icon in the status bar next to the model name.
+
+Enable by default: >lua
+  require("sllm").setup({
+    online_enabled = true,
+  })
+<
+Note: The `online` option may not be available for all models. Check your
+model provider's documentation.
+
+==============================================================================
+WORKFLOW                                                        *sllm-workflow*
+
+Typical workflow:
+  1. Open a file and press `<leader>ss` to ask the LLM
+  2. Press `<leader><Tab>` to auto-complete code at cursor
+  3. Add context:
+     - Current file: `<leader>sa`
+     - Visual selection: (Visual mode) `<leader>sv`
+     - Diagnostics: `<leader>sd`
+     - URL content: `<leader>su`
+     - Shell command output: `<leader>sx`
+     - Installed tool: `<leader>sT`
+     - Python function: `<leader>sF`
+  4. Reset context: `<leader>sr`
+  5. Switch models: `<leader>sm`
+  6. Set model options: `<leader>so`
+  7. Check available options: `<leader>sO`
+  8. Cancel request: `<leader>sc`
+  9. Toggle online mode: `<leader>sW`
+  10. Copy code blocks: `<leader>sy`, `<leader>sY`, or `<leader>sE`
+
+==============================================================================
+INTERNALS                                                      *sllm-internals*
+
+Module structure:
+  • sllm.init: Main module with public API
+  • sllm.context_manager: Tracks files, snippets, tools, and functions
+  • sllm.backend.llm: Builds and executes the `llm` CLI command
+  • sllm.job_manager: Spawns Neovim jobs for CLI, streams stdout
+  • sllm.ui: Creates and manages scratch markdown buffer
+  • sllm.utils: Helper functions for buffer/window checks, paths, etc.
+
+Context types:
+  • fragments: File paths passed to `llm` with `-f <path>`
+  • snips: Code snippets embedded in the prompt
+  • tools: Tool names passed with `-T <tool>`
+  • functions: Python functions passed with `--functions <py_function>`
+
+==============================================================================
+LUA API                                                          *sllm-lua-api*
+
+For advanced usage, you can call sllm.nvim functions directly from Lua:
+>lua
+  local sllm = require("sllm")
+
+  -- Setup with custom configuration
+  sllm.setup({
+    default_model = "gpt-4o",
+    window_type = "float",
+  })
+
+  -- Call functions programmatically
+  sllm.ask_llm()
+  sllm.select_model()
+  sllm.add_file_to_ctx()
+  sllm.reset_context()
+<
+All public functions are documented in |sllm-functions|.
+
+==============================================================================
+HEALTH CHECK                                                *sllm-health-check*
+
+To check if sllm.nvim is properly configured, run:
+>vim
+  :checkhealth sllm
+<
+This will verify:
+  • `llm` CLI is installed and accessible
+  • At least one model is available
+  • Dependencies are properly configured
+
+==============================================================================
+TROUBLESHOOTING                                          *sllm-troubleshooting*
+
+"llm command not found" ~
+  Ensure `llm` is installed and in your PATH, or set the full path in
+  `llm_cmd` configuration option.
+
+"No models found" ~
+  Install at least one `llm` extension:
+  >
+    llm install llm-openai
+<
+"Request fails with authentication error" ~
+  Configure your API keys:
+  >
+    llm keys set openai
+    # or set environment variable
+    export OPENAI_API_KEY="your-key-here"
+<
+"Code completion not working" ~
+  Ensure you have a model selected and the `llm` CLI is accessible. Check
+  that the model supports completion (most do).
+
+"Online mode not working" ~
+  Not all models support the `online` option. Check your model provider's
+  documentation.
+
+For more help, visit:
+  https://github.com/mozanunal/sllm.nvim
+
+==============================================================================
+CREDITS                                                          *sllm-credits*
+
+  • Core LLM interaction: Simon Willison's `llm` CLI
+    https://github.com/simonw/llm
+  • UI components: echasnovski/mini.nvim
+    https://github.com/echasnovski/mini.nvim
+  • Plugin created and maintained by mozanunal
+
+==============================================================================
+LICENSE                                                          *sllm-license*
+
+Apache 2.0 — see LICENSE file in the repository.
+
+`llm` and its extensions are copyright Simon Willison.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

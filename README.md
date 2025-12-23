@@ -23,6 +23,8 @@ the [**PREFACE.md**](./PREFACE.md).
 
 - **Interactive Chat** Send prompts to any installed LLM backend, streaming
   replies line by line.
+- **Code Completion** Press `<leader><Tab>` to complete code at cursor position.
+  Automatically includes current file context and inserts completion inline.
 - **Context Management** Add or reset files, URLs, shell command outputs,
   selections, diagnostics, installed LLM tools, or **on-the-fly Python
   functions** in the context so the model can reference your code, web content,
@@ -547,14 +549,15 @@ require("sllm").setup({
 ## Workflow Example
 
 1. Open any file and press `<leader>ss`; type your prompt and hit Enter.
-2. Add the entire file to context: `<leader>sa`.
-3. Add only a visual selection: (Visual mode) `<leader>sv`.
-4. Add diagnostics: `<leader>sd`.
-5. Add the content of a URL: `<leader>su`.
-6. Add a shell command output: `<leader>sx`.
-7. **Add an installed tool to the context:** `<leader>sT`, then pick from the
+2. **Complete code at cursor:** Press `<leader><Tab>` to auto-complete code.
+3. Add the entire file to context: `<leader>sa`.
+4. Add only a visual selection: (Visual mode) `<leader>sv`.
+5. Add diagnostics: `<leader>sd`.
+6. Add the content of a URL: `<leader>su`.
+7. Add a shell command output: `<leader>sx`.
+8. **Add an installed tool to the context:** `<leader>sT`, then pick from the
    list.
-8. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a
+9. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a
    selection, or normal mode for the whole file).
 9. Reset context: `<leader>sr`.
 10. Switch models: `<leader>sm`.

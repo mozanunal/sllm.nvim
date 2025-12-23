@@ -184,7 +184,7 @@ function M.ask_llm()
       return
     end
 
-    Ui.show_llm_buffer(config.window_type, state.selected_model)
+    Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
     if JobMan.is_busy() then
       notify('[sllm] already running, please wait.', vim.log.levels.WARN)
       return
@@ -272,18 +272,18 @@ function M.new_chat()
     notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
   state.continue = false
-  Ui.show_llm_buffer(config.window_type, state.selected_model)
+  Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
   Ui.clean_llm_buffer()
   notify('[sllm] new chat created', vim.log.levels.INFO)
 end
 
 --- Focus the existing LLM window or create it.
 ---@return nil
-function M.focus_llm_buffer() Ui.focus_llm_buffer(config.window_type, state.selected_model) end
+function M.focus_llm_buffer() Ui.focus_llm_buffer(config.window_type, state.selected_model, state.online_enabled) end
 
 --- Toggle visibility of the LLM window.
 ---@return nil
-function M.toggle_llm_buffer() Ui.toggle_llm_buffer(config.window_type, state.selected_model) end
+function M.toggle_llm_buffer() Ui.toggle_llm_buffer(config.window_type, state.selected_model, state.online_enabled) end
 
 --- Prompt user to select an LLM model.
 ---@return nil
@@ -454,7 +454,7 @@ function M.show_model_options()
   local output = vim.fn.systemlist(cmd)
 
   -- Display in a floating window or show in the LLM buffer
-  Ui.show_llm_buffer(config.window_type, state.selected_model)
+  Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
   Ui.append_to_llm_buffer({ '', '> 📋 Available options for ' .. state.selected_model, '' }, config.scroll_to_bottom)
   Ui.append_to_llm_buffer(output, config.scroll_to_bottom)
   Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)

@@ -564,14 +564,7 @@ require("sllm").setup({
 13. Cancel a running request: `<leader>sc`.
 14. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
     indicator).
-15. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
-    indicator).
-16. **Check available model options:** `<leader>sO` (capital O).
-17. **Set model options (e.g., temperature):** `<leader>so`, enter
-    `temperature`, then `0.7`.
-18. Cancel a running request: `<leader>sc`.
-19. Cancel a running request: `<leader>sc`.
-20. **Copy code blocks from response:** Use `<leader>sy` for the last code
+15. **Copy code blocks from response:** Use `<leader>sy` for the last code
     block, `<leader>sY` for the first code block, or `<leader>sE` for the entire
     last response.
 

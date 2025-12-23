@@ -26,3 +26,4 @@ end
 vim.keymap.set("n", "<leader>rr", refresh_sllm, { desc = "Reload local sllm plugin" })
 vim.keymap.set("n", "<leader>rx", source_file, { desc = "Source current file" })
 refresh_sllm()
+vim.notify("nvim.lua loaded!", vim.log.levels.INFO)

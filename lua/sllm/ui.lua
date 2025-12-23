@@ -65,8 +65,9 @@ end
 --- Create and configure a window for the LLM buffer.
 ---@param window_type? string  "float" | "horizontal" | "vertical"  Default: "vertical".
 ---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return integer win_id      Window handle.
-local function create_llm_win(window_type, model_name)
+local function create_llm_win(window_type, model_name, online_enabled)
   window_type = window_type or 'vertical'
   local buf = ensure_llm_buffer()
 
@@ -85,7 +86,7 @@ local function create_llm_win(window_type, model_name)
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  M.update_llm_win_title(model_name, false) -- online status will be updated separately
+  M.update_llm_win_title(model_name, online_enabled)
   return win_id
 end
 
@@ -153,26 +154,28 @@ end
 --- Show the LLM buffer, creating a window if needed.
 ---@param window_type? string  `"float"|"horizontal"|"vertical"`.
 ---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return integer win_id  Window handle where the buffer is shown.
-function M.show_llm_buffer(window_type, model_name)
+function M.show_llm_buffer(window_type, model_name, online_enabled)
   local win = Utils.check_buffer_visible(llm_buf)
   if win then
     return win
   else
-    return create_llm_win(window_type, model_name)
+    return create_llm_win(window_type, model_name, online_enabled)
   end
 end
 
 --- Focus (enter) the LLM window, creating it if necessary.
 ---@param window_type? string  `"float"|"horizontal"|"vertical"`.
 ---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return nil
-function M.focus_llm_buffer(window_type, model_name)
+function M.focus_llm_buffer(window_type, model_name, online_enabled)
   local win = Utils.check_buffer_visible(llm_buf)
   if win then
     vim.api.nvim_set_current_win(win)
   else
-    win = M.show_llm_buffer(window_type, model_name)
+    win = M.show_llm_buffer(window_type, model_name, online_enabled)
     vim.api.nvim_set_current_win(win)
   end
 end
@@ -180,13 +183,14 @@ end
 --- Toggle the LLM window: close if open, open if closed.
 ---@param window_type? string  `"float"|"horizontal"|"vertical"`.
 ---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return nil
-function M.toggle_llm_buffer(window_type, model_name)
+function M.toggle_llm_buffer(window_type, model_name, online_enabled)
   local win = Utils.check_buffer_visible(llm_buf)
   if win then
     vim.api.nvim_win_close(win, false)
   else
-    win = M.show_llm_buffer(window_type, model_name)
+    win = M.show_llm_buffer(window_type, model_name, online_enabled)
     vim.api.nvim_set_current_win(win)
   end
 end

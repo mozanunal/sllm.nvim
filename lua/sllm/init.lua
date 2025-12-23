@@ -93,7 +93,6 @@ If the offered change is small, return only the changed part or function, not th
 }
 
 --- Internal state.
----@type SllmState
 local state = {
   continue = nil,
   selected_model = nil,
@@ -207,7 +206,7 @@ function M.ask_llm()
       ctx.fragments,
       ctx.tools,
       ctx.functions,
-      state.system_prompt
+      state.system_prompt,
       state.model_options
     )
     state.continue = true

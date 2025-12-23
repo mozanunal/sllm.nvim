@@ -165,7 +165,7 @@ If the offered change is small, return only the changed part or function, not th
 | `notify_func`           | function          | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
 | `input_func`            | function          | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
 | `model_options`         | table<string,any> | `{}`                                   | Model-specific options (e.g., `{online = 1}`). These are passed to the `llm` CLI with `-o` flags.                                         |
-| `online_enabled`        | boolean                 | `false`                                | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
+| `online_enabled`        | boolean           | `false`                                | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
 | `system_prompt`         | string/nil        | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
 | `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
@@ -557,13 +557,14 @@ require("sllm").setup({
 12. **Set model options (e.g., temperature):** `<leader>so`, enter
     `temperature`, then `0.7`.
 13. Cancel a running request: `<leader>sc`.
-11. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐 indicator).
-11. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
+14. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
     indicator).
-12. **Check available model options:** `<leader>sO` (capital O).
-13. **Set model options (e.g., temperature):** `<leader>so`, enter
+15. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
+    indicator).
+16. **Check available model options:** `<leader>sO` (capital O).
+17. **Set model options (e.g., temperature):** `<leader>so`, enter
     `temperature`, then `0.7`.
-14. Cancel a running request: `<leader>sc`.
+18. Cancel a running request: `<leader>sc`.
 
 ### Visual Workflow
 

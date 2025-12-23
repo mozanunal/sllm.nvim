@@ -103,7 +103,18 @@ end
 ---@param system_prompt  string?            Pass `-s <prompt>` for system prompt.
 ---@param model_options table<string,any>? Pass `-o <key> <value>` for each model option.
 ---@return string                        The assembled shell command.
-function M.llm_cmd(llm_cmd, user_input, continue, show_usage, model, ctx_files, tools, functions, system_prompt, model_options)
+function M.llm_cmd(
+  llm_cmd,
+  user_input,
+  continue,
+  show_usage,
+  model,
+  ctx_files,
+  tools,
+  functions,
+  system_prompt,
+  model_options
+)
   local cmd = llm_cmd .. ' --td'
   if continue then cmd = cmd .. ' -c' end
   if show_usage then cmd = cmd .. ' -u' end

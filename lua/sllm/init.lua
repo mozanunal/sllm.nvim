@@ -15,6 +15,7 @@
 ---@field add_tool_to_ctx string|false|nil     Keymap for adding a tool.
 ---@field add_func_to_ctx string|false|nil     Keymap for adding a function.
 ---@field reset_context string|false|nil       Keymap for resetting the context.
+---@field set_system_prompt string|false|nil   Keymap for setting the system prompt.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -37,6 +38,7 @@
 ---@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
 ---@field pre_hooks PreHook[]?               Commands to run before llm execution.
 ---@field post_hooks PostHook[]?             Commands to run after llm execution.
+---@field system_prompt string?              System prompt to prepend to all queries.
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -60,6 +62,9 @@ local config = {
   input_func = vim.ui.input,
   pre_hooks = nil,
   post_hooks = nil,
+  system_prompt = [[You are a sllm plugin living within neovim.
+Always answer with markdown.
+If the offered change is small, return only the changed part or function, not the entire file.]],
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -75,6 +80,7 @@ local config = {
     add_tool_to_ctx = '<leader>sT',
     add_func_to_ctx = '<leader>sF',
     reset_context = '<leader>sr',
+    set_system_prompt = '<leader>sS',
   },
 }
 
@@ -83,6 +89,7 @@ local config = {
 local state = {
   continue = nil,
   selected_model = nil,
+  system_prompt = nil,
 }
 
 ---@type fun(msg: string, level?: number)
@@ -118,6 +125,7 @@ function M.setup(user_config)
       reset_context = { modes = { 'n', 'v' }, func = M.reset_context, desc = 'Reset LLM context' },
       add_sel_to_ctx = { modes = 'v', func = M.add_sel_to_ctx, desc = 'Add visual selection to context' },
       add_func_to_ctx = { modes = 'n', func = M.add_func_to_ctx, desc = 'Add selected function to context' },
+      set_system_prompt = { modes = { 'n', 'v' }, func = M.set_system_prompt, desc = 'Set system prompt' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -129,6 +137,7 @@ function M.setup(user_config)
   state.continue = not config.on_start_new_chat
   state.selected_model = config.default_model ~= 'default' and config.default_model
     or Backend.get_default_model(config.llm_cmd)
+  state.system_prompt = config.system_prompt
 
   notify = config.notify_func
   pick = config.pick_func
@@ -179,7 +188,8 @@ function M.ask_llm()
       state.selected_model,
       ctx.fragments,
       ctx.tools,
-      ctx.functions
+      ctx.functions,
+      state.system_prompt
     )
     state.continue = true
 
@@ -384,6 +394,24 @@ end
 function M.reset_context()
   CtxMan.reset()
   notify('[sllm] context reset.', vim.log.levels.INFO)
+end
+
+--- Set the system prompt on-the-fly.
+---@return nil
+function M.set_system_prompt()
+  input({ prompt = 'System Prompt: ', default = state.system_prompt or '' }, function(user_input)
+    if user_input == nil then
+      notify('[sllm] system prompt not changed.', vim.log.levels.INFO)
+      return
+    end
+    if user_input == '' then
+      state.system_prompt = nil
+      notify('[sllm] system prompt cleared.', vim.log.levels.INFO)
+    else
+      state.system_prompt = user_input
+      notify('[sllm] system prompt updated.', vim.log.levels.INFO)
+    end
+  end)
 end
 
 return M

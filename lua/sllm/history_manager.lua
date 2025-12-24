@@ -12,6 +12,11 @@
 
 local M = {}
 
+--- Execute a system command (can be mocked for testing).
+---@param cmd string  Command to execute.
+---@return string     Command output.
+M._system_exec = function(cmd) return vim.fn.system(cmd) end
+
 --- Parse JSON output from llm logs command.
 ---@param json_str string  JSON string from llm logs.
 ---@return table?          Parsed table or nil on error.
@@ -38,7 +43,7 @@ function M.fetch_history(llm_cmd, count, query, model)
 
   if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end
 
-  local output = vim.fn.system(cmd)
+  local output = M._system_exec(cmd)
   local parsed = parse_json(output)
 
   if not parsed then return nil end
@@ -70,7 +75,7 @@ end
 ---@return SllmHistoryEntry[]?      List of conversation entries or nil on error.
 function M.fetch_conversation(llm_cmd, conversation_id)
   local cmd = llm_cmd .. ' logs list --json --cid ' .. vim.fn.shellescape(conversation_id)
-  local output = vim.fn.system(cmd)
+  local output = M._system_exec(cmd)
   local parsed = parse_json(output)
 
   if not parsed then return nil end

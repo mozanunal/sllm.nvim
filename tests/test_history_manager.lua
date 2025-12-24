@@ -4,44 +4,91 @@ local HistMan = require('sllm.history_manager')
 local T = MiniTest.new_set({ name = 'history_manager' })
 
 -- =============================================================================
+-- Test helpers
+-- =============================================================================
+
+--- Mock llm logs output with sample data
+local function create_mock_logs_output(count)
+  local entries = {}
+  for i = 1, count do
+    table.insert(entries, {
+      id = 'test-id-' .. i,
+      conversation_id = 'conv-' .. math.floor((i - 1) / 2) + 1,
+      model = 'gpt-4',
+      prompt = 'Test prompt ' .. i,
+      response = 'Test response ' .. i,
+      system = 'You are a helpful assistant',
+      datetime_utc = '2025-01-01T12:00:' .. string.format('%02d', i) .. '.000000+00:00',
+      response_json = {
+        usage = {
+          prompt_tokens = 10 * i,
+          completion_tokens = 20 * i,
+        },
+      },
+    })
+  end
+  return vim.fn.json_encode(entries)
+end
+
+--- Save original _system_exec and restore after test
+local original_system_exec
+
+local function setup_mock(output)
+  original_system_exec = HistMan._system_exec
+  HistMan._system_exec = function(_) return output end
+end
+
+local function teardown_mock()
+  if original_system_exec then HistMan._system_exec = original_system_exec end
+end
+
+-- =============================================================================
 -- fetch_history tests
 -- =============================================================================
 
 T['fetch_history'] = MiniTest.new_set()
 
 T['fetch_history']['returns table of entries'] = function()
+  setup_mock(create_mock_logs_output(5))
   local entries = HistMan.fetch_history('llm', 5)
+  teardown_mock()
+
   MiniTest.expect.equality(type(entries), 'table')
+  MiniTest.expect.equality(#entries, 5)
 end
 
 T['fetch_history']['handles vim.NIL in response_json'] = function()
   -- This test verifies the fix for vim.NIL userdata values
+  setup_mock(create_mock_logs_output(10))
   local entries = HistMan.fetch_history('llm', 10)
+  teardown_mock()
 
-  if entries and #entries > 0 then
-    for _, entry in ipairs(entries) do
-      -- All required fields should be strings
-      MiniTest.expect.equality(type(entry.id), 'string')
-      MiniTest.expect.equality(type(entry.conversation_id), 'string')
-      MiniTest.expect.equality(type(entry.model), 'string')
-      MiniTest.expect.equality(type(entry.prompt), 'string')
-      MiniTest.expect.equality(type(entry.response), 'string')
-      MiniTest.expect.equality(type(entry.timestamp), 'string')
+  MiniTest.expect.equality(#entries, 10)
+  for _, entry in ipairs(entries) do
+    -- All required fields should be strings
+    MiniTest.expect.equality(type(entry.id), 'string')
+    MiniTest.expect.equality(type(entry.conversation_id), 'string')
+    MiniTest.expect.equality(type(entry.model), 'string')
+    MiniTest.expect.equality(type(entry.prompt), 'string')
+    MiniTest.expect.equality(type(entry.response), 'string')
+    MiniTest.expect.equality(type(entry.timestamp), 'string')
 
-      -- usage can be nil or table, but never userdata
-      if entry.usage ~= nil then MiniTest.expect.equality(type(entry.usage), 'table') end
-    end
+    -- usage can be nil or table, but never userdata
+    if entry.usage ~= nil then MiniTest.expect.equality(type(entry.usage), 'table') end
   end
 end
 
 T['fetch_history']['respects count parameter'] = function()
+  setup_mock(create_mock_logs_output(5))
   local entries_5 = HistMan.fetch_history('llm', 5)
-  local entries_10 = HistMan.fetch_history('llm', 10)
+  teardown_mock()
 
-  if entries_5 and entries_10 then
-    MiniTest.expect.equality(#entries_5 <= 5, true)
-    MiniTest.expect.equality(#entries_10 <= 10, true)
-  end
+  setup_mock(create_mock_logs_output(10))
+  local entries_10 = HistMan.fetch_history('llm', 10)
+  teardown_mock()
+
+  MiniTest.expect.equality(#entries_5, 5)
+  MiniTest.expect.equality(#entries_10, 10)
 end
 
 -- =============================================================================
@@ -51,43 +98,43 @@ end
 T['format_conversation_entry'] = MiniTest.new_set()
 
 T['format_conversation_entry']['returns table of lines'] = function()
+  setup_mock(create_mock_logs_output(1))
   local entries = HistMan.fetch_history('llm', 1)
+  teardown_mock()
 
-  if entries and #entries > 0 then
-    local formatted = HistMan.format_conversation_entry(entries[1])
-    MiniTest.expect.equality(type(formatted), 'table')
-    MiniTest.expect.equality(#formatted > 0, true)
-  end
+  local formatted = HistMan.format_conversation_entry(entries[1])
+  MiniTest.expect.equality(type(formatted), 'table')
+  MiniTest.expect.equality(#formatted > 0, true)
 end
 
 T['format_conversation_entry']['includes timestamp'] = function()
+  setup_mock(create_mock_logs_output(1))
   local entries = HistMan.fetch_history('llm', 1)
+  teardown_mock()
 
-  if entries and #entries > 0 then
-    local formatted = HistMan.format_conversation_entry(entries[1])
-    local has_timestamp = false
+  local formatted = HistMan.format_conversation_entry(entries[1])
+  local has_timestamp = false
 
-    for _, line in ipairs(formatted) do
-      if line:find('#') then
-        has_timestamp = true
-        break
-      end
+  for _, line in ipairs(formatted) do
+    if line:find('#') then
+      has_timestamp = true
+      break
     end
-
-    MiniTest.expect.equality(has_timestamp, true)
   end
+
+  MiniTest.expect.equality(has_timestamp, true)
 end
 
 T['format_conversation_entry']['includes prompt and response sections'] = function()
+  setup_mock(create_mock_logs_output(1))
   local entries = HistMan.fetch_history('llm', 1)
+  teardown_mock()
 
-  if entries and #entries > 0 then
-    local formatted = HistMan.format_conversation_entry(entries[1])
-    local content = table.concat(formatted, '\n')
+  local formatted = HistMan.format_conversation_entry(entries[1])
+  local content = table.concat(formatted, '\n')
 
-    MiniTest.expect.equality(content:find('Prompt') ~= nil, true)
-    MiniTest.expect.equality(content:find('Response') ~= nil, true)
-  end
+  MiniTest.expect.equality(content:find('Prompt') ~= nil, true)
+  MiniTest.expect.equality(content:find('Response') ~= nil, true)
 end
 
 T['format_conversation_entry']['handles entries without usage info'] = function()

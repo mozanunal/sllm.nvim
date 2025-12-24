@@ -14,6 +14,7 @@ on the fly, and control everything asynchronously without leaving Neovim.
 Features:
   • Interactive chat with streaming responses
   • Code completion at cursor position
+  • History navigation (browse and continue up to 1000 conversations)
   • Context management (files, URLs, selections, diagnostics, etc.)
   • Model and tool selection
   • On-the-fly Python function tools
@@ -100,6 +101,7 @@ Default configuration: >lua
     post_hooks = nil,              -- commands to run after LLM execution
     model_options = {},            -- model-specific options (e.g., temperature)
     online_enabled = false,        -- enable online/web mode by default
+    history_max_entries = 1000,    -- max log entries to fetch for history
   })
 <
                                                           *sllm-config-options*
@@ -158,6 +160,11 @@ Default configuration: >lua
 `online_enabled`          (boolean, default: false)
     Enable online/web mode by default (shows 🌐 in status bar).
 
+`history_max_entries`     (integer, default: 1000)
+    Maximum number of history log entries to fetch when browsing
+    conversations. Increase for more history (slower), decrease for faster
+    loading. With 2168 total logs, 1000 provides access to ~380 conversations.
+
 ==============================================================================
 KEYMAPS                                                          *sllm-keymaps*
 
@@ -182,8 +189,7 @@ Default keybindings (all customizable via `keymaps` option):
     <leader>sF    |sllm.add_func_to_ctx()|      Add Python function as tool
     <leader>sr    |sllm.reset_context()|        Reset/clear all context
     <leader>sS    |sllm.set_system_prompt()|    Set/update system prompt
-    <leader>sh    |sllm.browse_history()|       Browse chat history
-    <leader>sl    |sllm.load_conversation()|    Load a conversation
+    <leader>sh    |sllm.browse_history()|       Browse and continue conversations
     <leader>sy    |sllm.copy_last_code_block()| Copy last code block
     <leader>sY    |sllm.copy_first_code_block()| Copy first code block
     <leader>sE    |sllm.copy_last_response()|   Copy last LLM response
@@ -338,38 +344,54 @@ History Navigation ~
 
                                                         *sllm.browse_history()*
 sllm.browse_history()
-    Browse recent chat history from `llm logs`. Displays a list of recent
-    prompts and responses. Select an entry to view it in the LLM buffer.
-    Uses the last 50 history entries.
+    Browse and continue previous conversations from `llm logs`. Displays up
+    to 1000 recent conversations (configurable via `history_max_entries`)
+    with timestamps, models, message counts, and previews. Select a
+    conversation to:
+      • Load all messages into the LLM buffer
+      • Review the complete conversation history
+      • Continue chatting from where you left off
 
-                                                      *sllm.load_conversation()*
-sllm.load_conversation()
-    Load a complete conversation by ID. Displays all conversations grouped
-    by conversation ID, showing the number of messages in each. Select a
-    conversation to view the entire chat history in the LLM buffer.
+    New prompts after loading a conversation will extend that conversation
+    using the same conversation ID.
 
 ==============================================================================
 HISTORY                                                          *sllm-history*
 
-sllm.nvim integrates with the `llm` CLI's logging feature to provide chat
-history navigation. The `llm` CLI automatically logs all prompts and
-responses to a local database.
+sllm.nvim integrates with the `llm` CLI's logging feature to provide
+conversation history browsing and continuation. The `llm` CLI automatically
+logs all prompts and responses to a local database.
 
-Browsing History ~
+Browse and Continue Conversations ~
 
-Press `<leader>sh` (or your custom keybinding) to browse recent chat history:
-  1. A picker will display recent prompts with timestamps and models
-  2. Select an entry to view the full prompt and response
-  3. The entry is displayed in the LLM buffer for reference
+Press `<leader>sh` (or your custom keybinding) to browse and continue
+previous conversations:
+  1. A picker displays up to 1000 recent conversations (configurable)
+  2. Each entry shows timestamp, model, message count, and conversation preview
+  3. Select a conversation to load all messages into the LLM buffer
+  4. Review the complete conversation history
+  5. Press `<leader>ss` to add a new message and continue the conversation
 
-Loading Conversations ~
+Example workflow:
+  • Press `<leader>sh`
+  • Select a conversation from yesterday
+  • Review what was discussed
+  • Press `<leader>ss` and ask a follow-up question
+  • The new message extends the existing conversation
 
-Press `<leader>sl` (or your custom keybinding) to load a complete
-conversation:
-  1. A picker displays conversations grouped by conversation ID
-  2. Each entry shows the timestamp, model, message count, and preview
-  3. Select a conversation to view all messages in sequence
-  4. The full conversation is displayed in the LLM buffer
+Configuring History Limit ~
+
+By default, `browse_history` fetches the most recent 1000 log entries. Adjust
+this in your setup: >lua
+  require("sllm").setup({
+    history_max_entries = 2000,  -- More history (slower)
+    -- or
+    history_max_entries = 500,   -- Less history (faster)
+  })
+<
+Performance Note: Higher values provide access to more conversations but may
+take longer to load. The default of 1000 provides a good balance. With 2168
+total logs, 1000 entries gives access to ~380 conversations.
 
 History Storage ~
 
@@ -567,12 +589,11 @@ Typical workflow:
   4. Reset context: `<leader>sr`
   5. Switch models: `<leader>sm`
   6. Set model options: `<leader>so`
-  7. Check available options: `<leader>sO`
-  8. Cancel request: `<leader>sc`
-  9. Toggle online mode: `<leader>sW`
-  10. Browse history: `<leader>sh`
-  11. Load conversation: `<leader>sl`
-  12. Copy code blocks: `<leader>sy`, `<leader>sY`, or `<leader>sE`
+   7. Check available options: `<leader>sO`
+   8. Cancel request: `<leader>sc`
+   9. Toggle online mode: `<leader>sW`
+   10. Browse and continue conversations: `<leader>sh`
+   11. Copy code blocks: `<leader>sy`, `<leader>sY`, or `<leader>sE`
 
 ==============================================================================
 INTERNALS                                                      *sllm-internals*

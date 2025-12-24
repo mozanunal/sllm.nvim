@@ -35,3 +35,7 @@ gif:
 	@echo "------------------ make_gif  -----------------------"
 	@vhs < ./assets/tapes/main.tape
 	@open -R ./assets/workflow.gif
+
+docs:
+	@echo "------------------ docs  ---------------------------"
+	nvim --headless --noplugin -u scripts/minidoc.lua

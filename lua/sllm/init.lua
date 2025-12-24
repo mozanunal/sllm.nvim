@@ -1,4 +1,62 @@
+--- *sllm.nvim* Integrate Simon Willison's llm CLI into Neovim
+---
+--- MIT License Copyright (c) 2025 mozanunal
+---
 ---@module "sllm"
+---
+---@toc_entry Introduction
+---@text
+--- # Introduction
+---
+--- sllm.nvim is a Neovim plugin that integrates Simon Willison's `llm` CLI
+--- directly into your editor. Chat with large language models, stream responses
+--- in a scratch buffer, manage context files, switch models or tool integrations
+--- on the fly, and control everything asynchronously without leaving Neovim.
+---
+--- Features:
+---   • Interactive chat with streaming responses
+---   • Code completion at cursor position
+---   • History navigation (browse and continue conversations)
+---   • Context management (files, URLs, selections, diagnostics, etc.)
+---   • Model and tool selection
+---   • On-the-fly Python function tools
+---   • Asynchronous, non-blocking requests
+---   • Split buffer UI with markdown rendering
+---   • Token usage feedback
+---   • Code block extraction
+---
+---@toc_entry Requirements
+---@text
+--- # Requirements
+---
+--- 1. The `llm` CLI must be installed:
+---    https://github.com/simonw/llm
+---
+--- 2. At least one `llm` extension (e.g., `llm install llm-openai`)
+---
+--- 3. Configure API keys (e.g., `llm keys set openai`)
+---
+---@toc_entry Installation
+---@text
+--- # Installation
+---
+--- Using lazy.nvim: >lua
+---   {
+---     "mozanunal/sllm.nvim",
+---     dependencies = {
+---       "echasnovski/mini.notify",  -- optional
+---       "echasnovski/mini.pick",    -- optional
+---     },
+---     config = function()
+---       require("sllm").setup({
+---         -- your custom options here
+---       })
+---     end,
+---   }
+--- <
+---
+---@tag sllm.nvim
+---@tag sllm
 
 ---@class SllmKeymaps
 ---@field ask_llm string|false|nil             Keymap for asking the LLM.
@@ -123,10 +181,26 @@ local pick = vim.ui.select
 ---@type fun(opts: table, on_confirm: fun(input: string?))
 local input = vim.ui.input
 
+---@toc_entry Setup
+---@text
+--- # Setup
+---
+--- Call `require("sllm").setup()` with an optional configuration table.
+---
+---@tag sllm.setup()
 --- Setup sllm.nvim with optional overrides.
 ---
 ---@param user_config SllmConfig?  Partial overrides for defaults.
 ---@return nil
+---
+---@usage >lua
+---   require("sllm").setup({
+---     llm_cmd = "llm",
+---     default_model = "default",
+---     window_type = "vertical",
+---     -- See full configuration options in help
+---   })
+--- <
 function M.setup(user_config)
   config = vim.tbl_deep_extend('force', {}, config, user_config or {})
 
@@ -179,7 +253,12 @@ function M.setup(user_config)
   input = config.input_func
 end
 
+---@tag sllm.ask_llm()
 --- Ask the LLM with a prompt from the user.
+---
+--- Prompt the LLM with user input. If in visual mode, automatically adds
+--- the selection to context before prompting.
+---
 ---@return nil
 function M.ask_llm()
   if Utils.is_mode_visual() then M.add_sel_to_ctx() end

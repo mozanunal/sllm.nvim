@@ -182,6 +182,8 @@ Default keybindings (all customizable via `keymaps` option):
     <leader>sF    |sllm.add_func_to_ctx()|      Add Python function as tool
     <leader>sr    |sllm.reset_context()|        Reset/clear all context
     <leader>sS    |sllm.set_system_prompt()|    Set/update system prompt
+    <leader>sh    |sllm.browse_history()|       Browse chat history
+    <leader>sl    |sllm.load_conversation()|    Load a conversation
     <leader>sy    |sllm.copy_last_code_block()| Copy last code block
     <leader>sY    |sllm.copy_first_code_block()| Copy first code block
     <leader>sE    |sllm.copy_last_response()|   Copy last LLM response
@@ -331,6 +333,62 @@ sllm.copy_last_code_block()
                                                    *sllm.copy_last_response()*
 sllm.copy_last_response()
     Copy the entire last LLM response to the clipboard.
+
+History Navigation ~
+
+                                                        *sllm.browse_history()*
+sllm.browse_history()
+    Browse recent chat history from `llm logs`. Displays a list of recent
+    prompts and responses. Select an entry to view it in the LLM buffer.
+    Uses the last 50 history entries.
+
+                                                      *sllm.load_conversation()*
+sllm.load_conversation()
+    Load a complete conversation by ID. Displays all conversations grouped
+    by conversation ID, showing the number of messages in each. Select a
+    conversation to view the entire chat history in the LLM buffer.
+
+==============================================================================
+HISTORY                                                          *sllm-history*
+
+sllm.nvim integrates with the `llm` CLI's logging feature to provide chat
+history navigation. The `llm` CLI automatically logs all prompts and
+responses to a local database.
+
+Browsing History ~
+
+Press `<leader>sh` (or your custom keybinding) to browse recent chat history:
+  1. A picker will display recent prompts with timestamps and models
+  2. Select an entry to view the full prompt and response
+  3. The entry is displayed in the LLM buffer for reference
+
+Loading Conversations ~
+
+Press `<leader>sl` (or your custom keybinding) to load a complete
+conversation:
+  1. A picker displays conversations grouped by conversation ID
+  2. Each entry shows the timestamp, model, message count, and preview
+  3. Select a conversation to view all messages in sequence
+  4. The full conversation is displayed in the LLM buffer
+
+History Storage ~
+
+History is managed by the `llm` CLI and stored in a local SQLite database.
+Location varies by platform:
+  • Linux/macOS: `~/.local/share/llm/logs.db`
+  • Windows: `%APPDATA%\llm\logs.db`
+
+To manage history:
+  • View logs: `llm logs list`
+  • Search logs: `llm logs list -q "search term"`
+  • Filter by model: `llm logs list -m "model-name"`
+  • Turn logging off: `llm logs off`
+  • Turn logging on: `llm logs on`
+  • Check status: `llm logs status`
+  • Get database path: `llm logs path`
+
+For more information about `llm logs`, see:
+  https://llm.datasette.io/en/stable/logging.html
 
 ==============================================================================
 HOOKS                                                              *sllm-hooks*
@@ -512,7 +570,9 @@ Typical workflow:
   7. Check available options: `<leader>sO`
   8. Cancel request: `<leader>sc`
   9. Toggle online mode: `<leader>sW`
-  10. Copy code blocks: `<leader>sy`, `<leader>sY`, or `<leader>sE`
+  10. Browse history: `<leader>sh`
+  11. Load conversation: `<leader>sl`
+  12. Copy code blocks: `<leader>sy`, `<leader>sY`, or `<leader>sE`
 
 ==============================================================================
 INTERNALS                                                      *sllm-internals*
@@ -523,6 +583,7 @@ Module structure:
   • sllm.backend.llm: Builds and executes the `llm` CLI command
   • sllm.job_manager: Spawns Neovim jobs for CLI, streams stdout
   • sllm.ui: Creates and manages scratch markdown buffer
+  • sllm.history_manager: Fetches and formats chat history from llm logs
   • sllm.utils: Helper functions for buffer/window checks, paths, etc.
 
 Context types:

@@ -23,6 +23,7 @@
 ---@field copy_last_code_block string|false|nil   Keymap for copying the last code block.
 ---@field copy_last_response string|false|nil     Keymap for copying the last response.
 ---@field complete_code string|false|nil          Keymap for triggering code completion at cursor.
+---@field browse_history string|false|nil         Keymap for browsing chat history.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -48,6 +49,7 @@
 ---@field system_prompt string?              System prompt to prepend to all queries.
 ---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 ---@field online_enabled boolean?            Enable online/web mode by default.
+---@field history_max_entries integer?       Maximum number of history entries to fetch (default: 1000).
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -55,6 +57,7 @@ local Backend = require('sllm.backend.llm')
 local CtxMan = require('sllm.context_manager')
 local JobMan = require('sllm.job_manager')
 local Ui = require('sllm.ui')
+local HistMan = require('sllm.history_manager')
 
 --- Module configuration (with defaults).
 ---@type SllmConfig
@@ -74,6 +77,7 @@ local config = {
   system_prompt = [[You are a sllm plugin living within neovim.
 Always answer with markdown.
 If the offered change is small, return only the changed part or function, not the entire file.]],
+  history_max_entries = 1000,
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -97,12 +101,13 @@ If the offered change is small, return only the changed part or function, not th
     copy_last_code_block = '<leader>sy',
     copy_last_response = '<leader>sE',
     complete_code = '<leader><Tab>',
+    browse_history = '<leader>sh',
   },
 }
 
 --- Internal state.
 local state = {
-  continue = nil,
+  continue = nil, -- Can be boolean or conversation_id string
   selected_model = nil,
   system_prompt = nil,
   model_options = {},
@@ -150,6 +155,7 @@ function M.setup(user_config)
       copy_last_code_block = { modes = { 'n', 'v' }, func = M.copy_last_code_block, desc = 'Copy last code block' },
       copy_last_response = { modes = { 'n', 'v' }, func = M.copy_last_response, desc = 'Copy last response' },
       complete_code = { modes = { 'n', 'v' }, func = M.complete_code, desc = 'Complete code at cursor' },
+      browse_history = { modes = { 'n', 'v' }, func = M.browse_history, desc = 'Browse chat history' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -647,6 +653,107 @@ function M.complete_code()
     else
       notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
     end
+  end)
+end
+
+--- Browse chat history, load a conversation, and continue from it.
+---@return nil
+function M.browse_history()
+  local max_entries = config.history_max_entries or 1000
+  local entries = HistMan.fetch_history(config.llm_cmd, max_entries)
+
+  if not entries or #entries == 0 then
+    notify('[sllm] no history found.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Group entries by conversation
+  local conversations = {}
+  for _, entry in ipairs(entries) do
+    local conv_id = entry.conversation_id
+    if conv_id and conv_id ~= '' then
+      if not conversations[conv_id] then conversations[conv_id] = {} end
+      table.insert(conversations[conv_id], entry)
+    end
+  end
+
+  -- Build display list
+  local conv_data = {}
+  for conv_id, conv_entries in pairs(conversations) do
+    -- Skip empty conversations or invalid entries
+    if #conv_entries > 0 then
+      -- Sort entries by timestamp within conversation (oldest first)
+      table.sort(conv_entries, function(a, b) return (a.timestamp or '') < (b.timestamp or '') end)
+
+      local first = conv_entries[1]
+      -- Ensure first is a valid table (not vim.NIL or nil)
+      if first and type(first) == 'table' then
+        -- Handle vim.NIL fields by converting to empty string
+        local timestamp_raw = first.timestamp
+        if type(timestamp_raw) ~= 'string' then timestamp_raw = '' end
+        local timestamp = timestamp_raw:gsub('T', ' '):gsub('Z', ''):sub(1, 19)
+
+        local model_raw = first.model
+        if type(model_raw) ~= 'string' then model_raw = 'unknown' end
+        local model = model_raw
+
+        local prompt_raw = first.prompt
+        if type(prompt_raw) ~= 'string' then prompt_raw = '' end
+        local prompt = prompt_raw:gsub('\n', ' '):sub(1, 40)
+        if #prompt_raw > 40 then prompt = prompt .. '...' end
+
+        table.insert(conv_data, {
+          id = conv_id,
+          display = string.format('[%s] %s (%d msgs) | %s', timestamp, model, #conv_entries, prompt),
+          model = model,
+          entries = conv_entries,
+        })
+      end
+    end
+  end
+
+  if #conv_data == 0 then
+    notify('[sllm] no conversations found.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Sort conversations by timestamp (newest first)
+  table.sort(conv_data, function(a, b) return a.display > b.display end)
+
+  local display_list = vim.tbl_map(function(c) return c.display end, conv_data)
+
+  pick(display_list, { prompt = 'Select conversation to continue:' }, function(_, idx)
+    if not idx then
+      notify('[sllm] selection canceled.', vim.log.levels.INFO)
+      return
+    end
+
+    local selected = conv_data[idx]
+    if not selected then return end
+
+    -- Update state to continue this conversation
+    state.selected_model = selected.model
+    state.continue = selected.id -- Store conversation ID for continuation
+
+    -- Display the conversation
+    Ui.show_llm_buffer(config.window_type, selected.model, state.online_enabled)
+    Ui.clean_llm_buffer()
+
+    Ui.append_to_llm_buffer({
+      '# Loaded conversation: ' .. selected.id:sub(1, 10) .. '...',
+      '*(New prompts will continue this conversation)*',
+      '',
+    }, config.scroll_to_bottom)
+
+    for _, entry in ipairs(selected.entries) do
+      local formatted = HistMan.format_conversation_entry(entry)
+      -- Ensure formatted is a table before appending
+      if formatted and type(formatted) == 'table' and #formatted > 0 then
+        Ui.append_to_llm_buffer(formatted, config.scroll_to_bottom)
+      end
+    end
+
+    notify('[sllm] loaded ' .. #selected.entries .. ' messages, ready to continue', vim.log.levels.INFO)
   end)
 end
 

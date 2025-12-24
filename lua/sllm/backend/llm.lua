@@ -94,7 +94,7 @@ end
 ---
 ---@param llm_cmd        string             The base command to run `llm`.
 ---@param user_input     string             The prompt text to send to LLM.
----@param continue       boolean?           Pass `-c` to continue a previous session.
+---@param continue       boolean|string|nil Pass `-c` to continue last session, or conversation ID string for `--cid`.
 ---@param show_usage     boolean?           Pass `-u` to show usage examples.
 ---@param model          string?            Pass `-m <model>` to select a model.
 ---@param ctx_files      string[]?          Pass `-f <file>` for each context file.
@@ -116,7 +116,14 @@ function M.llm_cmd(
   model_options
 )
   local cmd = llm_cmd .. ' --td'
-  if continue then cmd = cmd .. ' -c' end
+
+  -- Handle continuation: string = conversation ID, true = continue last, false/nil = new
+  if type(continue) == 'string' then
+    cmd = cmd .. ' --cid ' .. vim.fn.shellescape(continue)
+  elseif continue then
+    cmd = cmd .. ' -c'
+  end
+
   if show_usage then cmd = cmd .. ' -u' end
   if model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(model) end
 

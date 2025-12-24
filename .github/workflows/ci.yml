@@ -39,9 +39,9 @@ jobs:
       - name: Check formatting (stylua)
         run: make format-check
 
-      # 7. Run the unit tests
-      - name: Run unit tests (MiniTest)
-        run: make unit_tests
+      # 7. Run the unit test
+      - name: Run unit test (MiniTest)
+        run: make test
 
       # 8. (Optional) Print lines of code for stats
       - name: Print lines of code (tokei)

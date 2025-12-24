@@ -25,6 +25,9 @@ the [**PREFACE.md**](./PREFACE.md).
   replies line by line.
 - **Code Completion** Press `<leader><Tab>` to complete code at cursor position.
   Automatically includes current file context and inserts completion inline.
+- **History Navigation** Browse and load previous conversations using
+  `llm logs`. View up to 1000 recent conversation threads (configurable) and
+  continue chatting from any point.
 - **Context Management** Add or reset files, URLs, shell command outputs,
   selections, diagnostics, installed LLM tools, or **on-the-fly Python
   functions** in the context so the model can reference your code, web content,
@@ -144,6 +147,8 @@ require("sllm").setup({
   system_prompt = [[You are a sllm plugin living within neovim.
 Always answer with markdown.
 If the offered change is small, return only the changed part or function, not the entire file.]],
+  -- Maximum number of history entries to fetch (default: 1000)
+  history_max_entries = 1000,
   -- See the "Pre-Hooks and Post-Hooks" section for more details
   pre_hooks = {
     -- Example: automatically include git diff in context
@@ -170,6 +175,7 @@ If the offered change is small, return only the changed part or function, not th
 | `input_func`            | function          | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
 | `model_options`         | table<string,any> | `{}`                                   | Model-specific options (e.g., `{online = 1}`). These are passed to the `llm` CLI with `-o` flags.                                         |
 | `online_enabled`        | boolean           | `false`                                | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
+| `history_max_entries`   | integer           | `1000`                                 | Maximum number of history log entries to fetch when browsing conversations. Increase for more history, decrease for faster loading.       |
 | `system_prompt`         | string/nil        | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
 | `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
 
@@ -199,6 +205,7 @@ changed or disabled in your `setup` configuration (see
 | `<leader>sF` | `add_func_to_ctx`       | n,v  | Add Python function from buffer/selection as a tool |
 | `<leader>sr` | `reset_context`         | n,v  | Reset/clear all context files                       |
 | `<leader>sS` | `set_system_prompt`     | n,v  | Set/update the system prompt on-the-fly             |
+| `<leader>sh` | `browse_history`        | n,v  | Browse and continue previous conversations          |
 | `<leader>sy` | `copy_last_code_block`  | n,v  | Copy last code block from response to clipboard     |
 | `<leader>sY` | `copy_first_code_block` | n,v  | Copy first code block from response to clipboard    |
 | `<leader>sE` | `copy_last_response`    | n,v  | Copy last LLM response to clipboard                 |
@@ -567,13 +574,73 @@ require("sllm").setup({
 14. Cancel a running request: `<leader>sc`.
 15. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
     indicator).
-16. **Copy code blocks from response:** Use `<leader>sy` for the last code
+16. **Browse and continue conversations:** `<leader>sh` to select from up to
+    1000 recent conversations and continue chatting from any point.
+17. **Copy code blocks from response:** Use `<leader>sy` for the last code
     block, `<leader>sY` for the first code block, or `<leader>sE` for the entire
     last response.
 
 ### Visual Workflow
 
 ![sllm.nvim Workflow](./assets/workflow.png)
+
+---
+
+## History Navigation
+
+sllm.nvim integrates with the `llm` CLI's logging feature to provide
+conversation history browsing and continuation. The `llm` CLI automatically logs
+all prompts and responses.
+
+### Browse and Continue Conversations
+
+Press `<leader>sh` to browse and continue previous conversations:
+
+- View up to 1000 recent conversations (configurable via `history_max_entries`)
+- See timestamps, models, message counts, and conversation previews
+- Select a conversation to load all messages into the LLM buffer
+- Continue chatting from where you left off - new prompts extend the selected
+  conversation
+
+**Example:**
+
+1. Press `<leader>sh`
+2. Select a conversation from the picker
+3. Review the full conversation history in the LLM buffer
+4. Press `<leader>ss` to add a new message and continue the conversation
+
+### Configuring History Limit
+
+By default, `browse_history` fetches the most recent 1000 log entries. You can
+adjust this in your setup:
+
+```lua
+require("sllm").setup({
+  history_max_entries = 2000,  -- Fetch more history (slower)
+  -- or
+  history_max_entries = 500,   # Fetch less history (faster)
+})
+```
+
+**Performance Note:** Higher values provide access to more conversations but may
+take longer to load. The default of 1000 provides a good balance between
+performance and coverage.
+
+### History Management
+
+History is managed by the `llm` CLI. Common commands:
+
+```sh
+llm logs list              # View all logs
+llm logs list -n 10        # View last 10 entries
+llm logs list -q "search"  # Search logs
+llm logs list -m "gpt-4o"  # Filter by model
+llm logs status            # Check logging status
+llm logs off               # Disable logging
+llm logs on                # Enable logging
+```
+
+For more information: https://llm.datasette.io/en/stable/logging.html
 
 ---
 
@@ -589,6 +656,8 @@ require("sllm").setup({
   stdout line-by-line.
 - **UI** (`sllm.ui`) Creates and manages a scratch markdown buffer to display
   streaming output.
+- **History Manager** (`sllm.history_manager`) Fetches and formats chat history
+  from `llm logs`.
 - **Utils** (`sllm.utils`) Helper functions for buffer/window checks, path
   utilities, and more.
 

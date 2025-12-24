@@ -39,6 +39,7 @@ end
 ---@param hook_on_exit fun(exit_code: integer) Callback invoked when the job exits.
 ---@return nil
 function M.start(cmd, hook_on_newline, hook_on_exit)
+  stdout_acc = ''
   llm_job_id = vim.fn.jobstart(cmd, {
     stdout_buffer = false,
     pty = true,

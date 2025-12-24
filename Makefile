@@ -1,4 +1,4 @@
-ci: dev_install format-check lint unit_tests print_loc
+ci: dev_install format-check lint test print_loc
 
 dev_install:
 	@echo "------------------ dev_install ---------------------"
@@ -18,7 +18,7 @@ lint:
 	@echo "------------------ lint  ---------------------------"
 	luacheck lua/
 
-unit_tests:
+test:
 	@echo "------------------ unit_tests  ---------------------"
 	nvim --headless -u scripts/minimal_init.lua \
      -c "lua MiniTest.run()" \
@@ -35,3 +35,7 @@ gif:
 	@echo "------------------ make_gif  -----------------------"
 	@vhs < ./assets/tapes/main.tape
 	@open -R ./assets/workflow.gif
+
+docs:
+	@echo "------------------ docs  ---------------------------"
+	nvim --headless --noplugin -u scripts/minidoc.lua

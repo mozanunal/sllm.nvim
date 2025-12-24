@@ -1,0 +1,808 @@
+                                                                     *sllm.nvim*
+                                                                          *sllm*
+*sllm.nvim* Integrate Simon Willison's llm CLI into Neovim
+
+MIT License Copyright (c) 2025 mozanunal
+
+"sllm"
+
+Introduction
+
+# Introduction
+
+sllm.nvim is a Neovim plugin that integrates Simon Willison's `llm` CLI
+directly into your editor. Chat with large language models, stream responses
+in a scratch buffer, manage context files, switch models or tool integrations
+on the fly, and control everything asynchronously without leaving Neovim.
+
+Features:
+  • Interactive chat with streaming responses
+  • Code completion at cursor position
+  • History navigation (browse and continue conversations)
+  • Context management (files, URLs, selections, diagnostics, etc.)
+  • Model and tool selection
+  • On-the-fly Python function tools
+  • Asynchronous, non-blocking requests
+  • Split buffer UI with markdown rendering
+  • Token usage feedback
+  • Code block extraction
+
+Requirements
+
+# Requirements
+
+1. The `llm` CLI must be installed:
+   https://github.com/simonw/llm
+
+2. At least one `llm` extension (e.g., `llm install llm-openai`)
+
+3. Configure API keys (e.g., `llm keys set openai`)
+
+Installation
+
+# Installation
+
+Using lazy.nvim: >lua
+  {
+    "mozanunal/sllm.nvim",
+    dependencies = {
+      "echasnovski/mini.notify",  -- optional
+      "echasnovski/mini.pick",    -- optional
+    },
+    config = function()
+      require("sllm").setup({
+        -- your custom options here
+      })
+    end,
+  }
+<
+
+Class ~
+{SllmKeymaps}
+Fields ~
+{ask_llm} `(string|false|nil)`             Keymap for asking the LLM.
+{new_chat} `(string|false|nil)`            Keymap for starting a new chat.
+{cancel} `(string|false|nil)`              Keymap for canceling a request.
+{focus_llm_buffer} `(string|false|nil)`    Keymap for focusing the LLM window.
+{toggle_llm_buffer} `(string|false|nil)`   Keymap for toggling the LLM window.
+{select_model} `(string|false|nil)`        Keymap for selecting an LLM model.
+{add_file_to_ctx} `(string|false|nil)`     Keymap for adding current file to context.
+{add_url_to_ctx} `(string|false|nil)`      Keymap for adding a URL to context.
+{add_sel_to_ctx} `(string|false|nil)`      Keymap for adding visual selection.
+{add_diag_to_ctx} `(string|false|nil)`     Keymap for adding diagnostics.
+{add_cmd_out_to_ctx} `(string|false|nil)`  Keymap for adding command output.
+{add_tool_to_ctx} `(string|false|nil)`     Keymap for adding a tool.
+{add_func_to_ctx} `(string|false|nil)`     Keymap for adding a function.
+{reset_context} `(string|false|nil)`       Keymap for resetting the context.
+{set_system_prompt} `(string|false|nil)`   Keymap for setting the system prompt.
+{set_model_option} `(string|false|nil)`    Keymap for setting model options.
+{show_model_options} `(string|false|nil)`  Keymap for showing available model options.
+{toggle_online} `(string|false|nil)`       Keymap for toggling online mode.
+{copy_first_code_block} `(string|false|nil)`  Keymap for copying the first code block.
+{copy_last_code_block} `(string|false|nil)`   Keymap for copying the last code block.
+{copy_last_response} `(string|false|nil)`     Keymap for copying the last response.
+{complete_code} `(string|false|nil)`          Keymap for triggering code completion at cursor.
+{browse_history} `(string|false|nil)`         Keymap for browsing chat history.
+
+Class ~
+{PreHook}
+Fields ~
+{command} `(string)`                     Shell command to execute.
+{add_to_context} `(boolean?)`            Whether to capture stdout and add to context (default: false).
+
+Class ~
+{PostHook}
+Fields ~
+{command} `(string)`                     Shell command to execute.
+
+                                                                             *M*
+                                      `M`
+Class ~
+{SllmConfig}
+Fields ~
+{llm_cmd} `(string)`                     Command to run the LLM CLI.
+{default_model} `(string)`               Default model name or `"default"`.
+{show_usage} `(boolean)`                 Show usage examples flag.
+{on_start_new_chat} `(boolean)`          Whether to reset conversation on start.
+{reset_ctx_each_prompt} `(boolean)`      Whether to clear context after each prompt.
+{window_type} "'`(vertical)`'"|"'horizontal'"|"'float'"  How to open the chat window.
+{scroll_to_bottom} `(boolean)`           Whether to keep the cursor at the bottom of the LLM window.
+{pick_func} `(fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer)))`  Selector UI.
+{notify_func} `(fun(msg: string, level?: number))`      Notification function.
+{input_func} `(fun(opts: table, on_confirm: fun(input: string?)))`  Input prompt function.
+{keymaps} `(SllmKeymaps|false|nil)`      Collection of keybindings.
+{pre_hooks} `(PreHook[]?)`               Commands to run before llm execution.
+{post_hooks} `(PostHook[]?)`             Commands to run after llm execution.
+{system_prompt} `(string?)`              System prompt to prepend to all queries.
+{model_options} `(table<string,any>?)`   Model-specific options to pass with -o flag.
+{online_enabled} `(boolean?)`            Enable online/web mode by default.
+{history_max_entries} `(integer?)`       Maximum number of history entries to fetch (default: 1000).
+
+                                                                        *config*
+                                    `config`
+Module configuration (with defaults).
+Type ~
+`(SllmConfig)`
+
+                                                                         *state*
+                                    `state`
+Internal state.
+
+                                                                        *notify*
+                                    `notify`
+Type ~
+`(fun(msg: string, level?: number))`
+
+                                                                          *pick*
+                                     `pick`
+Type ~
+`(fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer)))`
+
+                                                                         *input*
+                                    `input`
+Type ~
+`(fun(opts: table, on_confirm: fun(input: string?)))`
+
+                                                                  *sllm.setup()*
+                                      *Setup* *sllm.nvim* *with* *optional* *overrides.*
+
+                            `M.setup`({user_config})
+Setup
+
+# Setup
+
+Call `require("sllm").setup()` with an optional configuration table.
+
+Parameters ~
+{user_config} `(SllmConfig?)`  Partial overrides for defaults.
+Return ~
+`(nil)`
+
+Usage ~
+>lua
+  require("sllm").setup({
+    llm_cmd = "llm",
+    default_model = "default",
+    window_type = "vertical",
+    -- See full configuration options in help
+  })
+<
+                                                                *sllm.ask_llm()*
+                                      *Ask* *the* *LLM* *with* *a* *prompt* *from* *the* *user.*
+
+         *Prompt* *the* *LLM* *with* *user* *input.* *If* *in* *visual* *mode,* *automatically* *adds*
+                                    *the* *selection* *to* *context* *before* *prompting.*
+
+                                 `M.ask_llm`()
+Return ~
+`(nil)`
+
+                                                                    *M.cancel()*
+                                  `M.cancel`()
+Cancel the in-flight LLM request, if any.
+Return ~
+`(nil)`
+
+                                                                  *M.new_chat()*
+                                 `M.new_chat`()
+Start a new chat (clears buffer and state).
+Return ~
+`(nil)`
+
+                                                          *M.focus_llm_buffer()*
+                             `M.focus_llm_buffer`()
+Focus the existing LLM window or create it.
+Return ~
+`(nil)`
+
+                                                         *M.toggle_llm_buffer()*
+                            `M.toggle_llm_buffer`()
+Toggle visibility of the LLM window.
+Return ~
+`(nil)`
+
+                                                              *M.select_model()*
+                               `M.select_model`()
+Prompt user to select an LLM model.
+Return ~
+`(nil)`
+
+                                                           *M.add_tool_to_ctx()*
+                             `M.add_tool_to_ctx`()
+Add a tool to the current context.
+Return ~
+`(nil)`
+
+                                                           *M.add_file_to_ctx()*
+                             `M.add_file_to_ctx`()
+Add the current file (or URL) path to the context.
+Return ~
+`(nil)`
+
+                                                            *M.add_url_to_ctx()*
+                              `M.add_url_to_ctx`()
+Prompt user for a URL and add it to context.
+Return ~
+`(nil)`
+
+                                                           *M.add_func_to_ctx()*
+                             `M.add_func_to_ctx`()
+Add the current function or entire buffer to context.
+Return ~
+`(nil)`
+
+                                                            *M.add_sel_to_ctx()*
+                              `M.add_sel_to_ctx`()
+Add the current visual selection as a code snippet.
+Return ~
+`(nil)`
+
+                                                           *M.add_diag_to_ctx()*
+                             `M.add_diag_to_ctx`()
+Add current buffer diagnostics to context as a snippet.
+Return ~
+`(nil)`
+
+                                                        *M.add_cmd_out_to_ctx()*
+                            `M.add_cmd_out_to_ctx`()
+Prompt for a shell command, run it, and add its output to context.
+Return ~
+`(nil)`
+
+                                                             *M.reset_context()*
+                              `M.reset_context`()
+Reset the LLM context (fragments, snippets, tools, functions).
+Return ~
+`(nil)`
+
+                                                         *M.set_system_prompt()*
+                            `M.set_system_prompt`()
+Set the system prompt on-the-fly.
+Return ~
+`(nil)`
+
+                                                        *M.show_model_options()*
+                            `M.show_model_options`()
+Show available options for the current model.
+Return ~
+`(nil)`
+
+                                                          *M.set_model_option()*
+                             `M.set_model_option`()
+Set or update a model option.
+Return ~
+`(nil)`
+
+                                                       *M.reset_model_options()*
+                           `M.reset_model_options`()
+Reset all model options.
+Return ~
+`(nil)`
+
+                                                             *M.toggle_online()*
+                              `M.toggle_online`()
+Toggle the online feature (adds/removes online=1 option).
+Return ~
+`(nil)`
+
+                                                         *M.is_online_enabled()*
+                            `M.is_online_enabled`()
+Get online status for UI display.
+Return ~
+`(boolean)`
+
+                                                     *M.copy_first_code_block()*
+                          `M.copy_first_code_block`()
+Copy the first code block from the LLM buffer to the clipboard.
+Return ~
+`(nil)`
+
+                                                      *M.copy_last_code_block()*
+                           `M.copy_last_code_block`()
+Copy the last code block from the LLM buffer to the clipboard.
+Return ~
+`(nil)`
+
+                                                        *M.copy_last_response()*
+                            `M.copy_last_response`()
+Copy the last response from the LLM buffer to the clipboard.
+Return ~
+`(nil)`
+
+                                                             *M.complete_code()*
+                              `M.complete_code`()
+Complete code at cursor position.
+Return ~
+`(nil)`
+
+                                                            *M.browse_history()*
+                              `M.browse_history`()
+Browse chat history, load a conversation, and continue from it.
+Return ~
+`(nil)`
+
+
+                                                                             *M*
+                                      `M`
+"sllm.backend.llm"
+
+                                                            *M.extract_models()*
+                         `M.extract_models`({llm_cmd})
+`llm models` and parse out just the model names.
+Parameters ~
+{llm_cmd} `(string)` Command to run the LLM CLI.
+Return ~
+`(string[])`  List of available model names.
+
+                                                         *M.get_default_model()*
+                        `M.get_default_model`({llm_cmd})
+`llm models default` and return the default model name.
+Parameters ~
+{llm_cmd} `(string)` Command to run the LLM CLI.
+Return ~
+`(string)` List of available model names.
+
+                                                             *M.extract_tools()*
+                          `M.extract_tools`({llm_cmd})
+`llm tools list --json` and extract tool names.
+Parameters ~
+{llm_cmd} `(string)` Command to run the LLM CLI.
+Return ~
+`(string[])`  List of tool names.
+
+                                                               *is_attachment()*
+                          `is_attachment`({filename})
+if a file should be treated as an attachment (image, PDF, etc.)
+Parameters ~
+{filename} `(string)` File path to check.
+Return ~
+`(boolean)` True if the file should use `-a`, false if it should use `-f`.
+
+                                                                   *M.llm_cmd()*
+`M.llm_cmd`({llm_cmd}, {user_input}, {continue}, {show_usage}, {model}, {ctx_files}, {tools}, {functions}, {system_prompt}, {model_options})
+the full `llm` command with provided options.
+
+Parameters ~
+{llm_cmd}        `(string)`             The base command to run `llm`.
+{user_input}     `(string)`             The prompt text to send to LLM.
+{continue}       `(boolean|string|nil)` Pass `-c` to continue last session, or conversation ID string for `--cid`.
+{show_usage}     `(boolean?)`           Pass `-u` to show usage examples.
+{model}          `(string?)`            Pass `-m <model>` to select a model.
+{ctx_files}      `(string[]?)`          Pass `-f <file>` for each context file.
+{tools}          `(string[]?)`          Pass `-T <tool>` for each tool.
+{functions}      `(string[]?)`          Pass `--functions <func>` for each function signature.
+{system_prompt}  `(string?)`            Pass `-s <prompt>` for system prompt.
+{model_options} `(table<string,any>?)` Pass `-o <key> <value>` for each model option.
+Return ~
+`(string)`                        The assembled shell command.
+
+
+"sllm.context_manager"
+
+Class ~
+{SllmSnippet}
+Fields ~
+{filepath} `(string)`   Path of the source file.
+{filetype} `(string)`   Filetype/language of the snippet.
+{text} `(string)`       The snippet text (trimmed).
+
+Class ~
+{SllmContext}
+{fragments} `(string[])`               List of file paths (“fragments”).
+{snips} `(SllmSnippet[])`             List of code snippets.
+{tools} `(string[])`                   List of tool names.
+{functions} `(string[])`               List of function definitions or signatures.
+
+                                                                       *context*
+                                   `context`
+Type ~
+`(SllmContext)`
+
+                                                                       *M.get()*
+                                   `M.get`()
+the current context (fragments, snippets, tools, functions).
+Return ~
+`(SllmContext)`  The context table.
+
+                                                                     *M.reset()*
+                                  `M.reset`()
+the context to empty lists.
+Return ~
+`(nil)`
+
+                                                              *M.add_fragment()*
+                          `M.add_fragment`({filepath})
+a file path to the fragments list, if not already present.
+Parameters ~
+{filepath} `(string)`  Path to a fragment file.
+Return ~
+`(nil)`
+
+                                                                  *M.add_snip()*
+                  `M.add_snip`({text}, {filepath}, {filetype})
+a snippet entry to the context.
+Parameters ~
+{text} `(string)`       Snippet text (will be trimmed).
+{filepath} `(string)`   Source file path for the snippet.
+{filetype} `(string)`   Filetype/language of the snippet.
+Return ~
+`(nil)`
+
+                                                                  *M.add_tool()*
+                           `M.add_tool`({tool_name})
+a tool name to the tools list, if not already present.
+Parameters ~
+{tool_name} `(string)`  Name of the tool.
+Return ~
+`(nil)`
+
+                                                              *M.add_function()*
+                          `M.add_function`({func_str})
+a function representation to the functions list, if not already present.
+Parameters ~
+{func_str} `(string)`   Function source or signature as a string.
+Return ~
+`(nil)`
+
+                                                             *render_template()*
+                     `render_template`({template}, {vars})
+a template by replacing `${key}` with `vars[key]`.
+Parameters ~
+{template} `(string)`                Template containing `${...}` placeholders.
+{vars} `(table<string, any>)`        Mapping of placeholder names to values.
+Return ~
+`(string)`                        Rendered string.
+
+                                                          *M.render_prompt_ui()*
+                       `M.render_prompt_ui`({user_input})
+the full prompt UI, including file list and code snippets.
+Parameters ~
+{user_input} `(string?)`  Optional user input (empty string if `nil`).
+Return ~
+`(string)`             Trimmed prompt text to send to the LLM.
+
+
+"sllm.history_manager"
+
+Class ~
+{SllmHistoryEntry}
+Fields ~
+{id} `(string)`                    Unique log ID
+{conversation_id} `(string)`       Conversation ID
+{model} `(string)`                 Model name used
+{prompt} `(string)`                User's prompt
+{response} `(string)`              LLM's response
+{system} `(string?)`               System prompt used
+{timestamp} `(string)`             ISO timestamp
+{usage} `(table?)`                 Token usage information
+
+                                                              *M._system_exec()*
+                            `M._system_exec`({cmd})
+Execute a system command (can be mocked for testing).
+Parameters ~
+{cmd} `(string)`  Command to execute.
+Return ~
+`(string)`     Command output.
+
+                                                                  *parse_json()*
+                            `parse_json`({json_str})
+Parse JSON output from llm logs command.
+Parameters ~
+{json_str} `(string)`  JSON string from llm logs.
+Return ~
+`(table)` `(optional)`          Parsed table or nil on error.
+
+                                                             *M.fetch_history()*
+            `M.fetch_history`({llm_cmd}, {count}, {query}, {model})
+Fetch history entries from llm logs.
+Parameters ~
+{llm_cmd} `(string)`         Command for the llm CLI.
+{count} `(integer?)`         Number of entries to fetch (default: 20).
+{query} `(string?)`          Search query to filter logs.
+{model} `(string?)`          Filter by model name.
+Return ~
+`(SllmHistoryEntry[])` `(optional)`  List of history entries or nil on error.
+
+                                                        *M.fetch_conversation()*
+              `M.fetch_conversation`({llm_cmd}, {conversation_id})
+Fetch all logs for a specific conversation ID.
+Parameters ~
+{llm_cmd} `(string)`             Command for the llm CLI.
+{conversation_id} `(string)`     Conversation ID to fetch.
+Return ~
+`(SllmHistoryEntry[])` `(optional)`      List of conversation entries or nil on error.
+
+                                                   *M.format_entry_for_picker()*
+                      `M.format_entry_for_picker`({entry})
+Format a history entry for display in a picker.
+Parameters ~
+{entry} `(SllmHistoryEntry)`  History entry to format.
+Return ~
+`(string)`                 Formatted display string.
+
+                                                 *M.format_conversation_entry()*
+                     `M.format_conversation_entry`({entry})
+Format a conversation entry for display.
+Parameters ~
+{entry} `(SllmHistoryEntry)`  History entry to format.
+Return ~
+`(string[])`               Lines to display in buffer.
+
+                                                         *M.get_conversations()*
+                        `M.get_conversations`({entries})
+Get unique conversation IDs from history entries.
+Parameters ~
+{entries} `(SllmHistoryEntry[])`  List of history entries.
+Return ~
+`(table<string, integer>)`    Map of conversation_id to count.
+
+
+                                                                             *M*
+                                      `M`
+"sllm.job_manager"
+
+                                                            *strip_ansi_codes()*
+                           `strip_ansi_codes`({text})
+Remove ANSI escape codes from a string.
+Parameters ~
+{text} `(string)` The input string possibly containing ANSI escape codes.
+Return ~
+`(string)` The string with ANSI escape codes removed.
+
+                                                                   *M.is_busy()*
+                                 `M.is_busy`()
+Check if a job is currently running.
+Return ~
+`(boolean)` `true` if a job is active, `false` otherwise.
+
+                                                   *M.exec_cmd_capture_output()*
+                     `M.exec_cmd_capture_output`({cmd_raw})
+a command synchronously and capture its output.
+Parameters ~
+{cmd_raw} `(string)` Command to execute (supports vim cmd expansion)
+Return ~
+`(string)` Combined stdout/stderr output, labeled if both present
+
+                                                                     *M.start()*
+              `M.start`({cmd}, {hook_on_newline}, {hook_on_exit})
+Start a new job and stream its output line by line.
+
+Splits on `'\r'` in the stdout buffer, strips ANSI codes, and calls
+`hook_on_newline` for each line. Once the job exits, it flushes any
+leftover, clears state, and calls `hook_on_exit`.
+
+Parameters ~
+{cmd} `(string|string[])`                 Command or command-plus-args for `vim.fn.jobstart`.
+{hook_on_newline} `(fun(line: string))`   Callback invoked on each decoded line.
+{hook_on_exit} `(fun(exit_code: integer))` Callback invoked when the job exits.
+Return ~
+`(nil)`
+
+                                                                      *M.stop()*
+                                   `M.stop`()
+Stop the currently running job, if any, and reset state.
+Return ~
+`(nil)`
+
+
+                                                                             *M*
+                                      `M`
+"sllm.ui"
+
+                                                                       *llm_buf*
+                                   `llm_buf`
+Type ~
+`(integer?)`  -- Buffer handle for LLM content
+
+                                                               *animation_timer*
+                               `animation_timer`
+Type ~
+`(uv_timer_t?)`  -- Animation timer (from `vim.loop.new_timer()`)
+
+                                                              *animation_frames*
+                               `animation_frames`
+Type ~
+`(string[])`  -- Braille spinner frames
+
+                                                   *current_animation_frame_idx*
+                         `current_animation_frame_idx`
+Type ~
+`(integer)`  -- Current index into `animation_frames`
+
+                                                             *is_loading_active*
+                              `is_loading_active`
+Type ~
+`(boolean)`  -- Whether loading animation is active
+
+                                                          *original_winbar_text*
+                             `original_winbar_text`
+Type ~
+`(string)`  -- Winbar text to restore after animation
+
+                                                           *ensure_llm_buffer()*
+                             `ensure_llm_buffer`()
+Ensure the LLM buffer exists (hidden, markdown) and return its handle.
+Return ~
+`(integer)` bufnr  Always‐valid buffer handle.
+
+                                                   *create_llm_float_win_opts()*
+                         `create_llm_float_win_opts`()
+Compute centered floating‐window options for the LLM buffer.
+Return ~
+`(table<string, number|string>)`  Options suitable for `nvim_open_win`.
+
+                                                               *update_winbar()*
+                            `update_winbar`({text})
+Update the winbar of the LLM window if it is visible.
+Parameters ~
+{text} `(string)`  New winbar text.
+
+                                                              *create_llm_win()*
+        `create_llm_win`({window_type}, {model_name}, {online_enabled})
+Create and configure a window for the LLM buffer.
+Parameters ~
+{window_type} `(optional)` `(string)`  "float" | "horizontal" | "vertical"  Default: "vertical".
+{model_name} `(optional)`  `(string)`  Model name for the title.
+{online_enabled} `(optional)` `(boolean)`  Whether online mode is enabled.
+Return ~
+`(integer)` win_id      Window handle.
+
+                                                   *M.start_loading_indicator()*
+                         `M.start_loading_indicator`()
+Start the Braille spinner in the LLM window's winbar.
+Return ~
+`(nil)`
+
+                                                    *M.stop_loading_indicator()*
+                          `M.stop_loading_indicator`()
+Stop the loading spinner and restore the original winbar text.
+Return ~
+`(nil)`
+
+                                                          *M.clean_llm_buffer()*
+                             `M.clean_llm_buffer`()
+Clear the LLM buffer and stop any active loading animation.
+Return ~
+`(nil)`
+
+                                                           *M.show_llm_buffer()*
+       `M.show_llm_buffer`({window_type}, {model_name}, {online_enabled})
+Show the LLM buffer, creating a window if needed.
+Parameters ~
+{window_type} `(optional)` `(string)`  `"float"|"horizontal"|"vertical"`.
+{model_name} `(optional)`  `(string)`  Model name for the title.
+{online_enabled} `(optional)` `(boolean)`  Whether online mode is enabled.
+Return ~
+`(integer)` win_id  Window handle where the buffer is shown.
+
+                                                          *M.focus_llm_buffer()*
+      `M.focus_llm_buffer`({window_type}, {model_name}, {online_enabled})
+Focus (enter) the LLM window, creating it if necessary.
+Parameters ~
+{window_type} `(optional)` `(string)`  `"float"|"horizontal"|"vertical"`.
+{model_name} `(optional)`  `(string)`  Model name for the title.
+{online_enabled} `(optional)` `(boolean)`  Whether online mode is enabled.
+Return ~
+`(nil)`
+
+                                                         *M.toggle_llm_buffer()*
+      `M.toggle_llm_buffer`({window_type}, {model_name}, {online_enabled})
+Toggle the LLM window: close if open, open if closed.
+Parameters ~
+{window_type} `(optional)` `(string)`  `"float"|"horizontal"|"vertical"`.
+{model_name} `(optional)`  `(string)`  Model name for the title.
+{online_enabled} `(optional)` `(boolean)`  Whether online mode is enabled.
+Return ~
+`(nil)`
+
+                                                      *M.append_to_llm_buffer()*
+             `M.append_to_llm_buffer`({lines}, {scroll_to_bottom})
+Append lines to the end of the LLM buffer and scroll to bottom.
+Parameters ~
+{lines} `(string[])`  Lines to append.
+{scroll_to_bottom} `(boolean)`  Whether or not to scroll to the bottom of the buffer
+Return ~
+`(nil)`
+
+                                                      *M.update_llm_win_title()*
+            `M.update_llm_win_title`({model_name}, {online_enabled})
+Update the LLM window's title (winbar) with the given model name.
+Parameters ~
+{model_name} `(optional)` `(string)`  Name of the model, or `nil` for default.
+{online_enabled} `(optional)` `(boolean)`  Whether online mode is enabled.
+Return ~
+`(nil)`
+
+                                                     *M.copy_first_code_block()*
+                          `M.copy_first_code_block`()
+Copy the first code block from the LLM buffer to the clipboard.
+Return ~
+`(boolean)`  `true` if a code block was found and copied; `false` otherwise.
+
+                                                      *M.copy_last_code_block()*
+                           `M.copy_last_code_block`()
+Copy the last code block from the LLM buffer to the clipboard.
+Return ~
+`(boolean)`  `true` if a code block was found and copied; `false` otherwise.
+
+                                                        *M.copy_last_response()*
+                            `M.copy_last_response`()
+Copy the last response from the LLM buffer to the clipboard.
+Extracts content from the last "🤖 Response" marker to the end.
+Return ~
+`(boolean)`  `true` if content was copied; `false` if no response found.
+
+
+                                                                             *M*
+                                      `M`
+"sllm.utils"
+
+                                                               *M.print_table()*
+                              `M.print_table`({t})
+Print all elements of `t`, each on its own line separated by "===".
+Parameters ~
+{t} `(string[])` List of strings to print.
+
+                                                              *M.buf_is_valid()*
+                            `M.buf_is_valid`({buf})
+Check if a buffer handle is valid.
+Parameters ~
+{buf} `(integer?)` Buffer handle (or `nil`).
+Return ~
+`(boolean)`
+
+                                                            *M.is_mode_visual()*
+                              `M.is_mode_visual`()
+Return `true` if the current mode is any Visual mode (`v`, `V`, or Ctrl+V).
+Return ~
+`(boolean)`
+
+                                                      *M.get_visual_selection()*
+                           `M.get_visual_selection`()
+Get text of the current visual selection.
+Return ~
+`(string)`  The selected text (lines joined with "\n").
+
+                                                        *M.get_path_of_buffer()*
+                         `M.get_path_of_buffer`({buf})
+Get the filesystem path of a buffer, or `nil` if it has none.
+Parameters ~
+{buf} `(integer)` Buffer handle.
+Return ~
+`(string)` `(optional)`  File path or `nil` if the buffer is unnamed.
+
+                                                               *M.get_relpath()*
+                           `M.get_relpath`({abspath})
+Convert an absolute path to one relative to the cwd.
+Parameters ~
+{abspath} `(string?)`  Absolute path (or `nil`).
+Return ~
+`(string)` `(optional)`  Relative path if possible; otherwise original or `nil`.
+
+                                                      *M.check_buffer_visible()*
+                        `M.check_buffer_visible`({buf})
+Return the window ID showing buffer `buf`, or `nil` if not visible.
+Parameters ~
+{buf} `(integer)` Buffer handle.
+Return ~
+`(integer)` `(optional)`  Window ID or `nil`.
+
+                                                                    *M.render()*
+                           `M.render`({tmpl}, {env})
+Simple template renderer: replaces `${key}` with `env[key]`.
+Parameters ~
+{tmpl} `(string)`             Template containing `${var}` placeholders.
+{env} `(table<string,string>)`  Lookup table for replacements.
+Return ~
+`(string)`  Rendered string.
+
+                                                       *M.extract_code_blocks()*
+                        `M.extract_code_blocks`({lines})
+Extract all code blocks from buffer lines.
+Parameters ~
+{lines} `(string[])`  Buffer lines to parse.
+Return ~
+`(string[])`  List of code block contents (without fence markers).
+
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

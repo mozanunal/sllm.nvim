@@ -7,11 +7,8 @@ function M.print_table(t) print(table.concat(t, '\n===')) end
 
 --- Check if a buffer handle is valid.
 ---@param buf integer? Buffer handle (or `nil`).
----@return boolean?
---   `true` if `buf` is non-`nil` and valid;
---   `false` if `buf` is non-`nil` but invalid;
---   `nil` if `buf == nil`.
-function M.buf_is_valid(buf) return buf and vim.api.nvim_buf_is_valid(buf) end
+---@return boolean
+function M.buf_is_valid(buf) return buf ~= nil and vim.api.nvim_buf_is_valid(buf) end
 
 --- Return `true` if the current mode is any Visual mode (`v`, `V`, or Ctrl+V).
 ---@return boolean

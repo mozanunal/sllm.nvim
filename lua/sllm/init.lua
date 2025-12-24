@@ -1,4 +1,62 @@
+--- *sllm.nvim* Integrate Simon Willison's llm CLI into Neovim
+---
+--- MIT License Copyright (c) 2025 mozanunal
+---
 ---@module "sllm"
+---
+---@toc_entry Introduction
+---@text
+--- # Introduction
+---
+--- sllm.nvim is a Neovim plugin that integrates Simon Willison's `llm` CLI
+--- directly into your editor. Chat with large language models, stream responses
+--- in a scratch buffer, manage context files, switch models or tool integrations
+--- on the fly, and control everything asynchronously without leaving Neovim.
+---
+--- Features:
+---   • Interactive chat with streaming responses
+---   • Code completion at cursor position
+---   • History navigation (browse and continue conversations)
+---   • Context management (files, URLs, selections, diagnostics, etc.)
+---   • Model and tool selection
+---   • On-the-fly Python function tools
+---   • Asynchronous, non-blocking requests
+---   • Split buffer UI with markdown rendering
+---   • Token usage feedback
+---   • Code block extraction
+---
+---@toc_entry Requirements
+---@text
+--- # Requirements
+---
+--- 1. The `llm` CLI must be installed:
+---    https://github.com/simonw/llm
+---
+--- 2. At least one `llm` extension (e.g., `llm install llm-openai`)
+---
+--- 3. Configure API keys (e.g., `llm keys set openai`)
+---
+---@toc_entry Installation
+---@text
+--- # Installation
+---
+--- Using lazy.nvim: >lua
+---   {
+---     "mozanunal/sllm.nvim",
+---     dependencies = {
+---       "echasnovski/mini.notify",  -- optional
+---       "echasnovski/mini.pick",    -- optional
+---     },
+---     config = function()
+---       require("sllm").setup({
+---         -- your custom options here
+---       })
+---     end,
+---   }
+--- <
+---
+---@tag sllm.nvim
+---@tag sllm
 
 ---@class SllmKeymaps
 ---@field ask_llm string|false|nil             Keymap for asking the LLM.
@@ -22,6 +80,8 @@
 ---@field copy_first_code_block string|false|nil  Keymap for copying the first code block.
 ---@field copy_last_code_block string|false|nil   Keymap for copying the last code block.
 ---@field copy_last_response string|false|nil     Keymap for copying the last response.
+---@field complete_code string|false|nil          Keymap for triggering code completion at cursor.
+---@field browse_history string|false|nil         Keymap for browsing chat history.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -47,6 +107,7 @@
 ---@field system_prompt string?              System prompt to prepend to all queries.
 ---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 ---@field online_enabled boolean?            Enable online/web mode by default.
+---@field history_max_entries integer?       Maximum number of history entries to fetch (default: 1000).
 local M = {}
 
 local Utils = require('sllm.utils')
@@ -54,6 +115,7 @@ local Backend = require('sllm.backend.llm')
 local CtxMan = require('sllm.context_manager')
 local JobMan = require('sllm.job_manager')
 local Ui = require('sllm.ui')
+local HistMan = require('sllm.history_manager')
 
 --- Module configuration (with defaults).
 ---@type SllmConfig
@@ -73,6 +135,7 @@ local config = {
   system_prompt = [[You are a sllm plugin living within neovim.
 Always answer with markdown.
 If the offered change is small, return only the changed part or function, not the entire file.]],
+  history_max_entries = 1000,
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -95,12 +158,14 @@ If the offered change is small, return only the changed part or function, not th
     copy_first_code_block = '<leader>sY',
     copy_last_code_block = '<leader>sy',
     copy_last_response = '<leader>sE',
+    complete_code = '<leader><Tab>',
+    browse_history = '<leader>sh',
   },
 }
 
 --- Internal state.
 local state = {
-  continue = nil,
+  continue = nil, -- Can be boolean or conversation_id string
   selected_model = nil,
   system_prompt = nil,
   model_options = {},
@@ -116,10 +181,26 @@ local pick = vim.ui.select
 ---@type fun(opts: table, on_confirm: fun(input: string?))
 local input = vim.ui.input
 
+---@toc_entry Setup
+---@text
+--- # Setup
+---
+--- Call `require("sllm").setup()` with an optional configuration table.
+---
+---@tag sllm.setup()
 --- Setup sllm.nvim with optional overrides.
 ---
 ---@param user_config SllmConfig?  Partial overrides for defaults.
 ---@return nil
+---
+---@usage >lua
+---   require("sllm").setup({
+---     llm_cmd = "llm",
+---     default_model = "default",
+---     window_type = "vertical",
+---     -- See full configuration options in help
+---   })
+--- <
 function M.setup(user_config)
   config = vim.tbl_deep_extend('force', {}, config, user_config or {})
 
@@ -147,6 +228,8 @@ function M.setup(user_config)
       copy_first_code_block = { modes = { 'n', 'v' }, func = M.copy_first_code_block, desc = 'Copy first code block' },
       copy_last_code_block = { modes = { 'n', 'v' }, func = M.copy_last_code_block, desc = 'Copy last code block' },
       copy_last_response = { modes = { 'n', 'v' }, func = M.copy_last_response, desc = 'Copy last response' },
+      complete_code = { modes = { 'n', 'v' }, func = M.complete_code, desc = 'Complete code at cursor' },
+      browse_history = { modes = { 'n', 'v' }, func = M.browse_history, desc = 'Browse chat history' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -170,7 +253,12 @@ function M.setup(user_config)
   input = config.input_func
 end
 
+---@tag sllm.ask_llm()
 --- Ask the LLM with a prompt from the user.
+---
+--- Prompt the LLM with user input. If in visual mode, automatically adds
+--- the selection to context before prompting.
+---
 ---@return nil
 function M.ask_llm()
   if Utils.is_mode_visual() then M.add_sel_to_ctx() end
@@ -184,7 +272,7 @@ function M.ask_llm()
       return
     end
 
-    Ui.show_llm_buffer(config.window_type, state.selected_model)
+    Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
     if JobMan.is_busy() then
       notify('[sllm] already running, please wait.', vim.log.levels.WARN)
       return
@@ -272,18 +360,18 @@ function M.new_chat()
     notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
   state.continue = false
-  Ui.show_llm_buffer(config.window_type, state.selected_model)
+  Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
   Ui.clean_llm_buffer()
   notify('[sllm] new chat created', vim.log.levels.INFO)
 end
 
 --- Focus the existing LLM window or create it.
 ---@return nil
-function M.focus_llm_buffer() Ui.focus_llm_buffer(config.window_type, state.selected_model) end
+function M.focus_llm_buffer() Ui.focus_llm_buffer(config.window_type, state.selected_model, state.online_enabled) end
 
 --- Toggle visibility of the LLM window.
 ---@return nil
-function M.toggle_llm_buffer() Ui.toggle_llm_buffer(config.window_type, state.selected_model) end
+function M.toggle_llm_buffer() Ui.toggle_llm_buffer(config.window_type, state.selected_model, state.online_enabled) end
 
 --- Prompt user to select an LLM model.
 ---@return nil
@@ -454,7 +542,7 @@ function M.show_model_options()
   local output = vim.fn.systemlist(cmd)
 
   -- Display in a floating window or show in the LLM buffer
-  Ui.show_llm_buffer(config.window_type, state.selected_model)
+  Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
   Ui.append_to_llm_buffer({ '', '> 📋 Available options for ' .. state.selected_model, '' }, config.scroll_to_bottom)
   Ui.append_to_llm_buffer(output, config.scroll_to_bottom)
   Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)
@@ -509,6 +597,7 @@ end
 --- Get online status for UI display.
 ---@return boolean
 function M.is_online_enabled() return state.online_enabled end
+
 --- Copy the first code block from the LLM buffer to the clipboard.
 ---@return nil
 function M.copy_first_code_block()
@@ -537,6 +626,214 @@ function M.copy_last_response()
   else
     notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
   end
+end
+
+--- Complete code at cursor position.
+---@return nil
+function M.complete_code()
+  if JobMan.is_busy() then
+    notify('[sllm] already running, please wait.', vim.log.levels.WARN)
+    return
+  end
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local row = cursor_pos[1]
+  local col = cursor_pos[2]
+
+  -- Get all lines in the buffer
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+  -- Split at cursor: before and after
+  local before_lines = {}
+  local after_lines = {}
+
+  for i = 1, #lines do
+    if i < row then
+      table.insert(before_lines, lines[i])
+    elseif i == row then
+      -- Split the current line at cursor position
+      local line = lines[i]
+      table.insert(before_lines, line:sub(1, col))
+      if col < #line then table.insert(after_lines, line:sub(col + 1)) end
+    else
+      table.insert(after_lines, lines[i])
+    end
+  end
+
+  local before_text = table.concat(before_lines, '\n')
+  local after_text = table.concat(after_lines, '\n')
+
+  -- Build the completion prompt with cursor marker
+  local prompt = [[
+    Complete the code at the cursor position marked with <CURSOR>.
+    Output ONLY the completion code, no explanations, no markdown formatting.'
+  ]]
+  prompt = prompt .. before_text .. '<CURSOR>'
+  if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
+
+  -- Build LLM command - no continuation, no usage stats for cleaner output
+  local cmd = config.llm_cmd .. ' --no-stream'
+  if state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(state.selected_model) end
+  cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+
+  notify('[sllm] requesting completion...', vim.log.levels.INFO)
+
+  -- Collect the completion output
+  local completion_output = {}
+
+  JobMan.start(cmd, function(line)
+    if line ~= '' then table.insert(completion_output, line) end
+  end, function(exit_code)
+    if exit_code == 0 and #completion_output > 0 then
+      -- Join all output lines
+      local completion = table.concat(completion_output, '\n')
+
+      -- Clean up common LLM formatting
+      completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
+      completion = completion:gsub('\n```$', '') -- Remove closing code fence
+      completion = vim.trim(completion)
+
+      if completion ~= '' then
+        -- Insert the completion at cursor position
+        local completion_lines = vim.split(completion, '\n', { plain = true })
+
+        -- Get the current line and rebuild it with the completion
+        local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+        local line_before = current_line:sub(1, col)
+        local line_after = current_line:sub(col + 1)
+
+        -- Build the new lines to insert
+        local new_lines = {}
+        if #completion_lines == 1 then
+          -- Single line completion
+          table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
+        else
+          -- Multi-line completion
+          table.insert(new_lines, line_before .. completion_lines[1])
+          for i = 2, #completion_lines - 1 do
+            table.insert(new_lines, completion_lines[i])
+          end
+          table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
+        end
+
+        -- Replace the current line with new lines
+        vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
+
+        -- Move cursor to end of completion
+        local new_row = row + #new_lines - 1
+        local new_col = #new_lines[#new_lines] - #line_after
+        vim.api.nvim_win_set_cursor(0, { new_row, new_col })
+
+        notify('[sllm] completion inserted', vim.log.levels.INFO)
+      else
+        notify('[sllm] received empty completion', vim.log.levels.WARN)
+      end
+    else
+      notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+    end
+  end)
+end
+
+--- Browse chat history, load a conversation, and continue from it.
+---@return nil
+function M.browse_history()
+  local max_entries = config.history_max_entries or 1000
+  local entries = HistMan.fetch_history(config.llm_cmd, max_entries)
+
+  if not entries or #entries == 0 then
+    notify('[sllm] no history found.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Group entries by conversation
+  local conversations = {}
+  for _, entry in ipairs(entries) do
+    local conv_id = entry.conversation_id
+    if conv_id and conv_id ~= '' then
+      if not conversations[conv_id] then conversations[conv_id] = {} end
+      table.insert(conversations[conv_id], entry)
+    end
+  end
+
+  -- Build display list
+  local conv_data = {}
+  for conv_id, conv_entries in pairs(conversations) do
+    -- Skip empty conversations or invalid entries
+    if #conv_entries > 0 then
+      -- Sort entries by timestamp within conversation (oldest first)
+      table.sort(conv_entries, function(a, b) return (a.timestamp or '') < (b.timestamp or '') end)
+
+      local first = conv_entries[1]
+      -- Ensure first is a valid table (not vim.NIL or nil)
+      if first and type(first) == 'table' then
+        -- Handle vim.NIL fields by converting to empty string
+        local timestamp_raw = first.timestamp
+        if type(timestamp_raw) ~= 'string' then timestamp_raw = '' end
+        local timestamp = timestamp_raw:gsub('T', ' '):gsub('Z', ''):sub(1, 19)
+
+        local model_raw = first.model
+        if type(model_raw) ~= 'string' then model_raw = 'unknown' end
+        local model = model_raw
+
+        local prompt_raw = first.prompt
+        if type(prompt_raw) ~= 'string' then prompt_raw = '' end
+        local prompt = prompt_raw:gsub('\n', ' '):sub(1, 40)
+        if #prompt_raw > 40 then prompt = prompt .. '...' end
+
+        table.insert(conv_data, {
+          id = conv_id,
+          display = string.format('[%s] %s (%d msgs) | %s', timestamp, model, #conv_entries, prompt),
+          model = model,
+          entries = conv_entries,
+        })
+      end
+    end
+  end
+
+  if #conv_data == 0 then
+    notify('[sllm] no conversations found.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Sort conversations by timestamp (newest first)
+  table.sort(conv_data, function(a, b) return a.display > b.display end)
+
+  local display_list = vim.tbl_map(function(c) return c.display end, conv_data)
+
+  pick(display_list, { prompt = 'Select conversation to continue:' }, function(_, idx)
+    if not idx then
+      notify('[sllm] selection canceled.', vim.log.levels.INFO)
+      return
+    end
+
+    local selected = conv_data[idx]
+    if not selected then return end
+
+    -- Update state to continue this conversation
+    state.selected_model = selected.model
+    state.continue = selected.id -- Store conversation ID for continuation
+
+    -- Display the conversation
+    Ui.show_llm_buffer(config.window_type, selected.model, state.online_enabled)
+    Ui.clean_llm_buffer()
+
+    Ui.append_to_llm_buffer({
+      '# Loaded conversation: ' .. selected.id:sub(1, 10) .. '...',
+      '*(New prompts will continue this conversation)*',
+      '',
+    }, config.scroll_to_bottom)
+
+    for _, entry in ipairs(selected.entries) do
+      local formatted = HistMan.format_conversation_entry(entry)
+      -- Ensure formatted is a table before appending
+      if formatted and type(formatted) == 'table' and #formatted > 0 then
+        Ui.append_to_llm_buffer(formatted, config.scroll_to_bottom)
+      end
+    end
+
+    notify('[sllm] loaded ' .. #selected.entries .. ' messages, ready to continue', vim.log.levels.INFO)
+  end)
 end
 
 return M

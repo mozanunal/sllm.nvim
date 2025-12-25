@@ -1,42 +1,46 @@
 ---@module "sllm.ui"
-local M = {}
-local Utils = require('sllm.utils')
+-- Module definition ==========================================================
+local UI = {}
+local H = {}
+
+-- Helper data ================================================================
+H.utils = require('sllm.utils')
 
 ---@type integer?  -- Buffer handle for LLM content
-local llm_buf = nil
+H.llm_buf = nil
 
 ---@type uv_timer_t?  -- Animation timer (from `vim.loop.new_timer()`)
-local animation_timer = nil
+H.animation_timer = nil
 
 ---@type string[]  -- Braille spinner frames
-local animation_frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
+H.animation_frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 
----@type integer  -- Current index into `animation_frames`
-local current_animation_frame_idx = 1
+---@type integer  -- Current index into `H.animation_frames`
+H.current_animation_frame_idx = 1
 
 ---@type boolean  -- Whether loading animation is active
-local is_loading_active = false
+H.is_loading_active = false
 
 ---@type string  -- Winbar text to restore after animation
-local original_winbar_text = ''
+H.original_winbar_text = ''
 
 --- Ensure the LLM buffer exists (hidden, markdown) and return its handle.
 ---@return integer bufnr  Always‐valid buffer handle.
-local function ensure_llm_buffer()
-  if llm_buf and Utils.buf_is_valid(llm_buf) then
-    return llm_buf
+H.ensure_llm_buffer = function()
+  if H.llm_buf and H.utils.buf_is_valid(H.llm_buf) then
+    return H.llm_buf
   else
-    llm_buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = llm_buf })
-    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = llm_buf })
-    vim.api.nvim_buf_set_name(llm_buf, 'sllm://chat')
-    return llm_buf
+    H.llm_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = H.llm_buf })
+    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = H.llm_buf })
+    vim.api.nvim_buf_set_name(H.llm_buf, 'sllm://chat')
+    return H.llm_buf
   end
 end
 
 --- Compute centered floating‐window options for the LLM buffer.
 ---@return table<string, number|string>  Options suitable for `nvim_open_win`.
-local function create_llm_float_win_opts()
+H.create_llm_float_win_opts = function()
   local width = math.floor(vim.o.columns * 0.7)
   local height = math.floor(vim.o.lines * 0.7)
   local row = math.floor((vim.o.lines - height) / 2)
@@ -55,8 +59,8 @@ end
 
 --- Update the winbar of the LLM window if it is visible.
 ---@param text string  New winbar text.
-local function update_winbar(text)
-  local llm_win = Utils.check_buffer_visible(llm_buf)
+H.update_winbar = function(text)
+  local llm_win = H.utils.check_buffer_visible(H.llm_buf)
   if llm_win and vim.api.nvim_win_is_valid(llm_win) then
     vim.api.nvim_set_option_value('winbar', text, { win = llm_win })
   end
@@ -67,14 +71,14 @@ end
 ---@param model_name?  string  Model name for the title.
 ---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return integer win_id      Window handle.
-local function create_llm_win(window_type, model_name, online_enabled)
+H.create_llm_win = function(window_type, model_name, online_enabled)
   window_type = window_type or 'vertical'
-  local buf = ensure_llm_buffer()
+  local buf = H.ensure_llm_buffer()
 
   -- choose window options based on type
   local win_opts
   if window_type == 'float' then
-    win_opts = create_llm_float_win_opts()
+    win_opts = H.create_llm_float_win_opts()
   elseif window_type == 'horizontal' then
     win_opts = { split = 'below' }
   else
@@ -86,69 +90,70 @@ local function create_llm_win(window_type, model_name, online_enabled)
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  M.update_llm_win_title(model_name, online_enabled)
+  UI.update_llm_win_title(model_name, online_enabled)
   return win_id
 end
 
 --- Start the Braille spinner in the LLM window's winbar.
 ---@return nil
-function M.start_loading_indicator()
-  if is_loading_active then return end
-  local llm_win = Utils.check_buffer_visible(llm_buf)
+-- Public API =================================================================
+function UI.start_loading_indicator()
+  if H.is_loading_active then return end
+  local llm_win = H.utils.check_buffer_visible(H.llm_buf)
   if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
 
-  is_loading_active = true
-  current_animation_frame_idx = 1
-  original_winbar_text = vim.api.nvim_get_option_value('winbar', { win = llm_win })
+  H.is_loading_active = true
+  H.current_animation_frame_idx = 1
+  H.original_winbar_text = vim.api.nvim_get_option_value('winbar', { win = llm_win })
 
-  if animation_timer then
-    animation_timer:close()
-    animation_timer = nil
+  if H.animation_timer then
+    H.animation_timer:close()
+    H.animation_timer = nil
   end
-  animation_timer = vim.loop.new_timer()
-  animation_timer:start(
+  H.animation_timer = vim.loop.new_timer()
+  H.animation_timer:start(
     0,
     150,
     vim.schedule_wrap(function()
-      if not is_loading_active then
-        animation_timer:stop()
-        animation_timer:close()
-        animation_timer = nil
+      if not H.is_loading_active then
+        H.animation_timer:stop()
+        H.animation_timer:close()
+        H.animation_timer = nil
         return
       end
 
-      local win_check = Utils.check_buffer_visible(llm_buf)
+      local win_check = H.utils.check_buffer_visible(H.llm_buf)
       if not (win_check and vim.api.nvim_win_is_valid(win_check)) then
-        M.stop_loading_indicator()
+        UI.stop_loading_indicator()
         return
       end
 
-      current_animation_frame_idx = (current_animation_frame_idx % #animation_frames) + 1
-      local frame = animation_frames[current_animation_frame_idx]
-      update_winbar(string.format('%s %s', frame, original_winbar_text))
+      H.current_animation_frame_idx = (H.current_animation_frame_idx % #H.animation_frames) + 1
+      local frame = H.animation_frames[H.current_animation_frame_idx]
+      H.update_winbar(string.format('%s %s', frame, H.original_winbar_text))
     end)
   )
 end
 
 --- Stop the loading spinner and restore the original winbar text.
 ---@return nil
-function M.stop_loading_indicator()
-  if not is_loading_active then return end
-  is_loading_active = false
-  if animation_timer then
-    animation_timer:stop()
-    animation_timer:close()
-    animation_timer = nil
+function UI.stop_loading_indicator()
+  if not H.is_loading_active then return end
+  H.is_loading_active = false
+  if H.animation_timer then
+    H.animation_timer:stop()
+    H.animation_timer:close()
+    H.animation_timer = nil
   end
-  if original_winbar_text ~= '' then update_winbar(original_winbar_text) end
-  original_winbar_text = ''
+  if H.original_winbar_text ~= '' then H.update_winbar(H.original_winbar_text) end
+  H.original_winbar_text = ''
 end
 
 --- Clear the LLM buffer and stop any active loading animation.
 ---@return nil
-function M.clean_llm_buffer()
-  if is_loading_active then M.stop_loading_indicator() end
-  if llm_buf and Utils.buf_is_valid(llm_buf) then vim.api.nvim_buf_set_lines(llm_buf, 0, -1, false, {}) end
+function UI.clean_llm_buffer()
+  if H.is_loading_active then UI.stop_loading_indicator() end
+  if H.llm_buf and H.utils.buf_is_valid(H.llm_buf) then vim.api.nvim_buf_set_lines(H.llm_buf, 0, -1, false, {}) end
 end
 
 --- Show the LLM buffer, creating a window if needed.
@@ -156,12 +161,12 @@ end
 ---@param model_name?  string  Model name for the title.
 ---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return integer win_id  Window handle where the buffer is shown.
-function M.show_llm_buffer(window_type, model_name, online_enabled)
-  local win = Utils.check_buffer_visible(llm_buf)
+function UI.show_llm_buffer(window_type, model_name, online_enabled)
+  local win = H.utils.check_buffer_visible(H.llm_buf)
   if win then
     return win
   else
-    return create_llm_win(window_type, model_name, online_enabled)
+    return H.create_llm_win(window_type, model_name, online_enabled)
   end
 end
 
@@ -170,12 +175,12 @@ end
 ---@param model_name?  string  Model name for the title.
 ---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return nil
-function M.focus_llm_buffer(window_type, model_name, online_enabled)
-  local win = Utils.check_buffer_visible(llm_buf)
+function UI.focus_llm_buffer(window_type, model_name, online_enabled)
+  local win = H.utils.check_buffer_visible(H.llm_buf)
   if win then
     vim.api.nvim_set_current_win(win)
   else
-    win = M.show_llm_buffer(window_type, model_name, online_enabled)
+    win = UI.show_llm_buffer(window_type, model_name, online_enabled)
     vim.api.nvim_set_current_win(win)
   end
 end
@@ -185,13 +190,12 @@ end
 ---@param model_name?  string  Model name for the title.
 ---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return nil
-function M.toggle_llm_buffer(window_type, model_name, online_enabled)
-  local win = Utils.check_buffer_visible(llm_buf)
+function UI.toggle_llm_buffer(window_type, model_name, online_enabled)
+  local win = H.utils.check_buffer_visible(H.llm_buf)
   if win then
     vim.api.nvim_win_close(win, false)
   else
-    win = M.show_llm_buffer(window_type, model_name, online_enabled)
-    vim.api.nvim_set_current_win(win)
+    UI.show_llm_buffer(window_type, model_name, online_enabled)
   end
 end
 
@@ -199,11 +203,11 @@ end
 ---@param lines string[]  Lines to append.
 ---@param scroll_to_bottom boolean  Whether or not to scroll to the bottom of the buffer
 ---@return nil
-function M.append_to_llm_buffer(lines, scroll_to_bottom)
+function UI.append_to_llm_buffer(lines, scroll_to_bottom)
   if not lines then return end
-  local buf = ensure_llm_buffer()
+  local buf = H.ensure_llm_buffer()
   vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
-  local win = Utils.check_buffer_visible(buf)
+  local win = H.utils.check_buffer_visible(buf)
   if win and scroll_to_bottom then
     local last = vim.api.nvim_buf_line_count(buf)
     vim.api.nvim_win_set_cursor(win, { last, 0 })
@@ -214,23 +218,23 @@ end
 ---@param model_name? string  Name of the model, or `nil` for default.
 ---@param online_enabled? boolean  Whether online mode is enabled.
 ---@return nil
-function M.update_llm_win_title(model_name, online_enabled)
+function UI.update_llm_win_title(model_name, online_enabled)
   local display = model_name or '(default)'
   local online_indicator = online_enabled and ' 🌐' or ''
   local title = string.format('  sllm.nvim | Model: %s%s', display, online_indicator)
-  if is_loading_active then
-    original_winbar_text = title
+  if H.is_loading_active then
+    H.original_winbar_text = title
   else
-    update_winbar(title)
+    H.update_winbar(title)
   end
 end
 
 --- Copy the first code block from the LLM buffer to the clipboard.
 ---@return boolean  `true` if a code block was found and copied; `false` otherwise.
-function M.copy_first_code_block()
-  local buf = ensure_llm_buffer()
+function UI.copy_first_code_block()
+  local buf = H.ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local code_blocks = Utils.extract_code_blocks(lines)
+  local code_blocks = H.utils.extract_code_blocks(lines)
 
   if #code_blocks == 0 then return false end
 
@@ -241,10 +245,10 @@ end
 
 --- Copy the last code block from the LLM buffer to the clipboard.
 ---@return boolean  `true` if a code block was found and copied; `false` otherwise.
-function M.copy_last_code_block()
-  local buf = ensure_llm_buffer()
+function UI.copy_last_code_block()
+  local buf = H.ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local code_blocks = Utils.extract_code_blocks(lines)
+  local code_blocks = H.utils.extract_code_blocks(lines)
 
   if #code_blocks == 0 then return false end
 
@@ -256,8 +260,8 @@ end
 --- Copy the last response from the LLM buffer to the clipboard.
 --- Extracts content from the last "🤖 Response" marker to the end.
 ---@return boolean  `true` if content was copied; `false` if no response found.
-function M.copy_last_response()
-  local buf = ensure_llm_buffer()
+function UI.copy_last_response()
+  local buf = H.ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
   if #lines == 0 then return false end
@@ -297,4 +301,4 @@ function M.copy_last_response()
   return true
 end
 
-return M
+return UI

@@ -2,7 +2,7 @@
 ---
 --- MIT License Copyright (c) 2025 mozanunal
 ---
----@module "sllm"
+---                                                                         *Sllm*
 ---
 ---@toc_entry Introduction
 ---@text
@@ -54,6 +54,322 @@
 ---     end,
 ---   }
 --- <
+---
+---@toc_entry Configuration
+---@text
+--- # Configuration ~
+---
+--- All configuration options with their defaults: >lua
+---   require("sllm").setup({
+---     llm_cmd = "llm",            -- Command or path for the llm CLI
+---     default_model = "default",  -- Model to use (or "default" for llm's default)
+---     show_usage = true,          -- Show token usage stats after responses
+---     on_start_new_chat = true,   -- Start with fresh chat on setup
+---     reset_ctx_each_prompt = true, -- Clear context after each prompt
+---     window_type = "vertical",   -- "vertical", "horizontal", or "float"
+---     scroll_to_bottom = true,    -- Auto-scroll to bottom of LLM window
+---     pick_func = vim.ui.select,  -- Function for item selection
+---     notify_func = vim.notify,   -- Function for notifications
+---     input_func = vim.ui.input,  -- Function for input prompts
+---     keymaps = { ... },          -- See |Sllm-keymaps|
+---     pre_hooks = nil,            -- Commands before LLM execution
+---     post_hooks = nil,           -- Commands after LLM execution
+---     system_prompt = "...",      -- System prompt for all queries
+---     model_options = {},         -- Model-specific options (-o flags)
+---     online_enabled = false,     -- Enable web search by default
+---     history_max_entries = 1000, -- Max history entries to fetch
+---   })
+--- <
+--- ## Configuration Options ~
+---
+--- `llm_cmd` - Command or full path to the `llm` CLI executable.
+---
+--- `default_model` - Model to use on startup. Set to "default" to use the
+--- default model configured in `llm`.
+---
+--- `show_usage` - When `true`, displays token usage and estimated cost after
+--- each response.
+---
+--- `on_start_new_chat` - When `true`, starts with a fresh chat buffer on setup.
+---
+--- `reset_ctx_each_prompt` - When `true`, automatically clears file context
+--- after each prompt. Set to `false` to persist context across prompts.
+---
+--- `window_type` - Controls how the LLM buffer opens:
+---   • "vertical" - Split vertically
+---   • "horizontal" - Split horizontally
+---   • "float" - Floating window
+---
+--- `scroll_to_bottom` - When `true`, keeps cursor at bottom of LLM window as
+--- responses stream in.
+---
+--- `pick_func`, `notify_func`, `input_func` - UI functions for selections,
+--- notifications, and input prompts. Defaults to vim.ui.* functions but can
+--- use mini.pick and mini.notify for enhanced UI.
+---
+--- `keymaps` - Table of keybindings. See |Sllm-keymaps|. Set to `false` to
+--- disable all default keymaps.
+---
+--- `system_prompt` - Text prepended to all queries via `-s` flag. Useful for
+--- ensuring consistent output formatting. See |Sllm-system-prompt|.
+---
+--- `model_options` - Table of model-specific options passed via `-o` flags.
+--- Example: `{ temperature = 0.7, max_tokens = 1000 }`. See |Sllm-model-options|.
+---
+--- `online_enabled` - When `true`, enables web search capabilities (shows 🌐
+--- in status bar). Not all models support this.
+---
+--- `history_max_entries` - Maximum number of conversation history entries to
+--- fetch. Higher values show more history but may be slower.
+---
+---@toc_entry Keymaps
+---@text
+---                                                                 *Sllm-keymaps*
+--- # Keymaps ~
+---
+--- Default keybindings (all can be customized or disabled):
+---
+--- Keymap                  | Default Key   | Modes | Description
+--- ----------------------- | ------------- | ----- | ---------------------------
+--- `ask_llm`               | `<leader>ss`  | n,v   | Prompt the LLM
+--- `new_chat`              | `<leader>sn`  | n,v   | Start new chat
+--- `cancel`                | `<leader>sc`  | n,v   | Cancel current request
+--- `focus_llm_buffer`      | `<leader>sf`  | n,v   | Focus LLM buffer
+--- `toggle_llm_buffer`     | `<leader>st`  | n,v   | Toggle LLM buffer
+--- `select_model`          | `<leader>sm`  | n,v   | Select model
+--- `toggle_online`         | `<leader>sW`  | n,v   | Toggle online/web mode
+--- `set_model_option`      | `<leader>so`  | n,v   | Set model option
+--- `show_model_options`    | `<leader>sO`  | n,v   | Show model options
+--- `add_file_to_ctx`       | `<leader>sa`  | n,v   | Add current file
+--- `add_url_to_ctx`        | `<leader>su`  | n,v   | Add URL content
+--- `add_sel_to_ctx`        | `<leader>sv`  | v     | Add visual selection
+--- `add_diag_to_ctx`       | `<leader>sd`  | n,v   | Add diagnostics
+--- `add_cmd_out_to_ctx`    | `<leader>sx`  | n,v   | Add command output
+--- `add_tool_to_ctx`       | `<leader>sT`  | n,v   | Add tool
+--- `add_func_to_ctx`       | `<leader>sF`  | n,v   | Add Python function
+--- `reset_context`         | `<leader>sr`  | n,v   | Reset context
+--- `set_system_prompt`     | `<leader>sS`  | n,v   | Set system prompt
+--- `browse_history`        | `<leader>sh`  | n,v   | Browse history
+--- `copy_last_code_block`  | `<leader>sy`  | n,v   | Copy last code block
+--- `copy_first_code_block` | `<leader>sY`  | n,v   | Copy first code block
+--- `copy_last_response`    | `<leader>sE`  | n,v   | Copy last response
+--- `complete_code`         | `<leader><Tab>` | n,v | Complete code at cursor
+---
+--- ## Customizing Keymaps ~
+---
+--- Change specific keymaps: >lua
+---   require("sllm").setup({
+---     keymaps = {
+---       ask_llm = "<leader>a",    -- Change to <leader>a
+---       add_url_to_ctx = false,   -- Disable this keymap
+---     },
+---   })
+--- <
+--- Disable all default keymaps: >lua
+---   require("sllm").setup({
+---     keymaps = false,
+---   })
+---
+---   -- Then define your own
+---   vim.keymap.set("n", "<leader>a", require("sllm").ask_llm)
+--- <
+---
+---@toc_entry Usage
+---@text
+--- # Usage ~
+---
+--- ## Basic Workflow ~
+---
+--- 1. Press `<leader>ss` - Ask the LLM a question
+--- 2. Press `<leader>sa` - Add current file to context
+--- 3. Press `<leader>sv` (visual mode) - Add selection to context
+--- 4. Press `<leader>sm` - Switch models
+--- 5. Press `<leader>sh` - Browse and continue previous conversations
+--- 6. Press `<leader><Tab>` - Complete code at cursor position
+---
+--- ## Code Completion ~
+---
+--- The code completion feature (`<leader><Tab>`) sends code before and after
+--- your cursor to the LLM for intelligent completion:
+---
+--- 1. Position cursor where you want completion
+--- 2. Press `<leader><Tab>`
+--- 3. LLM analyzes context and inserts completion
+---
+--- ## Context Management ~
+---
+--- Build context for better LLM responses:
+--- - `<leader>sa` - Add entire current file
+--- - `<leader>sv` - Add visual selection (in visual mode)
+--- - `<leader>sd` - Add diagnostics (errors/warnings)
+--- - `<leader>su` - Add content from a URL
+--- - `<leader>sx` - Add output from shell command
+--- - `<leader>sT` - Add an installed llm tool
+--- - `<leader>sF` - Add Python function as a tool
+--- - `<leader>sr` - Clear all context
+---
+--- Context is automatically cleared after each prompt by default
+--- (configurable with `reset_ctx_each_prompt`).
+---
+--- ## History Navigation ~
+---
+--- Press `<leader>sh` to browse previous conversations:
+--- - View up to 1000 recent conversations (configurable)
+--- - See timestamps, models, and message counts
+--- - Select a conversation to load and continue chatting
+---
+--- The `llm` CLI logs all interactions automatically. You can manage logs
+--- with: `llm logs list`, `llm logs off`, etc.
+---
+---@toc_entry System Prompt
+---@text
+---                                                          *Sllm-system-prompt*
+--- # System Prompt ~
+---
+--- The system prompt is prepended to all queries using the `-s` flag. This
+--- ensures consistent behavior and output formatting.
+---
+--- ## Default System Prompt ~
+--- >
+---   You are a sllm plugin living within neovim.
+---   Always answer with markdown.
+---   If the offered change is small, return only the changed part or
+---   function, not the entire file.
+--- <
+--- ## Configure in setup() ~
+--- >lua
+---   require("sllm").setup({
+---     system_prompt = [[You are an expert code reviewer.
+---   Always provide constructive feedback.
+---   Format code suggestions using markdown code blocks.]],
+---   })
+--- <
+--- ## Update on-the-fly ~
+---
+--- Press `<leader>sS` to interactively update the system prompt during a
+--- session. This allows you to adapt the LLM's behavior without restarting
+--- Neovim. Submit an empty string to clear the system prompt.
+---
+---@toc_entry Model Options
+---@text
+---                                                          *Sllm-model-options*
+--- # Model Options ~
+---
+--- Models support specific options passed via `-o` flags. Common options
+--- include temperature, max_tokens, and more.
+---
+--- ## Discover Options ~
+---
+--- Press `<leader>sO` (capital O) to see available options for your current
+--- model, or run: `llm models --options -m <model-name>`
+---
+--- ## Set Options in Config ~
+--- >lua
+---   require("sllm").setup({
+---     model_options = {
+---       temperature = 0.7,     -- Control randomness (0-2)
+---       max_tokens = 1000,     -- Limit response length
+---       top_p = 0.9,          -- Nucleus sampling
+---       seed = 42,            -- Deterministic sampling
+---     },
+---   })
+--- <
+--- ## Set Options at Runtime ~
+---
+--- Press `<leader>so` to set an option on-the-fly:
+--- 1. Enter option key (e.g., `temperature`)
+--- 2. Enter option value (e.g., `0.7`)
+---
+--- Or use Lua: >lua
+---   require("sllm").set_model_option()
+---   require("sllm").reset_model_options()  -- Clear all options
+--- <
+--- ## Common Options ~
+---
+--- - `temperature` (0-2) - Randomness: higher = creative, lower = focused
+--- - `max_tokens` - Maximum tokens to generate
+--- - `top_p` (0-1) - Nucleus sampling (alternative to temperature)
+--- - `frequency_penalty` (-2 to 2) - Penalize repeated tokens
+--- - `presence_penalty` (-2 to 2) - Encourage new topics
+--- - `seed` - Integer for deterministic outputs
+--- - `json_object` (boolean) - Force JSON output
+--- - `reasoning_effort` (low/medium/high) - For reasoning models
+--- - `image_detail` (low/high/auto) - For vision models
+---
+--- Not all options are available for all models.
+---
+---@toc_entry Pre/Post Hooks
+---@text
+---                                                               *Sllm-hooks*
+--- # Pre-Hooks and Post-Hooks ~
+---
+--- Hooks allow running shell commands before and after LLM execution.
+---
+--- ## Pre-Hooks ~
+---
+--- Run before LLM invocation. Can capture output and add to context: >lua
+---   require("sllm").setup({
+---     pre_hooks = {
+---       {
+---         command = "git diff --cached",
+---         add_to_context = true,  -- Capture and add to context
+---       },
+---       {
+---         command = "echo 'Starting LLM...'",
+---         add_to_context = false,  -- Just run, don't capture
+---       },
+---     },
+---   })
+--- <
+--- Pre-hook output is added as a snippet labeled `Pre-hook-> <command>`.
+---
+--- ## Post-Hooks ~
+---
+--- Run after LLM completes (both on success and failure): >lua
+---   require("sllm").setup({
+---     post_hooks = {
+---       {
+---         command = "date >> ~/.sllm_history.log",
+---       },
+---       {
+---         command = "notify-send 'SLLM' 'Request completed'",
+---       },
+---     },
+---   })
+--- <
+--- Post-hook output is not captured or displayed.
+---
+--- ## Use Cases ~
+---
+--- - Automatically include git diff: `git diff HEAD`
+--- - Include current file: `cat %` (% expands to filename)
+--- - Log interactions: `date >> log.txt`
+--- - Desktop notifications: `notify-send ...`
+---
+---@toc_entry Online Mode
+---@text
+---                                                            *Sllm-online-mode*
+--- # Online/Web Mode ~
+---
+--- Some models support an `online` option for web search capabilities.
+---
+--- ## Toggle Online Mode ~
+---
+--- Press `<leader>sW` to toggle online mode. When enabled, you'll see a 🌐
+--- icon in the status bar.
+---
+--- Status bar examples:
+---   `sllm.nvim | Model: gpt-4o 🌐`    (online mode enabled)
+---   `sllm.nvim | Model: gpt-4o`       (online mode disabled)
+---
+--- ## Enable by Default ~
+--- >lua
+---   require("sllm").setup({
+---     online_enabled = true,
+---   })
+--- <
+--- Note: Not all models support online mode. Check your model provider's
+--- documentation.
 ---
 ---@tag sllm.nvim
 ---@tag sllm
@@ -108,18 +424,13 @@
 ---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 ---@field online_enabled boolean?            Enable online/web mode by default.
 ---@field history_max_entries integer?       Maximum number of history entries to fetch (default: 1000).
-local M = {}
+-- Module definition ==========================================================
+local Sllm = {}
+local H = {}
 
-local Utils = require('sllm.utils')
-local Backend = require('sllm.backend.llm')
-local CtxMan = require('sllm.context_manager')
-local JobMan = require('sllm.job_manager')
-local Ui = require('sllm.ui')
-local HistMan = require('sllm.history_manager')
-
---- Module configuration (with defaults).
----@type SllmConfig
-local config = {
+-- Helper data ================================================================
+-- Module default config
+H.default_config = vim.deepcopy({
   llm_cmd = 'llm',
   default_model = 'default',
   show_usage = true,
@@ -161,10 +472,18 @@ If the offered change is small, return only the changed part or function, not th
     complete_code = '<leader><Tab>',
     browse_history = '<leader>sh',
   },
-}
+})
 
---- Internal state.
-local state = {
+-- Internal modules
+H.utils = require('sllm.utils')
+H.backend = require('sllm.backend.llm')
+H.context_manager = require('sllm.context_manager')
+H.job_manager = require('sllm.job_manager')
+H.ui = require('sllm.ui')
+H.history_manager = require('sllm.history_manager')
+
+-- Internal state
+H.state = {
   continue = nil, -- Can be boolean or conversation_id string
   selected_model = nil,
   system_prompt = nil,
@@ -172,64 +491,86 @@ local state = {
   online_enabled = false,
 }
 
----@type fun(msg: string, level?: number)
-local notify = vim.notify
+-- Internal functions for UI
+H.notify = vim.notify
+H.pick = vim.ui.select
+H.input = vim.ui.input
 
----@type fun(items: any[], opts: table?, on_choice: fun(item: any, idx?: integer))
-local pick = vim.ui.select
-
----@type fun(opts: table, on_confirm: fun(input: string?))
-local input = vim.ui.input
-
----@toc_entry Setup
----@text
---- # Setup
+-- Module setup ===============================================================
+--- Module setup
 ---
---- Call `require("sllm").setup()` with an optional configuration table.
----
----@tag sllm.setup()
---- Setup sllm.nvim with optional overrides.
----
----@param user_config SllmConfig?  Partial overrides for defaults.
----@return nil
+---@param config table|nil Module config table. See |Sllm.config|.
 ---
 ---@usage >lua
----   require("sllm").setup({
----     llm_cmd = "llm",
----     default_model = "default",
----     window_type = "vertical",
----     -- See full configuration options in help
----   })
+---   require('sllm').setup() -- use default config
+---   -- OR
+---   require('sllm').setup({}) -- replace {} with your config table
 --- <
-function M.setup(user_config)
-  config = vim.tbl_deep_extend('force', {}, config, user_config or {})
+Sllm.setup = function(config)
+  -- Export module
+  _G.Sllm = Sllm
 
-  local km = config.keymaps
+  -- Setup config
+  config = H.setup_config(config)
+
+  -- Apply config
+  H.apply_config(config)
+end
+
+--- Defaults ~
+---@eval return MiniDoc.afterlines_to_code(MiniDoc.current.eval_section)
+Sllm.config = vim.deepcopy(H.default_config)
+--minidoc_afterlines_end
+
+-- Helper functionality =======================================================
+-- Settings -------------------------------------------------------------------
+H.setup_config = function(config)
+  vim.validate({ config = { config, 'table', true } })
+  config = vim.tbl_deep_extend('force', vim.deepcopy(H.default_config), config or {})
+  return config
+end
+
+H.apply_config = function(config)
+  Sllm.config = config
+
+  local km = Sllm.config.keymaps
   if km then
     local keymap_defs = {
-      ask_llm = { modes = { 'n', 'v' }, func = M.ask_llm, desc = 'Ask LLM' },
-      new_chat = { modes = { 'n', 'v' }, func = M.new_chat, desc = 'New LLM chat' },
-      cancel = { modes = { 'n', 'v' }, func = M.cancel, desc = 'Cancel LLM request' },
-      focus_llm_buffer = { modes = { 'n', 'v' }, func = M.focus_llm_buffer, desc = 'Focus LLM buffer' },
-      toggle_llm_buffer = { modes = { 'n', 'v' }, func = M.toggle_llm_buffer, desc = 'Toggle LLM buffer' },
-      select_model = { modes = { 'n', 'v' }, func = M.select_model, desc = 'Select LLM model' },
-      add_tool_to_ctx = { modes = { 'n', 'v' }, func = M.add_tool_to_ctx, desc = 'Add tool to context' },
-      add_file_to_ctx = { modes = { 'n', 'v' }, func = M.add_file_to_ctx, desc = 'Add file to context' },
-      add_url_to_ctx = { modes = { 'n', 'v' }, func = M.add_url_to_ctx, desc = 'Add URL to context' },
-      add_diag_to_ctx = { modes = { 'n', 'v' }, func = M.add_diag_to_ctx, desc = 'Add diagnostics to context' },
-      add_cmd_out_to_ctx = { modes = { 'n', 'v' }, func = M.add_cmd_out_to_ctx, desc = 'Add command output to context' },
-      reset_context = { modes = { 'n', 'v' }, func = M.reset_context, desc = 'Reset LLM context' },
-      add_sel_to_ctx = { modes = 'v', func = M.add_sel_to_ctx, desc = 'Add visual selection to context' },
-      add_func_to_ctx = { modes = 'n', func = M.add_func_to_ctx, desc = 'Add selected function to context' },
-      set_system_prompt = { modes = { 'n', 'v' }, func = M.set_system_prompt, desc = 'Set system prompt' },
-      set_model_option = { modes = { 'n', 'v' }, func = M.set_model_option, desc = 'Set model option' },
-      show_model_options = { modes = { 'n', 'v' }, func = M.show_model_options, desc = 'Show available model options' },
-      toggle_online = { modes = { 'n', 'v' }, func = M.toggle_online, desc = 'Toggle online mode' },
-      copy_first_code_block = { modes = { 'n', 'v' }, func = M.copy_first_code_block, desc = 'Copy first code block' },
-      copy_last_code_block = { modes = { 'n', 'v' }, func = M.copy_last_code_block, desc = 'Copy last code block' },
-      copy_last_response = { modes = { 'n', 'v' }, func = M.copy_last_response, desc = 'Copy last response' },
-      complete_code = { modes = { 'n', 'v' }, func = M.complete_code, desc = 'Complete code at cursor' },
-      browse_history = { modes = { 'n', 'v' }, func = M.browse_history, desc = 'Browse chat history' },
+      ask_llm = { modes = { 'n', 'v' }, func = Sllm.ask_llm, desc = 'Ask LLM' },
+      new_chat = { modes = { 'n', 'v' }, func = Sllm.new_chat, desc = 'New LLM chat' },
+      cancel = { modes = { 'n', 'v' }, func = Sllm.cancel, desc = 'Cancel LLM request' },
+      focus_llm_buffer = { modes = { 'n', 'v' }, func = Sllm.focus_llm_buffer, desc = 'Focus LLM buffer' },
+      toggle_llm_buffer = { modes = { 'n', 'v' }, func = Sllm.toggle_llm_buffer, desc = 'Toggle LLM buffer' },
+      select_model = { modes = { 'n', 'v' }, func = Sllm.select_model, desc = 'Select LLM model' },
+      add_tool_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_tool_to_ctx, desc = 'Add tool to context' },
+      add_file_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_file_to_ctx, desc = 'Add file to context' },
+      add_url_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_url_to_ctx, desc = 'Add URL to context' },
+      add_diag_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_diag_to_ctx, desc = 'Add diagnostics to context' },
+      add_cmd_out_to_ctx = {
+        modes = { 'n', 'v' },
+        func = Sllm.add_cmd_out_to_ctx,
+        desc = 'Add command output to context',
+      },
+      reset_context = { modes = { 'n', 'v' }, func = Sllm.reset_context, desc = 'Reset LLM context' },
+      add_sel_to_ctx = { modes = 'v', func = Sllm.add_sel_to_ctx, desc = 'Add visual selection to context' },
+      add_func_to_ctx = { modes = 'n', func = Sllm.add_func_to_ctx, desc = 'Add selected function to context' },
+      set_system_prompt = { modes = { 'n', 'v' }, func = Sllm.set_system_prompt, desc = 'Set system prompt' },
+      set_model_option = { modes = { 'n', 'v' }, func = Sllm.set_model_option, desc = 'Set model option' },
+      show_model_options = {
+        modes = { 'n', 'v' },
+        func = Sllm.show_model_options,
+        desc = 'Show available model options',
+      },
+      toggle_online = { modes = { 'n', 'v' }, func = Sllm.toggle_online, desc = 'Toggle online mode' },
+      copy_first_code_block = {
+        modes = { 'n', 'v' },
+        func = Sllm.copy_first_code_block,
+        desc = 'Copy first code block',
+      },
+      copy_last_code_block = { modes = { 'n', 'v' }, func = Sllm.copy_last_code_block, desc = 'Copy last code block' },
+      copy_last_response = { modes = { 'n', 'v' }, func = Sllm.copy_last_response, desc = 'Copy last response' },
+      complete_code = { modes = { 'n', 'v' }, func = Sllm.complete_code, desc = 'Complete code at cursor' },
+      browse_history = { modes = { 'n', 'v' }, func = Sllm.browse_history, desc = 'Browse chat history' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -238,20 +579,22 @@ function M.setup(user_config)
     end
   end
 
-  state.continue = not config.on_start_new_chat
-  state.selected_model = config.default_model ~= 'default' and config.default_model
-    or Backend.get_default_model(config.llm_cmd)
-  state.system_prompt = config.system_prompt
-  state.model_options = config.model_options or {}
-  state.online_enabled = config.online_enabled or false
+  H.state.continue = not Sllm.config.on_start_new_chat
+  H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model
+    or H.backend.get_default_model(Sllm.config.llm_cmd)
+  H.state.system_prompt = Sllm.config.system_prompt
+  H.state.model_options = Sllm.config.model_options or {}
+  H.state.online_enabled = Sllm.config.online_enabled or false
 
   -- Set online option if enabled by default
-  if state.online_enabled then state.model_options.online = 1 end
+  if H.state.online_enabled then H.state.model_options.online = 1 end
 
-  notify = config.notify_func
-  pick = config.pick_func
-  input = config.input_func
+  H.notify = Sllm.config.notify_func
+  H.pick = Sllm.config.pick_func
+  H.input = Sllm.config.input_func
 end
+
+-- Public API =================================================================
 
 ---@tag sllm.ask_llm()
 --- Ask the LLM with a prompt from the user.
@@ -260,80 +603,80 @@ end
 --- the selection to context before prompting.
 ---
 ---@return nil
-function M.ask_llm()
-  if Utils.is_mode_visual() then M.add_sel_to_ctx() end
-  input({ prompt = 'Prompt: ' }, function(user_input)
+function Sllm.ask_llm()
+  if H.utils.is_mode_visual() then Sllm.add_sel_to_ctx() end
+  H.input({ prompt = 'Prompt: ' }, function(user_input)
     if user_input == '' then
-      notify('[sllm] no prompt provided.', vim.log.levels.INFO)
+      H.notify('[sllm] no prompt provided.', vim.log.levels.INFO)
       return
     end
     if user_input == nil then
-      notify('[sllm] prompt canceled.', vim.log.levels.INFO)
+      H.notify('[sllm] prompt canceled.', vim.log.levels.INFO)
       return
     end
 
-    Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
-    if JobMan.is_busy() then
-      notify('[sllm] already running, please wait.', vim.log.levels.WARN)
+    H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+    if H.job_manager.is_busy() then
+      H.notify('[sllm] already running, please wait.', vim.log.levels.WARN)
       return
     end
 
-    if config.pre_hooks then
-      for _, hook in ipairs(config.pre_hooks) do
-        local output = JobMan.exec_cmd_capture_output(hook.command)
+    if Sllm.config.pre_hooks then
+      for _, hook in ipairs(Sllm.config.pre_hooks) do
+        local output = H.job_manager.exec_cmd_capture_output(hook.command)
         if hook.add_to_context then
-          CtxMan.add_snip(output, 'Pre-hook-> ' .. hook.command, 'text')
-          notify('[sllm] pre-hook executed, added to context ' .. hook.command, vim.log.levels.INFO)
+          H.context_manager.add_snip(output, 'Pre-hook-> ' .. hook.command, 'text')
+          H.notify('[sllm] pre-hook executed, added to context ' .. hook.command, vim.log.levels.INFO)
         end
       end
     end
 
-    local ctx = CtxMan.get()
-    local prompt = CtxMan.render_prompt_ui(user_input)
-    Ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' }, config.scroll_to_bottom)
-    Ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), config.scroll_to_bottom)
-    Ui.start_loading_indicator()
+    local ctx = H.context_manager.get()
+    local prompt = H.context_manager.render_prompt_ui(user_input)
+    H.ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' }, Sllm.config.scroll_to_bottom)
+    H.ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
+    H.ui.start_loading_indicator()
 
-    local cmd = Backend.llm_cmd(
-      config.llm_cmd,
+    local cmd = H.backend.llm_cmd(
+      Sllm.config.llm_cmd,
       prompt,
-      state.continue,
-      config.show_usage,
-      state.selected_model,
+      H.state.continue,
+      Sllm.config.show_usage,
+      H.state.selected_model,
       ctx.fragments,
       ctx.tools,
       ctx.functions,
-      state.system_prompt,
-      state.model_options
+      H.state.system_prompt,
+      H.state.model_options
     )
-    state.continue = true
+    H.state.continue = true
 
     local first_line = false
-    JobMan.start(
+    H.job_manager.start(
       cmd,
       ---@param line string
       function(line)
         if not first_line then
-          Ui.stop_loading_indicator()
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, config.scroll_to_bottom)
+          H.ui.stop_loading_indicator()
+          H.ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, Sllm.config.scroll_to_bottom)
           first_line = true
         end
-        Ui.append_to_llm_buffer({ line }, config.scroll_to_bottom)
+        H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom)
       end,
       ---@param exit_code integer
       function(exit_code)
-        Ui.stop_loading_indicator()
+        H.ui.stop_loading_indicator()
         if not first_line then
-          Ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, config.scroll_to_bottom)
+          H.ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, Sllm.config.scroll_to_bottom)
           local msg = exit_code == 0 and '(empty response)' or string.format('(failed or canceled: exit %d)', exit_code)
-          Ui.append_to_llm_buffer({ msg }, config.scroll_to_bottom)
+          H.ui.append_to_llm_buffer({ msg }, Sllm.config.scroll_to_bottom)
         end
-        notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
-        Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)
-        if config.reset_ctx_each_prompt then CtxMan.reset() end
-        if config.post_hooks then
-          for _, hook in ipairs(config.post_hooks) do
-            local _ = JobMan.exec_cmd_capture_output(hook.command)
+        H.notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
+        H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
+        if Sllm.config.reset_ctx_each_prompt then H.context_manager.reset() end
+        if Sllm.config.post_hooks then
+          for _, hook in ipairs(Sllm.config.post_hooks) do
+            local _ = H.job_manager.exec_cmd_capture_output(hook.command)
           end
         end
       end
@@ -343,140 +686,144 @@ end
 
 --- Cancel the in-flight LLM request, if any.
 ---@return nil
-function M.cancel()
-  if JobMan.is_busy() then
-    JobMan.stop()
-    notify('[sllm] canceling request...', vim.log.levels.WARN)
+function Sllm.cancel()
+  if H.job_manager.is_busy() then
+    H.job_manager.stop()
+    H.notify('[sllm] canceling request...', vim.log.levels.WARN)
   else
-    notify('[sllm] no active llm job', vim.log.levels.INFO)
+    H.notify('[sllm] no active llm job', vim.log.levels.INFO)
   end
 end
 
 --- Start a new chat (clears buffer and state).
 ---@return nil
-function M.new_chat()
-  if JobMan.is_busy() then
-    JobMan.stop()
-    notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
+function Sllm.new_chat()
+  if H.job_manager.is_busy() then
+    H.job_manager.stop()
+    H.notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
-  state.continue = false
-  Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
-  Ui.clean_llm_buffer()
-  notify('[sllm] new chat created', vim.log.levels.INFO)
+  H.state.continue = false
+  H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui.clean_llm_buffer()
+  H.notify('[sllm] new chat created', vim.log.levels.INFO)
 end
 
 --- Focus the existing LLM window or create it.
 ---@return nil
-function M.focus_llm_buffer() Ui.focus_llm_buffer(config.window_type, state.selected_model, state.online_enabled) end
+function Sllm.focus_llm_buffer()
+  H.ui.focus_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+end
 
 --- Toggle visibility of the LLM window.
 ---@return nil
-function M.toggle_llm_buffer() Ui.toggle_llm_buffer(config.window_type, state.selected_model, state.online_enabled) end
+function Sllm.toggle_llm_buffer()
+  H.ui.toggle_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+end
 
 --- Prompt user to select an LLM model.
 ---@return nil
-function M.select_model()
-  local models = Backend.extract_models(config.llm_cmd)
+function Sllm.select_model()
+  local models = H.backend.extract_models(Sllm.config.llm_cmd)
   if not (models and #models > 0) then
-    notify('[sllm] no models found.', vim.log.levels.ERROR)
+    H.notify('[sllm] no models found.', vim.log.levels.ERROR)
     return
   end
-  pick(models, {}, function(item)
+  H.pick(models, {}, function(item)
     if item then
-      state.selected_model = item
-      notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
-      Ui.update_llm_win_title(state.selected_model, state.online_enabled)
+      H.state.selected_model = item
+      H.notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
+      H.ui.update_llm_win_title(H.state.selected_model, H.state.online_enabled)
     else
-      notify('[sllm] llm model not changed', vim.log.levels.WARN)
+      H.notify('[sllm] llm model not changed', vim.log.levels.WARN)
     end
   end)
 end
 
 --- Add a tool to the current context.
 ---@return nil
-function M.add_tool_to_ctx()
-  local tools = Backend.extract_tools(config.llm_cmd)
+function Sllm.add_tool_to_ctx()
+  local tools = H.backend.extract_tools(Sllm.config.llm_cmd)
   if not (tools and #tools > 0) then
-    notify('[sllm] no tools found.', vim.log.levels.ERROR)
+    H.notify('[sllm] no tools found.', vim.log.levels.ERROR)
     return
   end
-  pick(tools, {}, function(item)
+  H.pick(tools, {}, function(item)
     if item then
-      CtxMan.add_tool(item)
-      notify('[sllm] tool added: ' .. item, vim.log.levels.INFO)
+      H.context_manager.add_tool(item)
+      H.notify('[sllm] tool added: ' .. item, vim.log.levels.INFO)
     else
-      notify('[sllm] no tools added.', vim.log.levels.WARN)
+      H.notify('[sllm] no tools added.', vim.log.levels.WARN)
     end
   end)
 end
 
 --- Add the current file (or URL) path to the context.
 ---@return nil
-function M.add_file_to_ctx()
-  local buf_path = Utils.get_path_of_buffer(0)
+function Sllm.add_file_to_ctx()
+  local buf_path = H.utils.get_path_of_buffer(0)
   if buf_path then
-    CtxMan.add_fragment(buf_path)
-    notify('[sllm] context +' .. Utils.get_relpath(buf_path), vim.log.levels.INFO)
+    H.context_manager.add_fragment(buf_path)
+    H.notify('[sllm] context +' .. H.utils.get_relpath(buf_path), vim.log.levels.INFO)
   else
-    notify('[sllm] buffer does not have a path.', vim.log.levels.WARN)
+    H.notify('[sllm] buffer does not have a path.', vim.log.levels.WARN)
   end
 end
 
 --- Prompt user for a URL and add it to context.
 ---@return nil
-function M.add_url_to_ctx()
-  input({ prompt = 'URL: ' }, function(user_input)
+function Sllm.add_url_to_ctx()
+  H.input({ prompt = 'URL: ' }, function(user_input)
     if user_input == '' then
-      notify('[sllm] no URL provided.', vim.log.levels.INFO)
+      H.notify('[sllm] no URL provided.', vim.log.levels.INFO)
       return
     end
-    CtxMan.add_fragment(user_input)
-    notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
+    H.context_manager.add_fragment(user_input)
+    H.notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
   end)
 end
 
 --- Add the current function or entire buffer to context.
 ---@return nil
-function M.add_func_to_ctx()
+function Sllm.add_func_to_ctx()
   local text
-  if Utils.is_mode_visual() then
-    text = Utils.get_visual_selection()
+  if H.utils.is_mode_visual() then
+    text = H.utils.get_visual_selection()
     if text:match('^%s*$') then
-      notify('[sllm] empty selection.', vim.log.levels.WARN)
+      H.notify('[sllm] empty selection.', vim.log.levels.WARN)
       return
     end
   else
     local bufnr = vim.api.nvim_get_current_buf()
     text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
     if text:match('^%s*$') then
-      notify('[sllm] file is empty.', vim.log.levels.WARN)
+      H.notify('[sllm] file is empty.', vim.log.levels.WARN)
       return
     end
   end
-  CtxMan.add_function(text)
-  notify('[sllm] added function to context.', vim.log.levels.INFO)
+  H.context_manager.add_function(text)
+  H.notify('[sllm] added function to context.', vim.log.levels.INFO)
 end
 
 --- Add the current visual selection as a code snippet.
 ---@return nil
-function M.add_sel_to_ctx()
-  local text = Utils.get_visual_selection()
+function Sllm.add_sel_to_ctx()
+  local text = H.utils.get_visual_selection()
   if text:match('^%s*$') then
-    notify('[sllm] empty selection.', vim.log.levels.WARN)
+    H.notify('[sllm] empty selection.', vim.log.levels.WARN)
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
-  CtxMan.add_snip(text, Utils.get_relpath(Utils.get_path_of_buffer(bufnr)), vim.bo[bufnr].filetype)
-  notify('[sllm] added selection to context.', vim.log.levels.INFO)
+  H.context_manager.add_snip(text, H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)), vim.bo[bufnr].filetype)
+  H.notify('[sllm] added selection to context.', vim.log.levels.INFO)
 end
 
 --- Add current buffer diagnostics to context as a snippet.
 ---@return nil
-function M.add_diag_to_ctx()
+function Sllm.add_diag_to_ctx()
   local bufnr = vim.api.nvim_get_current_buf()
   local diags = vim.diagnostic.get(bufnr)
   if not diags or #diags == 0 then
-    notify('[sllm] no diagnostics found in buffer.', vim.log.levels.INFO)
+    H.notify('[sllm] no diagnostics found in buffer.', vim.log.levels.INFO)
     return
   end
   local lines = {}
@@ -485,154 +832,157 @@ function M.add_diag_to_ctx()
     local loc = ('[L%d,C%d]'):format((d.lnum or 0) + 1, (d.col or 0) + 1)
     table.insert(lines, loc .. ' ' .. msg)
   end
-  CtxMan.add_snip(
+  H.context_manager.add_snip(
     'diagnostics:\n' .. table.concat(lines, '\n'),
-    Utils.get_relpath(Utils.get_path_of_buffer(bufnr)),
+    H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)),
     vim.bo[bufnr].filetype
   )
-  notify('[sllm] added diagnostics to context.', vim.log.levels.INFO)
+  H.notify('[sllm] added diagnostics to context.', vim.log.levels.INFO)
 end
 
 --- Prompt for a shell command, run it, and add its output to context.
 ---@return nil
-function M.add_cmd_out_to_ctx()
-  input({ prompt = 'Command: ' }, function(cmd_raw)
-    notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
-    local res_out = JobMan.exec_cmd_capture_output(cmd_raw)
-    CtxMan.add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
-    notify('[sllm] added command output to context.', vim.log.levels.INFO)
+function Sllm.add_cmd_out_to_ctx()
+  H.input({ prompt = 'Command: ' }, function(cmd_raw)
+    H.notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
+    local res_out = H.job_manager.exec_cmd_capture_output(cmd_raw)
+    H.context_manager.add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
+    H.notify('[sllm] added command output to context.', vim.log.levels.INFO)
   end)
 end
 
 --- Reset the LLM context (fragments, snippets, tools, functions).
 ---@return nil
-function M.reset_context()
-  CtxMan.reset()
-  notify('[sllm] context reset.', vim.log.levels.INFO)
+function Sllm.reset_context()
+  H.context_manager.reset()
+  H.notify('[sllm] context reset.', vim.log.levels.INFO)
 end
 
 --- Set the system prompt on-the-fly.
 ---@return nil
-function M.set_system_prompt()
-  input({ prompt = 'System Prompt: ', default = state.system_prompt or '' }, function(user_input)
+function Sllm.set_system_prompt()
+  H.input({ prompt = 'System Prompt: ', default = H.state.system_prompt or '' }, function(user_input)
     if user_input == nil then
-      notify('[sllm] system prompt not changed.', vim.log.levels.INFO)
+      H.notify('[sllm] system prompt not changed.', vim.log.levels.INFO)
       return
     end
     if user_input == '' then
-      state.system_prompt = nil
-      notify('[sllm] system prompt cleared.', vim.log.levels.INFO)
+      H.state.system_prompt = nil
+      H.notify('[sllm] system prompt cleared.', vim.log.levels.INFO)
     else
-      state.system_prompt = user_input
-      notify('[sllm] system prompt updated.', vim.log.levels.INFO)
+      H.state.system_prompt = user_input
+      H.notify('[sllm] system prompt updated.', vim.log.levels.INFO)
     end
   end)
 end
 
 --- Show available options for the current model.
 ---@return nil
-function M.show_model_options()
-  if not state.selected_model then
-    notify('[sllm] no model selected.', vim.log.levels.WARN)
+function Sllm.show_model_options()
+  if not H.state.selected_model then
+    H.notify('[sllm] no model selected.', vim.log.levels.WARN)
     return
   end
 
   -- Run `llm models --options -m <model>` to show available options
-  local cmd = config.llm_cmd .. ' models --options -m ' .. vim.fn.shellescape(state.selected_model)
+  local cmd = Sllm.config.llm_cmd .. ' models --options -m ' .. vim.fn.shellescape(H.state.selected_model)
   local output = vim.fn.systemlist(cmd)
 
   -- Display in a floating window or show in the LLM buffer
-  Ui.show_llm_buffer(config.window_type, state.selected_model, state.online_enabled)
-  Ui.append_to_llm_buffer({ '', '> 📋 Available options for ' .. state.selected_model, '' }, config.scroll_to_bottom)
-  Ui.append_to_llm_buffer(output, config.scroll_to_bottom)
-  Ui.append_to_llm_buffer({ '' }, config.scroll_to_bottom)
-  notify('[sllm] showing model options', vim.log.levels.INFO)
+  H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui.append_to_llm_buffer(
+    { '', '> 📋 Available options for ' .. H.state.selected_model, '' },
+    Sllm.config.scroll_to_bottom
+  )
+  H.ui.append_to_llm_buffer(output, Sllm.config.scroll_to_bottom)
+  H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
+  H.notify('[sllm] showing model options', vim.log.levels.INFO)
 end
 
 --- Set or update a model option.
 ---@return nil
-function M.set_model_option()
-  input({ prompt = 'Option key: ' }, function(key)
+function Sllm.set_model_option()
+  H.input({ prompt = 'Option key: ' }, function(key)
     if not key or key == '' then
-      notify('[sllm] no key provided.', vim.log.levels.INFO)
+      H.notify('[sllm] no key provided.', vim.log.levels.INFO)
       return
     end
-    input({ prompt = 'Option value for "' .. key .. '": ' }, function(value)
+    H.input({ prompt = 'Option value for "' .. key .. '": ' }, function(value)
       if not value or value == '' then
-        notify('[sllm] no value provided.', vim.log.levels.INFO)
+        H.notify('[sllm] no value provided.', vim.log.levels.INFO)
         return
       end
       -- Try to convert to number if it looks like a number
       local num_value = tonumber(value)
-      state.model_options[key] = num_value or value
-      notify('[sllm] set option: ' .. key .. ' = ' .. value, vim.log.levels.INFO)
+      H.state.model_options[key] = num_value or value
+      H.notify('[sllm] set option: ' .. key .. ' = ' .. value, vim.log.levels.INFO)
     end)
   end)
 end
 
 --- Reset all model options.
 ---@return nil
-function M.reset_model_options()
-  state.model_options = {}
-  notify('[sllm] model options reset.', vim.log.levels.INFO)
+function Sllm.reset_model_options()
+  H.state.model_options = {}
+  H.notify('[sllm] model options reset.', vim.log.levels.INFO)
 end
 
 --- Toggle the online feature (adds/removes online=1 option).
 ---@return nil
-function M.toggle_online()
-  state.online_enabled = not state.online_enabled
+function Sllm.toggle_online()
+  H.state.online_enabled = not H.state.online_enabled
 
-  if state.online_enabled then
-    state.model_options.online = 1
-    notify('[sllm] 🌐 Online mode enabled', vim.log.levels.INFO)
+  if H.state.online_enabled then
+    H.state.model_options.online = 1
+    H.notify('[sllm] 🌐 Online mode enabled', vim.log.levels.INFO)
   else
-    state.model_options.online = nil
-    notify('[sllm] 📴 Online mode disabled', vim.log.levels.INFO)
+    H.state.model_options.online = nil
+    H.notify('[sllm] 📴 Online mode disabled', vim.log.levels.INFO)
   end
 
   -- Update the UI title to reflect the change
-  Ui.update_llm_win_title(state.selected_model, state.online_enabled)
+  H.ui.update_llm_win_title(H.state.selected_model, H.state.online_enabled)
 end
 
 --- Get online status for UI display.
 ---@return boolean
-function M.is_online_enabled() return state.online_enabled end
+function Sllm.is_online_enabled() return H.state.online_enabled end
 
 --- Copy the first code block from the LLM buffer to the clipboard.
 ---@return nil
-function M.copy_first_code_block()
-  if Ui.copy_first_code_block() then
-    notify('[sllm] first code block copied to clipboard.', vim.log.levels.INFO)
+function Sllm.copy_first_code_block()
+  if H.ui.copy_first_code_block() then
+    H.notify('[sllm] first code block copied to clipboard.', vim.log.levels.INFO)
   else
-    notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
+    H.notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
   end
 end
 
 --- Copy the last code block from the LLM buffer to the clipboard.
 ---@return nil
-function M.copy_last_code_block()
-  if Ui.copy_last_code_block() then
-    notify('[sllm] last code block copied to clipboard.', vim.log.levels.INFO)
+function Sllm.copy_last_code_block()
+  if H.ui.copy_last_code_block() then
+    H.notify('[sllm] last code block copied to clipboard.', vim.log.levels.INFO)
   else
-    notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
+    H.notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
   end
 end
 
 --- Copy the last response from the LLM buffer to the clipboard.
 ---@return nil
-function M.copy_last_response()
-  if Ui.copy_last_response() then
-    notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
+function Sllm.copy_last_response()
+  if H.ui.copy_last_response() then
+    H.notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
   else
-    notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
+    H.notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
   end
 end
 
 --- Complete code at cursor position.
 ---@return nil
-function M.complete_code()
-  if JobMan.is_busy() then
-    notify('[sllm] already running, please wait.', vim.log.levels.WARN)
+function Sllm.complete_code()
+  if H.job_manager.is_busy() then
+    H.notify('[sllm] already running, please wait.', vim.log.levels.WARN)
     return
   end
 
@@ -673,16 +1023,16 @@ function M.complete_code()
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 
   -- Build LLM command - no continuation, no usage stats for cleaner output
-  local cmd = config.llm_cmd .. ' --no-stream'
-  if state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(state.selected_model) end
+  local cmd = Sllm.config.llm_cmd .. ' --no-stream'
+  if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
   cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
 
-  notify('[sllm] requesting completion...', vim.log.levels.INFO)
+  H.notify('[sllm] requesting completion...', vim.log.levels.INFO)
 
   -- Collect the completion output
   local completion_output = {}
 
-  JobMan.start(cmd, function(line)
+  H.job_manager.start(cmd, function(line)
     if line ~= '' then table.insert(completion_output, line) end
   end, function(exit_code)
     if exit_code == 0 and #completion_output > 0 then
@@ -725,24 +1075,24 @@ function M.complete_code()
         local new_col = #new_lines[#new_lines] - #line_after
         vim.api.nvim_win_set_cursor(0, { new_row, new_col })
 
-        notify('[sllm] completion inserted', vim.log.levels.INFO)
+        H.notify('[sllm] completion inserted', vim.log.levels.INFO)
       else
-        notify('[sllm] received empty completion', vim.log.levels.WARN)
+        H.notify('[sllm] received empty completion', vim.log.levels.WARN)
       end
     else
-      notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+      H.notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
     end
   end)
 end
 
 --- Browse chat history, load a conversation, and continue from it.
 ---@return nil
-function M.browse_history()
-  local max_entries = config.history_max_entries or 1000
-  local entries = HistMan.fetch_history(config.llm_cmd, max_entries)
+function Sllm.browse_history()
+  local max_entries = Sllm.config.history_max_entries or 1000
+  local entries = H.history_manager.fetch_history(Sllm.config.llm_cmd, max_entries)
 
   if not entries or #entries == 0 then
-    notify('[sllm] no history found.', vim.log.levels.INFO)
+    H.notify('[sllm] no history found.', vim.log.levels.INFO)
     return
   end
 
@@ -792,7 +1142,7 @@ function M.browse_history()
   end
 
   if #conv_data == 0 then
-    notify('[sllm] no conversations found.', vim.log.levels.INFO)
+    H.notify('[sllm] no conversations found.', vim.log.levels.INFO)
     return
   end
 
@@ -801,9 +1151,9 @@ function M.browse_history()
 
   local display_list = vim.tbl_map(function(c) return c.display end, conv_data)
 
-  pick(display_list, { prompt = 'Select conversation to continue:' }, function(_, idx)
+  H.pick(display_list, { prompt = 'Select conversation to continue:' }, function(_, idx)
     if not idx then
-      notify('[sllm] selection canceled.', vim.log.levels.INFO)
+      H.notify('[sllm] selection canceled.', vim.log.levels.INFO)
       return
     end
 
@@ -811,29 +1161,29 @@ function M.browse_history()
     if not selected then return end
 
     -- Update state to continue this conversation
-    state.selected_model = selected.model
-    state.continue = selected.id -- Store conversation ID for continuation
+    H.state.selected_model = selected.model
+    H.state.continue = selected.id -- Store conversation ID for continuation
 
     -- Display the conversation
-    Ui.show_llm_buffer(config.window_type, selected.model, state.online_enabled)
-    Ui.clean_llm_buffer()
+    H.ui.show_llm_buffer(Sllm.config.window_type, selected.model, H.state.online_enabled)
+    H.ui.clean_llm_buffer()
 
-    Ui.append_to_llm_buffer({
+    H.ui.append_to_llm_buffer({
       '# Loaded conversation: ' .. selected.id:sub(1, 10) .. '...',
       '*(New prompts will continue this conversation)*',
       '',
-    }, config.scroll_to_bottom)
+    }, Sllm.config.scroll_to_bottom)
 
     for _, entry in ipairs(selected.entries) do
-      local formatted = HistMan.format_conversation_entry(entry)
+      local formatted = H.history_manager.format_conversation_entry(entry)
       -- Ensure formatted is a table before appending
       if formatted and type(formatted) == 'table' and #formatted > 0 then
-        Ui.append_to_llm_buffer(formatted, config.scroll_to_bottom)
+        H.ui.append_to_llm_buffer(formatted, Sllm.config.scroll_to_bottom)
       end
     end
 
-    notify('[sllm] loaded ' .. #selected.entries .. ' messages, ready to continue', vim.log.levels.INFO)
+    H.notify('[sllm] loaded ' .. #selected.entries .. ' messages, ready to continue', vim.log.levels.INFO)
   end)
 end
 
-return M
+return Sllm

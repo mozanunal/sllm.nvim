@@ -71,9 +71,14 @@ T['render']['replaces multiple variables'] = function()
   MiniTest.expect.equality(result, 'Hi Ada!')
 end
 
-T['render']['leaves unmatched variables empty'] = function()
+T['render']['replaces missing variables with empty string'] = function()
   local result = Utils.render('Hello ${name}!', {})
-  MiniTest.expect.equality(result, 'Hello ${name}!')
+  MiniTest.expect.equality(result, 'Hello !')
+end
+
+T['render']['converts non-string values to string'] = function()
+  local result = Utils.render('ID: ${id}', { id = 42 })
+  MiniTest.expect.equality(result, 'ID: 42')
 end
 
 T['render']['handles underscores in variable names'] = function()
@@ -246,6 +251,54 @@ T['check_buffer_visible']['returns nil for hidden buffer'] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   MiniTest.expect.equality(Utils.check_buffer_visible(buf), nil)
   vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+-- =============================================================================
+-- strip_ansi_codes tests
+-- =============================================================================
+
+T['strip_ansi_codes'] = MiniTest.new_set()
+
+T['strip_ansi_codes']['removes ANSI color codes'] = function()
+  local text = '\27[31mRed text\27[0m'
+  MiniTest.expect.equality(Utils.strip_ansi_codes(text), 'Red text')
+end
+
+T['strip_ansi_codes']['handles text without ANSI codes'] = function()
+  local text = 'Plain text'
+  MiniTest.expect.equality(Utils.strip_ansi_codes(text), 'Plain text')
+end
+
+T['strip_ansi_codes']['handles empty string'] = function() MiniTest.expect.equality(Utils.strip_ansi_codes(''), '') end
+
+-- =============================================================================
+-- parse_json tests
+-- =============================================================================
+
+T['parse_json'] = MiniTest.new_set()
+
+T['parse_json']['parses valid JSON'] = function()
+  local json_str = '{"name":"test","value":42}'
+  local result = Utils.parse_json(json_str)
+  MiniTest.expect.equality(result.name, 'test')
+  MiniTest.expect.equality(result.value, 42)
+end
+
+T['parse_json']['returns nil for invalid JSON'] = function()
+  local result = Utils.parse_json('not json')
+  MiniTest.expect.equality(result, nil)
+end
+
+T['parse_json']['handles empty string'] = function()
+  local result = Utils.parse_json('')
+  MiniTest.expect.equality(result, nil)
+end
+
+T['parse_json']['parses JSON array'] = function()
+  local json_str = '[1,2,3]'
+  local result = Utils.parse_json(json_str)
+  MiniTest.expect.equality(#result, 3)
+  MiniTest.expect.equality(result[1], 1)
 end
 
 return T

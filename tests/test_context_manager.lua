@@ -4,31 +4,6 @@ local CtxMan = require('sllm.context_manager')
 local T = MiniTest.new_set({ name = 'context_manager' })
 
 -- =============================================================================
--- render_template tests
--- =============================================================================
-
-T['render_template'] = MiniTest.new_set()
-
-T['render_template']['replaces template variables with provided values'] = function()
-  local template = 'Hello, ${name}! Your id is ${id}.'
-  local vars = { name = 'Ada', id = 42 }
-  MiniTest.expect.equality(CtxMan.render_template(template, vars), 'Hello, Ada! Your id is 42.')
-end
-
-T['render_template']['replaces absent variables with nil string'] = function()
-  local template = 'Goodbye, ${missing}!'
-  MiniTest.expect.equality(CtxMan.render_template(template, {}), 'Goodbye, nil!')
-end
-
-T['render_template']['handles empty template'] = function()
-  MiniTest.expect.equality(CtxMan.render_template('', { name = 'test' }), '')
-end
-
-T['render_template']['handles template with no variables'] = function()
-  MiniTest.expect.equality(CtxMan.render_template('No variables', {}), 'No variables')
-end
-
--- =============================================================================
 -- Context management tests
 -- =============================================================================
 

@@ -1,18 +1,19 @@
----@module "sllm.utils"
-local M = {}
+-- Module definition ==========================================================
+local Utils = {}
 
+-- Public API =================================================================
 --- Print all elements of `t`, each on its own line separated by "===".
 ---@param t string[] List of strings to print.
-function M.print_table(t) print(table.concat(t, '\n===')) end
+function Utils.print_table(t) print(table.concat(t, '\n===')) end
 
 --- Check if a buffer handle is valid.
 ---@param buf integer? Buffer handle (or `nil`).
 ---@return boolean
-function M.buf_is_valid(buf) return buf ~= nil and vim.api.nvim_buf_is_valid(buf) end
+function Utils.buf_is_valid(buf) return buf ~= nil and vim.api.nvim_buf_is_valid(buf) end
 
 --- Return `true` if the current mode is any Visual mode (`v`, `V`, or Ctrl+V).
 ---@return boolean
-function M.is_mode_visual()
+function Utils.is_mode_visual()
   local current_mode = vim.api.nvim_get_mode().mode
   -- \22 is Ctrl-V
   return current_mode:match('^[vV\22]$') ~= nil
@@ -20,12 +21,14 @@ end
 
 --- Get text of the current visual selection.
 ---@return string  The selected text (lines joined with "\n").
-function M.get_visual_selection() return table.concat(vim.fn.getregion(vim.fn.getpos('v'), vim.fn.getpos('.')), '\n') end
+function Utils.get_visual_selection()
+  return table.concat(vim.fn.getregion(vim.fn.getpos('v'), vim.fn.getpos('.')), '\n')
+end
 
 --- Get the filesystem path of a buffer, or `nil` if it has none.
 ---@param buf integer Buffer handle.
 ---@return string?  File path or `nil` if the buffer is unnamed.
-function M.get_path_of_buffer(buf)
+function Utils.get_path_of_buffer(buf)
   local buf_name = vim.api.nvim_buf_get_name(buf)
   if buf_name == '' then
     return nil
@@ -37,7 +40,7 @@ end
 --- Convert an absolute path to one relative to the cwd.
 ---@param abspath string?  Absolute path (or `nil`).
 ---@return string?  Relative path if possible; otherwise original or `nil`.
-function M.get_relpath(abspath)
+function Utils.get_relpath(abspath)
   if abspath == nil then return abspath end
   local cwd = vim.uv.cwd()
   if cwd == nil then return abspath end
@@ -52,8 +55,8 @@ end
 --- Return the window ID showing buffer `buf`, or `nil` if not visible.
 ---@param buf integer Buffer handle.
 ---@return integer?  Window ID or `nil`.
-function M.check_buffer_visible(buf)
-  if not M.buf_is_valid(buf) then return nil end
+function Utils.check_buffer_visible(buf)
+  if not Utils.buf_is_valid(buf) then return nil end
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == buf then return win end
   end
@@ -62,17 +65,16 @@ end
 
 --- Simple template renderer: replaces `${key}` with `env[key]`.
 ---@param tmpl string             Template containing `${var}` placeholders.
----@param env table<string,string>  Lookup table for replacements.
+---@param env table<string,any>   Lookup table for replacements.
 ---@return string  Rendered string.
-function M.render(tmpl, env)
-  -- wrap in () so we only return the substituted string (ignore count)
-  return (tmpl:gsub('%${([%w_]+)}', env))
+function Utils.render(tmpl, env)
+  return (tmpl:gsub('%${(.-)}', function(key) return tostring(env[key] or '') end))
 end
 
 --- Extract all code blocks from buffer lines.
 ---@param lines string[]  Buffer lines to parse.
 ---@return string[]  List of code block contents (without fence markers).
-function M.extract_code_blocks(lines)
+function Utils.extract_code_blocks(lines)
   local code_blocks = {}
   local in_code_block = false
   local current_block = {}
@@ -100,4 +102,24 @@ function M.extract_code_blocks(lines)
   return code_blocks
 end
 
-return M
+--- Remove ANSI escape codes from a string.
+---@param text string  The input string possibly containing ANSI escape codes.
+---@return string  The string with ANSI escape codes removed.
+function Utils.strip_ansi_codes(text)
+  local ansi_escape_pattern = '[\27\155][][()#;?%][0-9;]*[A-Za-z@^_`{|}~]'
+  return text:gsub(ansi_escape_pattern, '')
+end
+
+--- Parse JSON string safely with error handling.
+---@param json_str string  JSON string to parse.
+---@return table?  Parsed table or nil on error.
+function Utils.parse_json(json_str)
+  local ok, result = pcall(vim.fn.json_decode, json_str)
+  if ok then
+    return result
+  else
+    return nil
+  end
+end
+
+return Utils

@@ -24,15 +24,9 @@ local minidoc = require('mini.doc')
 minidoc.setup({})
 
 -- Generate documentation
+-- Only include init.lua as it's the public API
 local input_files = {
   'lua/sllm/init.lua',
-  'lua/sllm/backend/llm.lua',
-  'lua/sllm/context_manager.lua',
-  'lua/sllm/history_manager.lua',
-  'lua/sllm/job_manager.lua',
-  'lua/sllm/ui.lua',
-  'lua/sllm/utils.lua',
-  'lua/sllm/health_check.lua',
 }
 
 local output_file = 'doc/sllm.txt'

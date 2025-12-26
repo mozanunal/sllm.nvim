@@ -1,10 +1,16 @@
 ---@module "sllm.backend.llm"
-local M = {}
+-- Module definition ==========================================================
+local Backend = {}
+local H = {}
+
+-- Helper data ================================================================
+H.utils = require('sllm.utils')
 
 ---Run `llm models` and parse out just the model names.
 ---@param llm_cmd string Command to run the LLM CLI.
 ---@return string[]  List of available model names.
-function M.extract_models(llm_cmd)
+-- Public API =================================================================
+function Backend.extract_models(llm_cmd)
   local models = vim.fn.systemlist(llm_cmd .. ' models')
   local only_models = {}
   for _, line in ipairs(models) do
@@ -18,7 +24,7 @@ end
 ---Run `llm models default` and return the default model name.
 ---@param llm_cmd string Command to run the LLM CLI.
 ---@return string List of available model names.
-function M.get_default_model(llm_cmd)
+function Backend.get_default_model(llm_cmd)
   local output = vim.fn.system(llm_cmd .. ' models default')
   -- remove trailing whitespace: the output includes a newline at its end
   return output:match('(.-)%s*$')
@@ -27,11 +33,11 @@ end
 ---Run `llm tools list --json` and extract tool names.
 ---@param llm_cmd string Command to run the LLM CLI.
 ---@return string[]  List of tool names.
-function M.extract_tools(llm_cmd)
+function Backend.extract_tools(llm_cmd)
   local json_string = vim.fn.system(llm_cmd .. ' tools list --json')
-  local spec = vim.fn.json_decode(json_string)
+  local spec = H.utils.parse_json(json_string)
   local names = {}
-  if spec.tools then
+  if spec and spec.tools then
     for _, tool in ipairs(spec.tools) do
       table.insert(names, tool.name)
     end
@@ -42,7 +48,7 @@ end
 ---Check if a file should be treated as an attachment (image, PDF, etc.)
 ---@param filename string File path to check.
 ---@return boolean True if the file should use `-a`, false if it should use `-f`.
-local function is_attachment(filename)
+H.is_attachment = function(filename)
   local attachment_extensions = {
     -- Images
     'png',
@@ -103,7 +109,7 @@ end
 ---@param system_prompt  string?            Pass `-s <prompt>` for system prompt.
 ---@param model_options table<string,any>? Pass `-o <key> <value>` for each model option.
 ---@return string                        The assembled shell command.
-function M.llm_cmd(
+function Backend.llm_cmd(
   llm_cmd,
   user_input,
   continue,
@@ -132,7 +138,7 @@ function M.llm_cmd(
   if ctx_files then
     for _, filename in ipairs(ctx_files) do
       -- Use -a for attachments (images, PDFs, etc.), -f for text files
-      local flag = is_attachment(filename) and '-a' or '-f'
+      local flag = H.is_attachment(filename) and '-a' or '-f'
       cmd = cmd .. ' ' .. flag .. ' ' .. vim.fn.shellescape(filename) .. ' '
     end
   end
@@ -160,4 +166,4 @@ function M.llm_cmd(
   return cmd
 end
 
-return M
+return Backend

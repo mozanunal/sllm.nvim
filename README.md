@@ -158,6 +158,14 @@ If the offered change is small, return only the changed part or function, not th
     -- Example: log completion time
     { command = "date >> ~/.sllm_history.log" },
   },
+  -- See the "Customizing the UI" section for more details
+  ui = {
+    -- Text displayed above the LLM response
+    markdown_prompt_header = '# 󰄛',
+    -- Prompt displayed by 'ask_llm'
+    ask_llm_prompt = ' 󰄛  > ',
+    -- Other UI elements will use their default values
+  },
 })
 ```
 
@@ -178,6 +186,7 @@ If the offered change is small, return only the changed part or function, not th
 | `history_max_entries`   | integer           | `1000`                                 | Maximum number of history log entries to fetch when browsing conversations. Increase for more history, decrease for faster loading.       |
 | `system_prompt`         | string/nil        | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
 | `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
+| `ui`                    | table             | (see defaults)                         | A table of UI elements.                                                                                                                   |
 
 ## Keybindings & Commands
 
@@ -255,6 +264,26 @@ require("sllm").setup({
 -- Now you can define your own from scratch
 local sllm = require("sllm")
 vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
+```
+
+### Customizing the UI
+
+You can change UI elements displayed by the plugin. Here are the defaults:
+
+```lua
+-- In your setup() call:
+require("sllm").setup({
+  ui = {
+    ask_llm_prompt = 'Prompt: ',
+    add_url_prompt = 'URL: ',
+    add_cmd_prompt = 'Command: ',
+    markdown_prompt_header = '> 💬 Prompt:',
+    markdown_response_header = '> 🤖 Response',
+    set_system_prompt = 'System Prompt: ',
+
+    -- You can omit a key to use the default
+  },
+})
 ```
 
 ---

@@ -258,9 +258,11 @@ function UI.copy_last_code_block()
 end
 
 --- Copy the last response from the LLM buffer to the clipboard.
---- Extracts content from the last "🤖 Response" marker to the end.
+--- Extracts content from the last response marker to the end.
+---@param response_header? string  The response header to search for (default: '> 🤖 Response').
 ---@return boolean  `true` if content was copied; `false` if no response found.
-function UI.copy_last_response()
+function UI.copy_last_response(response_header)
+  response_header = response_header or '> 🤖 Response'
   local buf = H.ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
@@ -269,7 +271,7 @@ function UI.copy_last_response()
   -- Find the last occurrence of the response marker
   local last_response_idx = nil
   for i = #lines, 1, -1 do
-    if lines[i]:match('^> 🤖 Response') then
+    if lines[i]:match('^' .. vim.pesc(response_header)) then
       last_response_idx = i
       break
     end

@@ -389,6 +389,7 @@
 ---     markdown_prompt_header = '> 💬 Prompt:',
 ---     markdown_response_header = '> 🤖 Response',
 ---     set_system_prompt = 'System Prompt: ',
+---     -- Note: markdown headers are used in both live chat and history
 ---   }
 --- <
 ---
@@ -1010,7 +1011,7 @@ end
 --- Copy the last response from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_last_response()
-  if H.ui.copy_last_response() then
+  if H.ui.copy_last_response(Sllm.config.ui.markdown_response_header) then
     H.notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
@@ -1214,7 +1215,7 @@ function Sllm.browse_history()
     }, Sllm.config.scroll_to_bottom)
 
     for _, entry in ipairs(selected.entries) do
-      local formatted = H.history_manager.format_conversation_entry(entry)
+      local formatted = H.history_manager.format_conversation_entry(entry, Sllm.config.ui)
       -- Ensure formatted is a table before appending
       if formatted and type(formatted) == 'table' and #formatted > 0 then
         H.ui.append_to_llm_buffer(formatted, Sllm.config.scroll_to_bottom)

@@ -80,6 +80,7 @@ All configuration options with their defaults: >lua
     model_options = {},         -- Model-specific options (-o flags)
     online_enabled = false,     -- Enable web search by default
     history_max_entries = 1000, -- Max history entries to fetch
+    ui = {...},                 -- See |Sllm-uiconfig|
   })
 <
 ## Configuration Options ~
@@ -123,6 +124,8 @@ in status bar). Not all models support this.
 
 `history_max_entries` - Maximum number of conversation history entries to
 fetch. Higher values show more history but may be slower.
+
+`ui` - Table of UI elements (prompts and headers). See |Sllm-uiconfig|.
 
 Keymaps
 
@@ -348,6 +351,25 @@ Status bar examples:
 Note: Not all models support online mode. Check your model provider's
 documentation.
 
+UIConfig
+
+                                                                *Sllm-uiconfig*
+# UI configuration ~
+
+Prompts and headers shown to the user through the Sllm UI. These defaults
+can be overriden:
+>lua
+  ui = {
+    ask_llm_prompt = 'Prompt: ',
+    add_url_prompt = 'URL: ',
+    add_cmd_prompt = 'Command: ',
+    markdown_prompt_header = '> 💬 Prompt:',
+    markdown_response_header = '> 🤖 Response',
+    set_system_prompt = 'System Prompt: ',
+    -- Note: markdown headers are used in both live chat and history
+  }
+<
+
 Class ~
 {SllmKeymaps}
 Fields ~
@@ -406,6 +428,16 @@ Fields ~
 {model_options} `(table<string,any>?)`   Model-specific options to pass with -o flag.
 {online_enabled} `(boolean?)`            Enable online/web mode by default.
 {history_max_entries} `(integer?)`       Maximum number of history entries to fetch (default: 1000).
+{ui} `(SllmUIConfig|nil)`                Prompts and text used in the UI.
+
+Class ~
+{SllmUIConfig}
+{ask_llm_prompt} `(string)`              Prompt displayed by the ask_llm function
+{add_url_prompt} `(string)`              Prompt displayed by the add_url_to_ctx function
+{add_cmd_prompt} `(string)`              Prompt displayed by the add_cmd_out_to_ctx function
+{markdown_prompt_header} `(string)`      Text displayed above the user prompt
+{markdown_response_header} `(string)`    Text displayed above the LLM response
+{set_system_prompt} `(string)`           Prompt displayed when modifying the system prompt
 
                                                                   *Sllm.setup()*
                              `Sllm.setup`({config})

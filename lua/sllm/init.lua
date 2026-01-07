@@ -78,6 +78,7 @@
 ---     model_options = {},         -- Model-specific options (-o flags)
 ---     online_enabled = false,     -- Enable web search by default
 ---     history_max_entries = 1000, -- Max history entries to fetch
+---     ui = {...},                 -- See |Sllm-uiconfig|
 ---   })
 --- <
 --- ## Configuration Options ~
@@ -121,6 +122,8 @@
 ---
 --- `history_max_entries` - Maximum number of conversation history entries to
 --- fetch. Higher values show more history but may be slower.
+---
+--- `ui` - Table of UI elements (prompts and headers). See |Sllm-uiconfig|.
 ---
 ---@toc_entry Keymaps
 ---@text
@@ -371,6 +374,25 @@
 --- Note: Not all models support online mode. Check your model provider's
 --- documentation.
 ---
+---@toc_entry UIConfig
+---@text
+---                                                                 *Sllm-uiconfig*
+--- # UI configuration ~
+---
+--- Prompts and headers shown to the user through the Sllm UI. These defaults
+--- can be overriden:
+--- >lua
+---   ui = {
+---     ask_llm_prompt = 'Prompt: ',
+---     add_url_prompt = 'URL: ',
+---     add_cmd_prompt = 'Command: ',
+---     markdown_prompt_header = '> 💬 Prompt:',
+---     markdown_response_header = '> 🤖 Response',
+---     set_system_prompt = 'System Prompt: ',
+---     -- Note: markdown headers are used in both live chat and history
+---   }
+--- <
+---
 ---@tag sllm.nvim
 ---@tag sllm
 
@@ -424,6 +446,16 @@
 ---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 ---@field online_enabled boolean?            Enable online/web mode by default.
 ---@field history_max_entries integer?       Maximum number of history entries to fetch (default: 1000).
+---@field ui SllmUIConfig|nil                Prompts and text used in the UI.
+---
+---@class SllmUIConfig
+---@field ask_llm_prompt string              Prompt displayed by the ask_llm function
+---@field add_url_prompt string              Prompt displayed by the add_url_to_ctx function
+---@field add_cmd_prompt string              Prompt displayed by the add_cmd_out_to_ctx function
+---@field markdown_prompt_header string      Text displayed above the user prompt
+---@field markdown_response_header string    Text displayed above the LLM response
+---@field set_system_prompt string           Prompt displayed when modifying the system prompt
+---
 -- Module definition ==========================================================
 local Sllm = {}
 local H = {}
@@ -471,6 +503,14 @@ If the offered change is small, return only the changed part or function, not th
     copy_last_response = '<leader>sE',
     complete_code = '<leader><Tab>',
     browse_history = '<leader>sh',
+  },
+  ui = {
+    ask_llm_prompt = 'Prompt: ',
+    add_url_prompt = 'URL: ',
+    add_cmd_prompt = 'Command: ',
+    markdown_prompt_header = '> 💬 Prompt:',
+    markdown_response_header = '> 🤖 Response',
+    set_system_prompt = 'System Prompt: ',
   },
 })
 
@@ -605,7 +645,7 @@ end
 ---@return nil
 function Sllm.ask_llm()
   if H.utils.is_mode_visual() then Sllm.add_sel_to_ctx() end
-  H.input({ prompt = 'Prompt: ' }, function(user_input)
+  H.input({ prompt = Sllm.config.ui.ask_llm_prompt }, function(user_input)
     if user_input == '' then
       H.notify('[sllm] no prompt provided.', vim.log.levels.INFO)
       return
@@ -633,7 +673,7 @@ function Sllm.ask_llm()
 
     local ctx = H.context_manager.get()
     local prompt = H.context_manager.render_prompt_ui(user_input)
-    H.ui.append_to_llm_buffer({ '', '> 💬 Prompt:', '' }, Sllm.config.scroll_to_bottom)
+    H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_prompt_header, '' }, Sllm.config.scroll_to_bottom)
     H.ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
     H.ui.start_loading_indicator()
 
@@ -658,7 +698,7 @@ function Sllm.ask_llm()
       function(line)
         if not first_line then
           H.ui.stop_loading_indicator()
-          H.ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, Sllm.config.scroll_to_bottom)
+          H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_response_header, '' }, Sllm.config.scroll_to_bottom)
           first_line = true
         end
         H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom)
@@ -667,7 +707,7 @@ function Sllm.ask_llm()
       function(exit_code)
         H.ui.stop_loading_indicator()
         if not first_line then
-          H.ui.append_to_llm_buffer({ '', '> 🤖 Response', '' }, Sllm.config.scroll_to_bottom)
+          H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_response_header, '' }, Sllm.config.scroll_to_bottom)
           local msg = exit_code == 0 and '(empty response)' or string.format('(failed or canceled: exit %d)', exit_code)
           H.ui.append_to_llm_buffer({ msg }, Sllm.config.scroll_to_bottom)
         end
@@ -772,7 +812,7 @@ end
 --- Prompt user for a URL and add it to context.
 ---@return nil
 function Sllm.add_url_to_ctx()
-  H.input({ prompt = 'URL: ' }, function(user_input)
+  H.input({ prompt = Sllm.config.ui.add_url_prompt }, function(user_input)
     if user_input == '' then
       H.notify('[sllm] no URL provided.', vim.log.levels.INFO)
       return
@@ -843,7 +883,7 @@ end
 --- Prompt for a shell command, run it, and add its output to context.
 ---@return nil
 function Sllm.add_cmd_out_to_ctx()
-  H.input({ prompt = 'Command: ' }, function(cmd_raw)
+  H.input({ prompt = Sllm.config.ui.add_cmd_prompt }, function(cmd_raw)
     H.notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
     local res_out = H.job_manager.exec_cmd_capture_output(cmd_raw)
     H.context_manager.add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
@@ -861,7 +901,7 @@ end
 --- Set the system prompt on-the-fly.
 ---@return nil
 function Sllm.set_system_prompt()
-  H.input({ prompt = 'System Prompt: ', default = H.state.system_prompt or '' }, function(user_input)
+  H.input({ prompt = Sllm.config.ui.set_system_prompt, default = H.state.system_prompt or '' }, function(user_input)
     if user_input == nil then
       H.notify('[sllm] system prompt not changed.', vim.log.levels.INFO)
       return
@@ -971,7 +1011,7 @@ end
 --- Copy the last response from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_last_response()
-  if H.ui.copy_last_response() then
+  if H.ui.copy_last_response(Sllm.config.ui.markdown_response_header) then
     H.notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
@@ -1175,7 +1215,7 @@ function Sllm.browse_history()
     }, Sllm.config.scroll_to_bottom)
 
     for _, entry in ipairs(selected.entries) do
-      local formatted = H.history_manager.format_conversation_entry(entry)
+      local formatted = H.history_manager.format_conversation_entry(entry, Sllm.config.ui)
       -- Ensure formatted is a table before appending
       if formatted and type(formatted) == 'table' and #formatted > 0 then
         H.ui.append_to_llm_buffer(formatted, Sllm.config.scroll_to_bottom)

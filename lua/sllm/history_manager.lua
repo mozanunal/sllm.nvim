@@ -108,15 +108,20 @@ end
 
 --- Format a conversation entry for display.
 ---@param entry SllmHistoryEntry  History entry to format.
+---@param ui_config table?  UI configuration with prompt/response headers.
 ---@return string[]               Lines to display in buffer.
-function HistoryManager.format_conversation_entry(entry)
+function HistoryManager.format_conversation_entry(entry, ui_config)
+  ui_config = ui_config or {}
+  local prompt_header = ui_config.markdown_prompt_header or '## 💬 Prompt'
+  local response_header = ui_config.markdown_response_header or '## 🤖 Response'
+
   local lines = {}
   local timestamp = entry.timestamp:gsub('T', ' '):gsub('Z', '')
 
   table.insert(lines, string.format('# %s', timestamp))
   table.insert(lines, string.format('**Model:** %s', entry.model))
   table.insert(lines, '')
-  table.insert(lines, '## 💬 Prompt')
+  table.insert(lines, prompt_header)
   table.insert(lines, '')
 
   for _, line in ipairs(vim.split(entry.prompt, '\n', { plain = true })) do
@@ -124,7 +129,7 @@ function HistoryManager.format_conversation_entry(entry)
   end
 
   table.insert(lines, '')
-  table.insert(lines, '## 🤖 Response')
+  table.insert(lines, response_header)
   table.insert(lines, '')
 
   for _, line in ipairs(vim.split(entry.response, '\n', { plain = true })) do

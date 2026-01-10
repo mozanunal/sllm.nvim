@@ -78,6 +78,7 @@
 ---     model_options = {},         -- Model-specific options (-o flags)
 ---     online_enabled = false,     -- Enable web search by default
 ---     history_max_entries = 1000, -- Max history entries to fetch
+---     chain_limit = 100,          -- Max conversation chain length
 ---     ui = {...},                 -- See |Sllm-uiconfig|
 ---   })
 --- <
@@ -122,6 +123,10 @@
 ---
 --- `history_max_entries` - Maximum number of conversation history entries to
 --- fetch. Higher values show more history but may be slower.
+---
+--- `chain_limit` - Maximum number of chained tool responses to allow. This
+--- controls how many times the model can call tools in one go. Default is 100.
+--- Set to 0 for unlimited.
 ---
 --- `ui` - Table of UI elements (prompts and headers). See |Sllm-uiconfig|.
 ---
@@ -446,6 +451,7 @@
 ---@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 ---@field online_enabled boolean?            Enable online/web mode by default.
 ---@field history_max_entries integer?       Maximum number of history entries to fetch (default: 1000).
+---@field chain_limit integer?               Maximum number of chained tool responses (default: 100).
 ---@field ui SllmUIConfig|nil                Prompts and text used in the UI.
 ---
 ---@class SllmUIConfig
@@ -479,6 +485,7 @@ H.default_config = vim.deepcopy({
 Always answer with markdown.
 If the offered change is small, return only the changed part or function, not the entire file.]],
   history_max_entries = 1000,
+  chain_limit = 100,
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -687,7 +694,8 @@ function Sllm.ask_llm()
       ctx.tools,
       ctx.functions,
       H.state.system_prompt,
-      H.state.model_options
+      H.state.model_options,
+      Sllm.config.chain_limit
     )
     H.state.continue = true
 

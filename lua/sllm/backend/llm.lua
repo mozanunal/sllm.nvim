@@ -108,6 +108,7 @@ end
 ---@param functions      string[]?          Pass `--functions <func>` for each function signature.
 ---@param system_prompt  string?            Pass `-s <prompt>` for system prompt.
 ---@param model_options table<string,any>? Pass `-o <key> <value>` for each model option.
+---@param chain_limit    integer?           Pass `--cl <limit>` for max chained tool responses.
 ---@return string                        The assembled shell command.
 function Backend.llm_cmd(
   llm_cmd,
@@ -119,9 +120,10 @@ function Backend.llm_cmd(
   tools,
   functions,
   system_prompt,
-  model_options
+  model_options,
+  chain_limit
 )
-  local cmd = llm_cmd .. ' --td'
+  local cmd = llm_cmd .. ' --td --cl ' .. (chain_limit or 100)
 
   -- Handle continuation: string = conversation ID, true = continue last, false/nil = new
   if type(continue) == 'string' then

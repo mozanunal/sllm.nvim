@@ -59,7 +59,6 @@ T['base'] = MiniTest.new_set()
 T['base']['extend creates backend with base methods'] = function()
   local custom = Base.extend({ name = 'custom' })
   MiniTest.expect.equality(custom.name, 'custom')
-  MiniTest.expect.equality(type(custom.supports_streaming), 'function')
   MiniTest.expect.equality(type(custom.supports_tools), 'function')
 end
 
@@ -70,21 +69,15 @@ T['base']['unimplemented methods throw errors'] = function()
   MiniTest.expect.error(function() Base.build_command({}, {}) end)
 end
 
-T['base']['default supports_streaming returns false'] = function()
-  MiniTest.expect.equality(Base.supports_streaming(), false)
-end
-
 T['base']['default supports_tools returns false'] = function() MiniTest.expect.equality(Base.supports_tools(), false) end
 
 T['base']['default supports_history returns false'] = function()
   MiniTest.expect.equality(Base.supports_history(), false)
 end
 
-T['base']['default fetch_history returns nil'] = function() MiniTest.expect.equality(Base.fetch_history({}, {}), nil) end
+T['base']['default get_history returns nil'] = function() MiniTest.expect.equality(Base.get_history({}, {}), nil) end
 
-T['base']['default fetch_conversation returns nil'] = function()
-  MiniTest.expect.equality(Base.fetch_conversation({}, 'conv-id'), nil)
-end
+T['base']['default get_session returns nil'] = function() MiniTest.expect.equality(Base.get_session({}, 'conv-id'), nil) end
 
 -- =============================================================================
 -- LLM backend tests
@@ -93,8 +86,6 @@ end
 T['llm'] = MiniTest.new_set()
 
 T['llm']['has correct name'] = function() MiniTest.expect.equality(LlmBackend.name, 'llm') end
-
-T['llm']['supports_streaming returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_streaming(), true) end
 
 T['llm']['supports_tools returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_tools(), true) end
 
@@ -209,12 +200,8 @@ end
 
 T['llm']['supports_history returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_history(), true) end
 
-T['llm']['fetch_history is a function'] = function()
-  MiniTest.expect.equality(type(LlmBackend.fetch_history), 'function')
-end
+T['llm']['get_history is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_history), 'function') end
 
-T['llm']['fetch_conversation is a function'] = function()
-  MiniTest.expect.equality(type(LlmBackend.fetch_conversation), 'function')
-end
+T['llm']['get_session is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_session), 'function') end
 
 return T

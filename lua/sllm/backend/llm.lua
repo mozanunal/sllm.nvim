@@ -159,10 +159,6 @@ local LlmBackend = Base.extend({
     return cmd
   end,
 
-  ---LLM CLI supports streaming output.
-  ---@return boolean True.
-  supports_streaming = function() return true end,
-
   ---LLM CLI supports tool calling.
   ---@return boolean True.
   supports_tools = function() return true end,
@@ -175,7 +171,7 @@ local LlmBackend = Base.extend({
   ---@param config BackendConfig Backend configuration with cmd field.
   ---@param options BackendHistoryOptions? History options.
   ---@return BackendHistoryEntry[]? List of history entries or nil.
-  fetch_history = function(config, options)
+  get_history = function(config, options)
     options = options or {}
     local llm_cmd = config.cmd or 'llm'
     local count = options.count or 20
@@ -213,7 +209,7 @@ local LlmBackend = Base.extend({
   ---@param config BackendConfig Backend configuration with cmd field.
   ---@param conversation_id string Conversation ID to fetch.
   ---@return BackendHistoryEntry[]? List of conversation entries or nil.
-  fetch_conversation = function(config, conversation_id)
+  get_session = function(config, conversation_id)
     local llm_cmd = config.cmd or 'llm'
     local cmd = llm_cmd .. ' logs list --json --cid ' .. vim.fn.shellescape(conversation_id)
     local output = vim.fn.system(cmd)

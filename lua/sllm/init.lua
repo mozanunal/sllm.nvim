@@ -1169,7 +1169,7 @@ function Sllm.browse_history()
   end
 
   local max_entries = Sllm.config.history_max_entries or 1000
-  local entries = H.backend.fetch_history(H.state.backend_config, { count = max_entries })
+  local entries = H.backend.get_history(H.state.backend_config, { count = max_entries })
 
   if not entries or #entries == 0 then
     H.notify('[sllm] no history found.', vim.log.levels.INFO)

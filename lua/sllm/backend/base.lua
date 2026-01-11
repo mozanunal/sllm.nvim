@@ -45,9 +45,8 @@ local Base = {}
 ---@field get_default_model fun(config: BackendConfig): string Get default model name.
 ---@field get_tools fun(config: BackendConfig): string[] Get available tools.
 ---@field build_command fun(config: BackendConfig, options: BackendCommandOptions): string Build execution command.
----@field fetch_history fun(config: BackendConfig, options: BackendHistoryOptions?): BackendHistoryEntry[]?
----@field fetch_conversation fun(config: BackendConfig, conversation_id: string): BackendHistoryEntry[]?
----@field supports_streaming fun(): boolean Whether backend supports streaming output.
+---@field get_history fun(config: BackendConfig, options: BackendHistoryOptions?): BackendHistoryEntry[]?
+---@field get_session fun(config: BackendConfig, session_id: string): BackendHistoryEntry[]?
 ---@field supports_tools fun(): boolean Whether backend supports tool calling.
 ---@field supports_history fun(): boolean Whether backend supports history.
 
@@ -78,10 +77,6 @@ function Base.get_tools(_config) error('Backend must implement get_tools()') end
 ---@return string The assembled command string.
 function Base.build_command(_config, _options) error('Backend must implement build_command()') end
 
----Check if backend supports streaming output.
----@return boolean True if streaming is supported.
-function Base.supports_streaming() return false end
-
 ---Check if backend supports tool calling.
 ---@return boolean True if tools are supported.
 function Base.supports_tools() return false end
@@ -94,13 +89,13 @@ function Base.supports_history() return false end
 ---@param config BackendConfig Backend configuration.
 ---@param options BackendHistoryOptions? History options.
 ---@return BackendHistoryEntry[]? List of history entries or nil.
-function Base.fetch_history(_config, _options) return nil end
+function Base.get_history(_config, _options) return nil end
 
 ---Fetch a specific conversation.
 ---@param config BackendConfig Backend configuration.
----@param conversation_id string Conversation ID to fetch.
----@return BackendHistoryEntry[]? List of conversation entries or nil.
-function Base.fetch_conversation(_config, _conversation_id) return nil end
+---@param session_id string Session/conversation ID to fetch.
+---@return BackendHistoryEntry[]? List of session entries or nil.
+function Base.get_session(_config, _session_id) return nil end
 
 ---Create a new backend instance that inherits from base.
 ---@param impl table Backend implementation table.

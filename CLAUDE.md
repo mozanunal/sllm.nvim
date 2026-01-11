@@ -14,12 +14,12 @@ Language Models without leaving the editor.
 
 ### Key Characteristics
 
-- **Lightweight wrapper**: ~1200 lines of Lua, delegates heavy lifting to `llm`
+- **Lightweight wrapper**: ~2800 lines of Lua, delegates heavy lifting to `llm`
   CLI
 - **Philosophy**: Explicit control, co-pilot (not autonomous agent)
 - **Unique Feature**: On-the-fly Python function tools (`<leader>sF`)
 - **Architecture**: mini.nvim-inspired patterns (ModuleName + H helper pattern)
-- **Testing**: 58 unit tests using mini.test
+- **Testing**: 38 unit tests using mini.test
 - **License**: MIT
 
 ---
@@ -29,20 +29,23 @@ Language Models without leaving the editor.
 ```
 sllm.nvim/
 ├── lua/sllm/
-│   ├── init.lua              # Main module (Sllm) - Public API
-│   ├── backend/llm.lua       # CLI command construction
-│   ├── context_manager.lua   # Context tracking
-│   ├── history_manager.lua   # Conversation history
-│   ├── job_manager.lua       # Async job execution
-│   ├── ui.lua               # Buffer/window management
-│   ├── utils.lua            # Helper functions
-│   └── health.lua           # Health check module
-├── tests/                   # Unit tests (mini.test)
-├── doc/sllm.txt            # Auto-generated help (583 lines)
-├── scripts/minidoc.lua     # Documentation generator
-├── README.md               # User documentation
-├── PREFACE.md              # Philosophy & comparison
-└── Makefile                # Build automation
+│   ├── init.lua              # Main module (~2100 lines)
+│   │                         # - Public API (Sllm.*)
+│   │                         # - H.* helper functions (context, ui, job, history, utils)
+│   │                         # - H.state (consolidated state management)
+│   │                         # - H.ANIMATION_FRAMES (constants)
+│   ├── backend/
+│   │   ├── init.lua          # Backend registry
+│   │   ├── base.lua          # Base backend class
+│   │   └── llm.lua           # LLM CLI backend implementation
+│   └── health.lua            # Health check module
+├── tests/                    # Unit tests (mini.test)
+│   └── test_backend.lua      # Backend integration tests (38 tests)
+├── doc/sllm.txt              # Auto-generated help
+├── scripts/minidoc.lua       # Documentation generator
+├── README.md                 # User documentation
+├── PREFACE.md                # Philosophy & comparison
+└── Makefile                  # Build automation
 ```
 
 ---
@@ -55,28 +58,58 @@ sllm.nvim/
 local ModuleName = {}  -- Public API (exported)
 local H = {}           -- Helper functions and internal state
 
--- Helper data
-H.state = {}           -- Internal state
-H.helper_func = function() ... end  -- Private helpers
+-- Constants (UPPERCASE naming convention)
+H.ANIMATION_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
+
+-- Consolidated state
+H.state = {
+  -- Main state
+  continue = nil,
+  selected_model = nil,
+
+  -- Nested sub-states for logical grouping
+  context = { fragments = {}, snips = {}, tools = {}, functions = {} },
+  ui = { llm_buf = nil, animation_timer = nil, ... },
+  job = { llm_job_id = nil, stdout_acc = '' },
+}
+
+-- Helper functions (prefixed by domain)
+H.context_get = function() ... end       -- Context helpers
+H.ui_show_llm_buffer = function() ... end  -- UI helpers
+H.job_start = function() ... end         -- Job helpers
+H.history_get_conversations = function() ... end  -- History helpers
+H.utils_parse_json = function() ... end  -- Utility helpers
 
 -- Public API
-function ModuleName.public_func() ... end
+function ModuleName.public_func()
+  H.helper_func()  -- Use internal helpers
+end
 
 return ModuleName
 ```
 
+**State Organization Rules:**
+- Constants at the top using UPPERCASE naming
+- All state consolidated in `H.state` with logical nesting
+- Helper functions prefixed by domain (context_, ui_, job_, etc.)
+- Public API functions in ModuleName namespace
+
 **Module Responsibilities:**
 
-| Module            | Responsibility                    | Exports          |
-| ----------------- | --------------------------------- | ---------------- |
-| `init.lua`        | Main entry point, config, keymaps | `Sllm`           |
-| `backend/llm.lua` | Build `llm` CLI commands          | `Backend`        |
-| `context_manager` | Track files, snippets, tools      | `ContextManager` |
-| `history_manager` | Fetch conversation history        | `HistoryManager` |
-| `job_manager`     | Async job execution               | `JobManager`     |
-| `ui.lua`          | Buffer/window management          | `UI`             |
-| `utils.lua`       | Helper utilities                  | `Utils`          |
-| `health.lua`      | Neovim health check               | `M.check`        |
+| Module              | Responsibility                                                                 | Exports  |
+| ------------------- | ------------------------------------------------------------------------------ | -------- |
+| `init.lua`          | Main module with all functionality:                                            | `Sllm`   |
+|                     | - Public API (config, keymaps, commands)                                       |          |
+|                     | - H.context\_\* (context tracking: files, snippets, tools)                     |          |
+|                     | - H.ui\_\* (buffer/window management, loading indicators)                      |          |
+|                     | - H.job\_\* (async job execution, streaming)                                   |          |
+|                     | - H.history\_\* (conversation history formatting)                              |          |
+|                     | - H.utils\_\* (utilities: JSON parsing, buffer ops, visual selection)          |          |
+|                     | - H.state (consolidated state: main, context, ui, job)                         |          |
+| `backend/base.lua`  | Base backend class with OOP-style inheritance                                  | `Base`   |
+| `backend/llm.lua`   | LLM CLI backend implementation (commands, models, tools, templates, history)   | `Backend`|
+| `backend/init.lua`  | Backend registry for pluggable backends                                        | `M`      |
+| `health.lua`        | Neovim health check (`:checkhealth sllm`)                                      | `M.check`|
 
 ---
 
@@ -125,29 +158,59 @@ Run: `make test` or
 
 ## Adding a New Feature
 
-1. **Identify the right module** (see table above)
-2. **Follow H-pattern**:
+1. **Determine feature domain** (context, UI, job, history, or public API)
+
+2. **Add state if needed** to `H.state`:
    ```lua
-   function ModuleName.new_feature()
-     H.validate_input()
-     H.process_data()
+   -- In init.lua, within H.state initialization
+   H.state = {
+     -- Add new state in appropriate section
+     my_new_state = nil,
+
+     -- Or add to existing nested state
+     ui = {
+       -- existing ui state...
+       my_ui_state = false,
+     },
+   }
+   ```
+
+3. **Create helper function(s)** with domain prefix:
+   ```lua
+   -- Helper function (internal only)
+   H.domain_validate_input = function()
+     -- Internal helper logic
    end
 
-   function H.validate_input()
-     -- Internal helper
+   H.domain_process_data = function()
+     H.domain_validate_input()
+     -- Access state: H.state.my_new_state
    end
    ```
-3. **Add documentation** (LuaCATS annotations):
+
+4. **Create public API function** (if user-facing):
    ```lua
    ---@tag sllm.new_feature()
    --- Brief description.
    ---@return nil
-   function Sllm.new_feature()
+   Sllm.new_feature = function()
+     H.domain_process_data()  -- Call helper
+   end
    ```
-4. **Add tests** in appropriate test file
-5. **Add keymap** (if user-facing) in `H.default_config.keymaps`
-6. **Update README.md** for user documentation
-7. **Run checks**: `make format && make lint && make test && make doc`
+
+5. **Add tests** in `tests/test_backend.lua` (public API level only)
+
+6. **Add keymap** (if user-facing) in `H.default_config.keymaps`
+
+7. **Update README.md** for user documentation
+
+8. **Run checks**: `make format && make lint && make test && make doc`
+
+**Key Principles:**
+- Keep helper functions in logical domain groups (context_, ui_, job_, etc.)
+- Always use `H.state.*` for state access, never separate variables
+- Test at the public API level, not helper function level
+- Follow UPPERCASE convention for new constants
 
 ---
 
@@ -159,10 +222,22 @@ Run: `make test` or
 
 **Why**:
 
-- Simplicity: Keep plugin lightweight (~1200 lines)
+- Simplicity: Keep plugin lightweight (~2800 lines, single main module)
 - Reliability: `llm` is battle-tested
 - Extensibility: Instant access to entire `llm` plugin ecosystem
 - Maintainability: No need to track API changes
+
+### Consolidated Module Design
+
+**Decision**: Merge separate modules (context, UI, job, history, utils) into init.lua as H.\* helpers
+
+**Why**:
+
+- Simplicity: Single file easier to navigate and understand
+- Cohesion: Related functionality kept together
+- Performance: No module loading overhead
+- State management: Single H.state makes data flow explicit
+- Maintainability: Fewer files to keep in sync
 
 ### Explicit Context Control
 
@@ -225,7 +300,7 @@ require("sllm").setup({
 
 ---
 
-**Last Updated**: 2025-12-26 | **Maintained By**: mozanunal
+**Last Updated**: 2026-01-11 | **Maintained By**: mozanunal
 
 **For AI Assistants**: This document should be read in full before making
 changes to the codebase.

@@ -536,6 +536,12 @@ H.state = {
   system_prompt = nil,
   model_options = {},
   online_enabled = false,
+  -- Session-level accumulated metrics (reset on new chat)
+  session_tokens = {
+    input = 0,
+    output = 0,
+    cost = 0,
+  },
 }
 
 -- Internal functions for UI
@@ -684,6 +690,13 @@ function Sllm.ask_llm()
     H.ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
     H.ui.start_loading_indicator()
 
+    -- Reset session stats when starting a new conversation
+    if not H.state.continue then
+      H.state.session_tokens.input = 0
+      H.state.session_tokens.output = 0
+      H.state.session_tokens.cost = 0
+    end
+
     local cmd = H.backend.llm_cmd(
       Sllm.config.llm_cmd,
       prompt,
@@ -702,6 +715,7 @@ function Sllm.ask_llm()
     local first_line = false
     H.job_manager.start(
       cmd,
+      -- stdout handler
       ---@param line string
       function(line)
         if not first_line then
@@ -711,6 +725,22 @@ function Sllm.ask_llm()
         end
         H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom)
       end,
+      -- stderr handler
+      ---@param line string
+      function(line)
+        -- Parse token usage and cost from stderr
+        local usage = H.job_manager.parse_token_usage(line)
+        if usage then
+          H.state.session_tokens.input = H.state.session_tokens.input + usage.input
+          H.state.session_tokens.output = H.state.session_tokens.output + usage.output
+          H.state.session_tokens.cost = H.state.session_tokens.cost + usage.cost
+
+          -- Update UI header with accumulated stats
+          H.ui.update_session_stats(H.state.session_tokens)
+        end
+        -- Note: Tool call outputs are intentionally filtered out from stderr display
+      end,
+      -- exit handler
       ---@param exit_code integer
       function(exit_code)
         H.ui.stop_loading_indicator()
@@ -751,6 +781,10 @@ function Sllm.new_chat()
     H.notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
   H.state.continue = false
+  -- Reset session stats for new chat
+  H.state.session_tokens.input = 0
+  H.state.session_tokens.output = 0
+  H.state.session_tokens.cost = 0
   H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
   H.ui.clean_llm_buffer()
   H.notify('[sllm] new chat created', vim.log.levels.INFO)
@@ -1080,57 +1114,67 @@ function Sllm.complete_code()
   -- Collect the completion output
   local completion_output = {}
 
-  H.job_manager.start(cmd, function(line)
-    if line ~= '' then table.insert(completion_output, line) end
-  end, function(exit_code)
-    if exit_code == 0 and #completion_output > 0 then
-      -- Join all output lines
-      local completion = table.concat(completion_output, '\n')
+  H.job_manager.start(
+    cmd,
+    -- stdout handler
+    function(line)
+      if line ~= '' then table.insert(completion_output, line) end
+    end,
+    -- stderr handler (for completion, we just ignore stderr)
+    function(_)
+      -- Optionally could log or parse token usage here too
+    end,
+    -- exit handler
+    function(exit_code)
+      if exit_code == 0 and #completion_output > 0 then
+        -- Join all output lines
+        local completion = table.concat(completion_output, '\n')
 
-      -- Clean up common LLM formatting
-      completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
-      completion = completion:gsub('\n```$', '') -- Remove closing code fence
-      completion = vim.trim(completion)
+        -- Clean up common LLM formatting
+        completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
+        completion = completion:gsub('\n```$', '') -- Remove closing code fence
+        completion = vim.trim(completion)
 
-      if completion ~= '' then
-        -- Insert the completion at cursor position
-        local completion_lines = vim.split(completion, '\n', { plain = true })
+        if completion ~= '' then
+          -- Insert the completion at cursor position
+          local completion_lines = vim.split(completion, '\n', { plain = true })
 
-        -- Get the current line and rebuild it with the completion
-        local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
-        local line_before = current_line:sub(1, col)
-        local line_after = current_line:sub(col + 1)
+          -- Get the current line and rebuild it with the completion
+          local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+          local line_before = current_line:sub(1, col)
+          local line_after = current_line:sub(col + 1)
 
-        -- Build the new lines to insert
-        local new_lines = {}
-        if #completion_lines == 1 then
-          -- Single line completion
-          table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
-        else
-          -- Multi-line completion
-          table.insert(new_lines, line_before .. completion_lines[1])
-          for i = 2, #completion_lines - 1 do
-            table.insert(new_lines, completion_lines[i])
+          -- Build the new lines to insert
+          local new_lines = {}
+          if #completion_lines == 1 then
+            -- Single line completion
+            table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
+          else
+            -- Multi-line completion
+            table.insert(new_lines, line_before .. completion_lines[1])
+            for i = 2, #completion_lines - 1 do
+              table.insert(new_lines, completion_lines[i])
+            end
+            table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
           end
-          table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
+
+          -- Replace the current line with new lines
+          vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
+
+          -- Move cursor to end of completion
+          local new_row = row + #new_lines - 1
+          local new_col = #new_lines[#new_lines] - #line_after
+          vim.api.nvim_win_set_cursor(0, { new_row, new_col })
+
+          H.notify('[sllm] completion inserted', vim.log.levels.INFO)
+        else
+          H.notify('[sllm] received empty completion', vim.log.levels.WARN)
         end
-
-        -- Replace the current line with new lines
-        vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
-
-        -- Move cursor to end of completion
-        local new_row = row + #new_lines - 1
-        local new_col = #new_lines[#new_lines] - #line_after
-        vim.api.nvim_win_set_cursor(0, { new_row, new_col })
-
-        H.notify('[sllm] completion inserted', vim.log.levels.INFO)
       else
-        H.notify('[sllm] received empty completion', vim.log.levels.WARN)
+        H.notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
       end
-    else
-      H.notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
     end
-  end)
+  )
 end
 
 --- Browse chat history, load a conversation, and continue from it.

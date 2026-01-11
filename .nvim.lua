@@ -1,9 +1,22 @@
 local function refresh_sllm()
   local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h")
   vim.opt.rtp:prepend(root)
-  local m = dofile("lua/sllm/init.lua")
+  -- Clear module cache to force reload of all modules
+  package.loaded['sllm'] = nil
+  package.loaded['sllm.init'] = nil
+  package.loaded['sllm.ui'] = nil
+  package.loaded['sllm.job_manager'] = nil
+  package.loaded['sllm.backend.llm'] = nil
+  package.loaded['sllm.context_manager'] = nil
+  package.loaded['sllm.history_manager'] = nil
+  package.loaded['sllm.utils'] = nil
+  package.loaded['sllm.health'] = nil
+
+  -- Use require instead of dofile to get proper module loading
+  local m = require("sllm")
   m.setup({
     window_type   = "vertical",
+    show_usage = true,  -- Explicitly enable usage tracking
     pre_hooks = {
       -- {command='ls', add_to_context=true},
       -- {command='pwd', add_to_context=true},

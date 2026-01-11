@@ -469,7 +469,11 @@ local H = {}
 -- Helper data ================================================================
 -- Module default config
 H.default_config = vim.deepcopy({
-  llm_cmd = 'llm',
+  backend = 'llm',
+  backend_config = {
+    cmd = 'llm',
+  },
+  llm_cmd = 'llm', -- Deprecated: use backend_config.cmd instead
   default_model = 'default',
   show_usage = true,
   on_start_new_chat = true,
@@ -523,7 +527,8 @@ If the offered change is small, return only the changed part or function, not th
 
 -- Internal modules
 H.utils = require('sllm.utils')
-H.backend = require('sllm.backend.llm')
+H.backend_registry = require('sllm.backend')
+H.backend = nil -- Set during apply_config based on backend selection
 H.context_manager = require('sllm.context_manager')
 H.job_manager = require('sllm.job_manager')
 H.ui = require('sllm.ui')
@@ -536,6 +541,7 @@ H.state = {
   system_prompt = nil,
   model_options = {},
   online_enabled = false,
+  backend_config = {}, -- Backend-specific configuration
 }
 
 -- Internal functions for UI
@@ -626,9 +632,29 @@ H.apply_config = function(config)
     end
   end
 
+  -- Set up backend
+  local backend_name = Sllm.config.backend or 'llm'
+  H.backend = H.backend_registry.get(backend_name)
+  if not H.backend then
+    error(
+      string.format(
+        '[sllm] Backend "%s" not found. Available: %s',
+        backend_name,
+        table.concat(H.backend_registry.list(), ', ')
+      )
+    )
+  end
+
+  -- Set up backend config (with backward compatibility for llm_cmd)
+  H.state.backend_config = Sllm.config.backend_config or {}
+  if Sllm.config.llm_cmd and Sllm.config.llm_cmd ~= 'llm' then
+    -- User specified llm_cmd directly (deprecated), use it
+    H.state.backend_config.cmd = Sllm.config.llm_cmd
+  end
+
   H.state.continue = not Sllm.config.on_start_new_chat
   H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model
-    or H.backend.get_default_model(Sllm.config.llm_cmd)
+    or H.backend.get_default_model(H.state.backend_config)
   H.state.system_prompt = Sllm.config.system_prompt
   H.state.model_options = Sllm.config.model_options or {}
   H.state.online_enabled = Sllm.config.online_enabled or false
@@ -684,19 +710,18 @@ function Sllm.ask_llm()
     H.ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
     H.ui.start_loading_indicator()
 
-    local cmd = H.backend.llm_cmd(
-      Sllm.config.llm_cmd,
-      prompt,
-      H.state.continue,
-      Sllm.config.show_usage,
-      H.state.selected_model,
-      ctx.fragments,
-      ctx.tools,
-      ctx.functions,
-      H.state.system_prompt,
-      H.state.model_options,
-      Sllm.config.chain_limit
-    )
+    local cmd = H.backend.build_command(H.state.backend_config, {
+      prompt = prompt,
+      continue = H.state.continue,
+      show_usage = Sllm.config.show_usage,
+      model = H.state.selected_model,
+      ctx_files = ctx.fragments,
+      tools = ctx.tools,
+      functions = ctx.functions,
+      system_prompt = H.state.system_prompt,
+      model_options = H.state.model_options,
+      chain_limit = Sllm.config.chain_limit,
+    })
     H.state.continue = true
 
     local first_line = false
@@ -771,7 +796,7 @@ end
 --- Prompt user to select an LLM model.
 ---@return nil
 function Sllm.select_model()
-  local models = H.backend.extract_models(Sllm.config.llm_cmd)
+  local models = H.backend.get_models(H.state.backend_config)
   if not (models and #models > 0) then
     H.notify('[sllm] no models found.', vim.log.levels.ERROR)
     return
@@ -790,7 +815,7 @@ end
 --- Add a tool to the current context.
 ---@return nil
 function Sllm.add_tool_to_ctx()
-  local tools = H.backend.extract_tools(Sllm.config.llm_cmd)
+  local tools = H.backend.get_tools(H.state.backend_config)
   if not (tools and #tools > 0) then
     H.notify('[sllm] no tools found.', vim.log.levels.ERROR)
     return
@@ -933,7 +958,8 @@ function Sllm.show_model_options()
   end
 
   -- Run `llm models --options -m <model>` to show available options
-  local cmd = Sllm.config.llm_cmd .. ' models --options -m ' .. vim.fn.shellescape(H.state.selected_model)
+  local llm_cmd = H.state.backend_config.cmd or 'llm'
+  local cmd = llm_cmd .. ' models --options -m ' .. vim.fn.shellescape(H.state.selected_model)
   local output = vim.fn.systemlist(cmd)
 
   -- Display in a floating window or show in the LLM buffer
@@ -1071,7 +1097,8 @@ function Sllm.complete_code()
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 
   -- Build LLM command - no continuation, no usage stats for cleaner output
-  local cmd = Sllm.config.llm_cmd .. ' --no-stream'
+  local llm_cmd = H.state.backend_config.cmd or 'llm'
+  local cmd = llm_cmd .. ' --no-stream'
   if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
   cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
 
@@ -1136,8 +1163,13 @@ end
 --- Browse chat history, load a conversation, and continue from it.
 ---@return nil
 function Sllm.browse_history()
+  if not H.backend.supports_history() then
+    H.notify('[sllm] current backend does not support history.', vim.log.levels.WARN)
+    return
+  end
+
   local max_entries = Sllm.config.history_max_entries or 1000
-  local entries = H.history_manager.fetch_history(Sllm.config.llm_cmd, max_entries)
+  local entries = H.backend.fetch_history(H.state.backend_config, { count = max_entries })
 
   if not entries or #entries == 0 then
     H.notify('[sllm] no history found.', vim.log.levels.INFO)

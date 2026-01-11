@@ -540,7 +540,6 @@ If the offered change is small, return only the changed part or function, not th
 H.utils = require('sllm.utils')
 H.backend_registry = require('sllm.backend')
 H.backend = nil -- Set during apply_config based on backend selection
-H.context_manager = require('sllm.context_manager')
 H.job_manager = require('sllm.job_manager')
 H.ui = require('sllm.ui')
 H.history_manager = require('sllm.history_manager')
@@ -556,10 +555,116 @@ H.state = {
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
 }
 
+-- Context state
+H.context = {
+  fragments = {},
+  snips = {},
+  tools = {},
+  functions = {},
+}
+
 -- Internal functions for UI
 H.notify = vim.notify
 H.pick = vim.ui.select
 H.input = vim.ui.input
+
+-- Context management helpers ------------------------------------------------------
+---Get the current context (fragments, snippets, tools, functions).
+---@return SllmContext  The context table.
+H.context_get = function() return H.context end
+
+---Reset the context to empty lists.
+---@return nil
+H.context_reset = function()
+  H.context = {
+    fragments = {},
+    snips = {},
+    tools = {},
+    functions = {},
+  }
+end
+
+---Add a file path to the fragments list, if not already present.
+---@param filepath string  Path to a fragment file.
+---@return nil
+H.context_add_fragment = function(filepath)
+  local is_in_context = vim.tbl_contains(H.context.fragments, filepath)
+  if not is_in_context then table.insert(H.context.fragments, filepath) end
+end
+
+---Add a snippet entry to the context.
+---@param text string       Snippet text (will be trimmed).
+---@param filepath string   Source file path for the snippet.
+---@param filetype string   Filetype/language of the snippet.
+---@return nil
+H.context_add_snip = function(text, filepath, filetype)
+  table.insert(H.context.snips, {
+    filepath = filepath,
+    filetype = filetype,
+    text = vim.trim(text),
+  })
+end
+
+---Add a tool name to the tools list, if not already present.
+---@param tool_name string  Name of the tool.
+---@return nil
+H.context_add_tool = function(tool_name)
+  local is_in_context = vim.tbl_contains(H.context.tools, tool_name)
+  if not is_in_context then table.insert(H.context.tools, tool_name) end
+end
+
+---Add a function representation to the functions list, if not already present.
+---@param func_str string   Function source or signature as a string.
+---@return nil
+H.context_add_function = function(func_str)
+  local is_in_context = vim.tbl_contains(H.context.functions, func_str)
+  if not is_in_context then table.insert(H.context.functions, func_str) end
+end
+
+---Assemble the full prompt UI, including file list and code snippets.
+---@param user_input string?  Optional user input (empty string if `nil`).
+---@return string             Trimmed prompt text to send to the LLM.
+H.context_render_prompt_ui = function(user_input)
+  -- Assemble files section
+  local files_list = ''
+  if #H.context.fragments > 0 then
+    files_list = '\n### Fragments\n'
+    for _, f in ipairs(H.context.fragments) do
+      files_list = files_list .. H.utils.render('- ${filepath}', { filepath = H.utils.get_relpath(f) }) .. '\n'
+    end
+    files_list = files_list .. '\n'
+  end
+
+  -- Assemble snippets section
+  local snip_list = ''
+  if #H.context.snips > 0 then
+    snip_list = '\n### Snippets\n'
+    for _, snip in ipairs(H.context.snips) do
+      snip_list = snip_list
+        .. H.utils.render('From ${filepath}:\n```' .. snip.filetype .. '\n${text}\n```', snip)
+        .. '\n\n'
+    end
+  end
+
+  -- Trim sections
+  files_list = vim.trim(files_list)
+  snip_list = vim.trim(snip_list)
+
+  -- Final prompt template
+  local tmpl_prompt = [[
+${user_input}
+
+${snippets}
+
+${files}
+]]
+  local prompt = H.utils.render(tmpl_prompt, {
+    user_input = user_input or '',
+    snippets = snip_list,
+    files = files_list,
+  })
+  return vim.trim(prompt)
+end
 
 -- Module setup ===============================================================
 --- Module setup
@@ -715,14 +820,14 @@ function Sllm.ask_llm()
       for _, hook in ipairs(Sllm.config.pre_hooks) do
         local output = H.job_manager.exec_cmd_capture_output(hook.command)
         if hook.add_to_context then
-          H.context_manager.add_snip(output, 'Pre-hook-> ' .. hook.command, 'text')
+          H.context_add_snip(output, 'Pre-hook-> ' .. hook.command, 'text')
           H.notify('[sllm] pre-hook executed, added to context ' .. hook.command, vim.log.levels.INFO)
         end
       end
     end
 
-    local ctx = H.context_manager.get()
-    local prompt = H.context_manager.render_prompt_ui(user_input)
+    local ctx = H.context_get()
+    local prompt = H.context_render_prompt_ui(user_input)
     H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_prompt_header, '' }, Sllm.config.scroll_to_bottom)
     H.ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
     H.ui.start_loading_indicator()
@@ -785,7 +890,7 @@ function Sllm.ask_llm()
         end
         H.notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
         H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
-        if Sllm.config.reset_ctx_each_prompt then H.context_manager.reset() end
+        if Sllm.config.reset_ctx_each_prompt then H.context_reset() end
         if Sllm.config.post_hooks then
           for _, hook in ipairs(Sllm.config.post_hooks) do
             local _ = H.job_manager.exec_cmd_capture_output(hook.command)
@@ -862,7 +967,7 @@ function Sllm.add_tool_to_ctx()
   end
   H.pick(tools, {}, function(item)
     if item then
-      H.context_manager.add_tool(item)
+      H.context_add_tool(item)
       H.notify('[sllm] tool added: ' .. item, vim.log.levels.INFO)
     else
       H.notify('[sllm] no tools added.', vim.log.levels.WARN)
@@ -875,7 +980,7 @@ end
 function Sllm.add_file_to_ctx()
   local buf_path = H.utils.get_path_of_buffer(0)
   if buf_path then
-    H.context_manager.add_fragment(buf_path)
+    H.context_add_fragment(buf_path)
     H.notify('[sllm] context +' .. H.utils.get_relpath(buf_path), vim.log.levels.INFO)
   else
     H.notify('[sllm] buffer does not have a path.', vim.log.levels.WARN)
@@ -890,7 +995,7 @@ function Sllm.add_url_to_ctx()
       H.notify('[sllm] no URL provided.', vim.log.levels.INFO)
       return
     end
-    H.context_manager.add_fragment(user_input)
+    H.context_add_fragment(user_input)
     H.notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
   end)
 end
@@ -913,7 +1018,7 @@ function Sllm.add_func_to_ctx()
       return
     end
   end
-  H.context_manager.add_function(text)
+  H.context_add_function(text)
   H.notify('[sllm] added function to context.', vim.log.levels.INFO)
 end
 
@@ -926,7 +1031,7 @@ function Sllm.add_sel_to_ctx()
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
-  H.context_manager.add_snip(text, H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)), vim.bo[bufnr].filetype)
+  H.context_add_snip(text, H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)), vim.bo[bufnr].filetype)
   H.notify('[sllm] added selection to context.', vim.log.levels.INFO)
 end
 
@@ -945,7 +1050,7 @@ function Sllm.add_diag_to_ctx()
     local loc = ('[L%d,C%d]'):format((d.lnum or 0) + 1, (d.col or 0) + 1)
     table.insert(lines, loc .. ' ' .. msg)
   end
-  H.context_manager.add_snip(
+  H.context_add_snip(
     'diagnostics:\n' .. table.concat(lines, '\n'),
     H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)),
     vim.bo[bufnr].filetype
@@ -959,7 +1064,7 @@ function Sllm.add_cmd_out_to_ctx()
   H.input({ prompt = Sllm.config.ui.add_cmd_prompt }, function(cmd_raw)
     H.notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
     local res_out = H.job_manager.exec_cmd_capture_output(cmd_raw)
-    H.context_manager.add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
+    H.context_add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
     H.notify('[sllm] added command output to context.', vim.log.levels.INFO)
   end)
 end
@@ -967,7 +1072,7 @@ end
 --- Reset the LLM context (fragments, snippets, tools, functions).
 ---@return nil
 function Sllm.reset_context()
-  H.context_manager.reset()
+  H.context_reset()
   H.notify('[sllm] context reset.', vim.log.levels.INFO)
 end
 

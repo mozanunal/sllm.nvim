@@ -7,7 +7,17 @@ local Base = require('sllm.backend.base')
 local H = {}
 
 -- Helper data ================================================================
-H.utils = require('sllm.utils')
+--- Parse JSON string safely with error handling.
+---@param json_str string  JSON string to parse.
+---@return table?  Parsed table or nil on error.
+H.parse_json = function(json_str)
+  local ok, result = pcall(vim.fn.json_decode, json_str)
+  if ok then
+    return result
+  else
+    return nil
+  end
+end
 
 ---Get the templates directory path.
 ---@param llm_cmd string LLM command path.
@@ -132,7 +142,7 @@ local LlmBackend = Base.extend({
   get_tools = function(config)
     local llm_cmd = config.cmd or 'llm'
     local json_string = vim.fn.system(llm_cmd .. ' tools list --json')
-    local spec = H.utils.parse_json(json_string)
+    local spec = H.parse_json(json_string)
     local names = {}
     if spec and spec.tools then
       for _, tool in ipairs(spec.tools) do
@@ -223,7 +233,7 @@ local LlmBackend = Base.extend({
     if options.model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(options.model) end
 
     local output = vim.fn.system(cmd)
-    local parsed = H.utils.parse_json(output)
+    local parsed = H.parse_json(output)
 
     if not parsed then return nil end
 
@@ -255,7 +265,7 @@ local LlmBackend = Base.extend({
     local llm_cmd = config.cmd or 'llm'
     local cmd = llm_cmd .. ' logs list --json --cid ' .. vim.fn.shellescape(conversation_id)
     local output = vim.fn.system(cmd)
-    local parsed = H.utils.parse_json(output)
+    local parsed = H.parse_json(output)
 
     if not parsed then return nil end
 

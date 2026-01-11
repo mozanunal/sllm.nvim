@@ -536,16 +536,16 @@ If the offered change is small, return only the changed part or function, not th
   },
 })
 
+-- Constants ------------------------------------------------------------------
+H.ANIMATION_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
+
 -- Internal modules
-H.utils = require('sllm.utils')
 H.backend_registry = require('sllm.backend')
 H.backend = nil -- Set during apply_config based on backend selection
-H.job_manager = require('sllm.job_manager')
-H.ui = require('sllm.ui')
-H.history_manager = require('sllm.history_manager')
 
 -- Internal state
 H.state = {
+  -- Main state
   continue = nil, -- Can be boolean or conversation_id string
   selected_model = nil,
   system_prompt = nil,
@@ -553,14 +553,29 @@ H.state = {
   online_enabled = false,
   backend_config = {}, -- Backend-specific configuration
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
-}
 
--- Context state
-H.context = {
-  fragments = {},
-  snips = {},
-  tools = {},
-  functions = {},
+  -- Context
+  context = {
+    fragments = {},
+    snips = {},
+    tools = {},
+    functions = {},
+  },
+
+  -- UI state
+  ui = {
+    llm_buf = nil,
+    animation_timer = nil,
+    current_animation_frame_idx = 1,
+    is_loading_active = false,
+    original_winbar_text = '',
+  },
+
+  -- Job state
+  job = {
+    llm_job_id = nil,
+    stdout_acc = '',
+  },
 }
 
 -- Internal functions for UI
@@ -568,15 +583,243 @@ H.notify = vim.notify
 H.pick = vim.ui.select
 H.input = vim.ui.input
 
+-- Utils helpers -----------------------------------------------------------------
+--- Print all elements of `t`, each on its own line separated by "===".
+---@param t string[] List of strings to print.
+H.utils_print_table = function(t) print(table.concat(t, '\n===')) end
+
+--- Check if a buffer handle is valid.
+---@param buf integer? Buffer handle (or `nil`).
+---@return boolean
+H.utils_buf_is_valid = function(buf) return buf ~= nil and vim.api.nvim_buf_is_valid(buf) end
+
+--- Return `true` if the current mode is any Visual mode (`v`, `V`, or Ctrl+V).
+---@return boolean
+H.utils_is_mode_visual = function()
+  local current_mode = vim.api.nvim_get_mode().mode
+  -- \22 is Ctrl-V
+  return current_mode:match('^[vV\22]$') ~= nil
+end
+
+--- Get text of the current visual selection.
+---@return string  The selected text (lines joined with "\n").
+H.utils_get_visual_selection = function()
+  return table.concat(vim.fn.getregion(vim.fn.getpos('v'), vim.fn.getpos('.')), '\n')
+end
+
+--- Get the filesystem path of a buffer, or `nil` if it has none.
+---@param buf integer Buffer handle.
+---@return string?  File path or `nil` if the buffer is unnamed.
+H.utils_get_path_of_buffer = function(buf)
+  local buf_name = vim.api.nvim_buf_get_name(buf)
+  if buf_name == '' then
+    return nil
+  else
+    return buf_name
+  end
+end
+
+--- Convert an absolute path to one relative to the cwd.
+---@param abspath string?  Absolute path (or `nil`).
+---@return string?  Relative path if possible; otherwise original or `nil`.
+H.utils_get_relpath = function(abspath)
+  if abspath == nil then return abspath end
+  local cwd = vim.uv.cwd()
+  if cwd == nil then return abspath end
+  local rel = vim.fs.relpath(cwd, abspath)
+  if rel then
+    return rel
+  else
+    return abspath
+  end
+end
+
+--- Return the window ID showing buffer `buf`, or `nil` if not visible.
+---@param buf integer Buffer handle.
+---@return integer?  Window ID or `nil`.
+H.utils_check_buffer_visible = function(buf)
+  if not H.utils_buf_is_valid(buf) then return nil end
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == buf then return win end
+  end
+  return nil
+end
+
+--- Simple template renderer: replaces `${key}` with `env[key]`.
+---@param tmpl string             Template containing `${var}` placeholders.
+---@param env table<string,any>   Lookup table for replacements.
+---@return string  Rendered string.
+H.utils_render = function(tmpl, env)
+  return (tmpl:gsub('%${(.-)}', function(key) return tostring(env[key] or '') end))
+end
+
+--- Extract all code blocks from buffer lines.
+---@param lines string[]  Buffer lines to parse.
+---@return string[]  List of code block contents (without fence markers).
+H.utils_extract_code_blocks = function(lines)
+  local code_blocks = {}
+  local in_code_block = false
+  local current_block = {}
+
+  for _, line in ipairs(lines) do
+    -- Check for code fence (``` or ~~~)
+    if line:match('^```') or line:match('^~~~') then
+      if in_code_block then
+        -- End of code block
+        if #current_block > 0 then table.insert(code_blocks, table.concat(current_block, '\n')) end
+        current_block = {}
+        in_code_block = false
+      else
+        -- Start of code block
+        in_code_block = true
+      end
+    elseif in_code_block then
+      table.insert(current_block, line)
+    end
+  end
+
+  -- Handle unclosed code block
+  if in_code_block and #current_block > 0 then table.insert(code_blocks, table.concat(current_block, '\n')) end
+
+  return code_blocks
+end
+
+--- Remove ANSI escape codes from a string.
+---@param text string  The input string possibly containing ANSI escape codes.
+---@return string  The string with ANSI escape codes removed.
+H.utils_strip_ansi_codes = function(text)
+  local ansi_escape_pattern = '[\27\155][][()#;?%][0-9;]*[A-Za-z@^_`{|}~]'
+  return text:gsub(ansi_escape_pattern, '')
+end
+
+--- Parse JSON string safely with error handling.
+---@param json_str string  JSON string to parse.
+---@return table?  Parsed table or nil on error.
+H.utils_parse_json = function(json_str)
+  local ok, result = pcall(vim.fn.json_decode, json_str)
+  if ok then
+    return result
+  else
+    return nil
+  end
+end
+
+-- Job Manager helpers -----------------------------------------------------------
+--- Check if a job is currently running.
+---@return boolean `true` if a job is active, `false` otherwise.
+H.job_is_busy = function() return H.state.job.llm_job_id ~= nil end
+
+---Execute a command synchronously and capture its output.
+---@param cmd_raw string Command to execute (supports vim cmd expansion)
+---@return string Combined stdout/stderr output, labeled if both present
+H.job_exec_cmd_capture_output = function(cmd_raw)
+  local cmd = vim.fn.expandcmd(cmd_raw)
+  local result = vim.system({ 'bash', '-c', cmd }, { text = true }):wait()
+  local res_stdout = vim.trim(result.stdout or '')
+  local res_stderr = vim.trim(result.stderr or '')
+  local output = ''
+  if res_stdout ~= '' then output = output .. '\nstdout:\n' .. res_stdout end
+  if res_stderr ~= '' then output = output .. '\nstderr:\n' .. res_stderr end
+  return output
+end
+
+--- Start a new job and stream its output line by line.
+---
+--- Splits on `'\n'` in the stdout buffer, strips ANSI codes, and calls
+--- `hook_on_stdout_line` for each line. Handles stderr separately via
+--- `hook_on_stderr_line`. Once the job exits, it flushes any leftover,
+--- clears state, and calls `hook_on_exit`.
+---
+---@param cmd string|string[]                      Command or command-plus-args for `vim.fn.jobstart`.
+---@param hook_on_stdout_line fun(line: string)    Callback invoked on each decoded stdout line.
+---@param hook_on_stderr_line fun(line: string)    Callback invoked on each decoded stderr line.
+---@param hook_on_exit fun(exit_code: integer)     Callback invoked when the job exits.
+---@return nil
+H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_exit)
+  H.state.job.stdout_acc = ''
+
+  -- Merge current environment with unbuffered settings
+  local job_env = vim.fn.environ()
+  job_env.PYTHONUNBUFFERED = '1'
+  job_env.PYTHONDONTWRITEBYTECODE = '1'
+
+  H.state.job.llm_job_id = vim.fn.jobstart(cmd, {
+    stdout_buffered = false,
+    pty = true, -- Use pty=true for proper streaming (stderr merges into stdout)
+    on_stdout = function(_, data, _)
+      if not data then return end
+      for _, chunk in ipairs(data) do
+        if chunk ~= '' then
+          -- 1) Accumulate chunks
+          H.state.job.stdout_acc = H.state.job.stdout_acc .. chunk
+
+          -- 2) Split on '\n' and flush each line
+          local nl_pos = H.state.job.stdout_acc:find('\n', 1, true)
+          while nl_pos do
+            local line = H.state.job.stdout_acc:sub(1, nl_pos - 1)
+            -- Strip trailing \r if present (handles \r\n line endings)
+            line = line:gsub('\r$', '')
+            local stripped = H.utils_strip_ansi_codes(line)
+
+            -- With pty=true, stderr is merged into stdout
+            -- Detect token usage lines and route to stderr handler
+            if stripped:match('Token usage:') or stripped:match('^Tool call:') then
+              hook_on_stderr_line(stripped)
+            else
+              hook_on_stdout_line(stripped)
+            end
+
+            H.state.job.stdout_acc = H.state.job.stdout_acc:sub(nl_pos + 1)
+            nl_pos = H.state.job.stdout_acc:find('\n', 1, true)
+          end
+        end
+      end
+    end,
+    on_stderr = function(_, data, _)
+      -- With pty=true, stderr is redirected to stdout, so this won't be called much
+      -- But keep it for safety
+      if not data then return end
+      for _, line in ipairs(data) do
+        if line ~= '' then hook_on_stderr_line(H.utils_strip_ansi_codes(line)) end
+      end
+    end,
+    on_exit = function(_, exit_code, _)
+      -- Flush leftover stdout without a trailing '\n'
+      if H.state.job.stdout_acc ~= '' then
+        local line = H.state.job.stdout_acc:gsub('\r$', '')
+        local stripped = H.utils_strip_ansi_codes(line)
+        if stripped:match('Token usage:') or stripped:match('^Tool call:') then
+          hook_on_stderr_line(stripped)
+        else
+          hook_on_stdout_line(stripped)
+        end
+        H.state.job.stdout_acc = ''
+      end
+      H.state.job.llm_job_id = nil
+      hook_on_exit(exit_code)
+    end,
+  })
+end
+
+--- Stop the currently running job, if any, and reset state.
+---@return nil
+H.job_stop = function()
+  if H.state.job.llm_job_id then
+    vim.fn.jobstop(H.state.job.llm_job_id)
+    H.state.job.llm_job_id = nil
+    H.state.job.stdout_acc = ''
+  end
+end
+
 -- Context management helpers ------------------------------------------------------
 ---Get the current context (fragments, snippets, tools, functions).
 ---@return SllmContext  The context table.
-H.context_get = function() return H.context end
+H.context_get = function() return H.state.context end
 
 ---Reset the context to empty lists.
 ---@return nil
 H.context_reset = function()
-  H.context = {
+  H.state.context = {
     fragments = {},
     snips = {},
     tools = {},
@@ -588,8 +831,8 @@ end
 ---@param filepath string  Path to a fragment file.
 ---@return nil
 H.context_add_fragment = function(filepath)
-  local is_in_context = vim.tbl_contains(H.context.fragments, filepath)
-  if not is_in_context then table.insert(H.context.fragments, filepath) end
+  local is_in_context = vim.tbl_contains(H.state.context.fragments, filepath)
+  if not is_in_context then table.insert(H.state.context.fragments, filepath) end
 end
 
 ---Add a snippet entry to the context.
@@ -598,7 +841,7 @@ end
 ---@param filetype string   Filetype/language of the snippet.
 ---@return nil
 H.context_add_snip = function(text, filepath, filetype)
-  table.insert(H.context.snips, {
+  table.insert(H.state.context.snips, {
     filepath = filepath,
     filetype = filetype,
     text = vim.trim(text),
@@ -609,16 +852,16 @@ end
 ---@param tool_name string  Name of the tool.
 ---@return nil
 H.context_add_tool = function(tool_name)
-  local is_in_context = vim.tbl_contains(H.context.tools, tool_name)
-  if not is_in_context then table.insert(H.context.tools, tool_name) end
+  local is_in_context = vim.tbl_contains(H.state.context.tools, tool_name)
+  if not is_in_context then table.insert(H.state.context.tools, tool_name) end
 end
 
 ---Add a function representation to the functions list, if not already present.
 ---@param func_str string   Function source or signature as a string.
 ---@return nil
 H.context_add_function = function(func_str)
-  local is_in_context = vim.tbl_contains(H.context.functions, func_str)
-  if not is_in_context then table.insert(H.context.functions, func_str) end
+  local is_in_context = vim.tbl_contains(H.state.context.functions, func_str)
+  if not is_in_context then table.insert(H.state.context.functions, func_str) end
 end
 
 ---Assemble the full prompt UI, including file list and code snippets.
@@ -627,21 +870,21 @@ end
 H.context_render_prompt_ui = function(user_input)
   -- Assemble files section
   local files_list = ''
-  if #H.context.fragments > 0 then
+  if #H.state.context.fragments > 0 then
     files_list = '\n### Fragments\n'
-    for _, f in ipairs(H.context.fragments) do
-      files_list = files_list .. H.utils.render('- ${filepath}', { filepath = H.utils.get_relpath(f) }) .. '\n'
+    for _, f in ipairs(H.state.context.fragments) do
+      files_list = files_list .. H.utils_render('- ${filepath}', { filepath = H.utils_get_relpath(f) }) .. '\n'
     end
     files_list = files_list .. '\n'
   end
 
   -- Assemble snippets section
   local snip_list = ''
-  if #H.context.snips > 0 then
+  if #H.state.context.snips > 0 then
     snip_list = '\n### Snippets\n'
-    for _, snip in ipairs(H.context.snips) do
+    for _, snip in ipairs(H.state.context.snips) do
       snip_list = snip_list
-        .. H.utils.render('From ${filepath}:\n```' .. snip.filetype .. '\n${text}\n```', snip)
+        .. H.utils_render('From ${filepath}:\n```' .. snip.filetype .. '\n${text}\n```', snip)
         .. '\n\n'
     end
   end
@@ -658,12 +901,392 @@ ${snippets}
 
 ${files}
 ]]
-  local prompt = H.utils.render(tmpl_prompt, {
+  local prompt = H.utils_render(tmpl_prompt, {
     user_input = user_input or '',
     snippets = snip_list,
     files = files_list,
   })
   return vim.trim(prompt)
+end
+
+-- History helpers ---------------------------------------------------------------
+--- Format a history entry for display in a picker.
+---@param entry BackendHistoryEntry History entry to format.
+---@return string Formatted display string.
+H.history_format_entry_for_picker = function(entry)
+  local timestamp = entry.timestamp:gsub('T', ' '):gsub('Z', ''):sub(1, 19)
+  local prompt_preview = entry.prompt:gsub('\n', ' '):sub(1, 60)
+  if #entry.prompt > 60 then prompt_preview = prompt_preview .. '...' end
+  return string.format('[%s] %s | %s', timestamp, entry.model, prompt_preview)
+end
+
+--- Format a conversation entry for display.
+---@param entry BackendHistoryEntry History entry to format.
+---@param ui_config table? UI configuration with prompt/response headers.
+---@return string[] Lines to display in buffer.
+H.history_format_conversation_entry = function(entry, ui_config)
+  ui_config = ui_config or {}
+  local prompt_header = ui_config.markdown_prompt_header or '## 💬 Prompt'
+  local response_header = ui_config.markdown_response_header or '## 🤖 Response'
+
+  local lines = {}
+  local timestamp = entry.timestamp:gsub('T', ' '):gsub('Z', '')
+
+  table.insert(lines, string.format('# %s', timestamp))
+  table.insert(lines, string.format('**Model:** %s', entry.model))
+  table.insert(lines, '')
+  table.insert(lines, prompt_header)
+  table.insert(lines, '')
+
+  for _, line in ipairs(vim.split(entry.prompt, '\n', { plain = true })) do
+    table.insert(lines, line)
+  end
+
+  table.insert(lines, '')
+  table.insert(lines, response_header)
+  table.insert(lines, '')
+
+  for _, line in ipairs(vim.split(entry.response, '\n', { plain = true })) do
+    table.insert(lines, line)
+  end
+
+  if entry.usage then
+    table.insert(lines, '')
+    table.insert(lines, '---')
+    table.insert(
+      lines,
+      string.format(
+        'Tokens: %s input / %s output',
+        entry.usage.prompt_tokens or 'N/A',
+        entry.usage.completion_tokens or 'N/A'
+      )
+    )
+  end
+
+  table.insert(lines, '')
+  table.insert(lines, '---')
+  table.insert(lines, '')
+
+  return lines
+end
+
+--- Get unique conversation IDs from history entries.
+---@param entries BackendHistoryEntry[] List of history entries.
+---@return table<string, integer> Map of conversation_id to count.
+H.history_get_conversations = function(entries)
+  local conversations = {}
+  for _, entry in ipairs(entries) do
+    if entry.conversation_id and entry.conversation_id ~= '' then
+      conversations[entry.conversation_id] = (conversations[entry.conversation_id] or 0) + 1
+    end
+  end
+  return conversations
+end
+
+-- UI helpers --------------------------------------------------------------------
+--- Ensure the LLM buffer exists (hidden, markdown) and return its handle.
+---@return integer bufnr  Always‐valid buffer handle.
+H.ui_ensure_llm_buffer = function()
+  if H.state.ui.llm_buf and H.utils_buf_is_valid(H.state.ui.llm_buf) then
+    return H.state.ui.llm_buf
+  else
+    H.state.ui.llm_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = H.state.ui.llm_buf })
+    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = H.state.ui.llm_buf })
+    vim.api.nvim_buf_set_name(H.state.ui.llm_buf, 'sllm://chat')
+    return H.state.ui.llm_buf
+  end
+end
+
+--- Compute centered floating‐window options for the LLM buffer.
+---@return table<string, number|string>  Options suitable for `nvim_open_win`.
+H.ui_create_llm_float_win_opts = function()
+  local width = math.floor(vim.o.columns * 0.7)
+  local height = math.floor(vim.o.lines * 0.7)
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+  return {
+    relative = 'editor',
+    row = row > 0 and row or 0,
+    col = col > 0 and col or 0,
+    width = width,
+    height = height,
+    style = 'minimal',
+    border = 'rounded',
+    zindex = 50,
+  }
+end
+
+--- Update the winbar of the LLM window if it is visible.
+---@param text string  New winbar text.
+H.ui_update_winbar = function(text)
+  local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if llm_win and vim.api.nvim_win_is_valid(llm_win) then
+    vim.api.nvim_set_option_value('winbar', text, { win = llm_win })
+  end
+end
+
+--- Create and configure a window for the LLM buffer.
+---@param window_type? string  "float" | "horizontal" | "vertical"  Default: "vertical".
+---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
+---@return integer win_id      Window handle.
+H.ui_create_llm_win = function(window_type, model_name, online_enabled)
+  window_type = window_type or 'vertical'
+  local buf = H.ui_ensure_llm_buffer()
+
+  -- choose window options based on type
+  local win_opts
+  if window_type == 'float' then
+    win_opts = H.ui_create_llm_float_win_opts()
+  elseif window_type == 'horizontal' then
+    win_opts = { split = 'below' }
+  else
+    win_opts = { split = 'right' }
+  end
+
+  local win_id = vim.api.nvim_open_win(buf, false, win_opts)
+  vim.api.nvim_set_option_value('wrap', true, { win = win_id })
+  vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
+  vim.api.nvim_set_option_value('number', false, { win = win_id })
+
+  H.ui_update_llm_win_title(model_name, online_enabled)
+  return win_id
+end
+
+--- Start the Braille spinner in the LLM window's winbar.
+---@return nil
+H.ui_start_loading_indicator = function()
+  if H.state.ui.is_loading_active then return end
+  local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
+
+  H.state.ui.is_loading_active = true
+  H.state.ui.current_animation_frame_idx = 1
+  H.state.ui.original_winbar_text = vim.api.nvim_get_option_value('winbar', { win = llm_win })
+
+  if H.state.ui.animation_timer then
+    H.state.ui.animation_timer:close()
+    H.state.ui.animation_timer = nil
+  end
+  H.state.ui.animation_timer = vim.loop.new_timer()
+  H.state.ui.animation_timer:start(
+    0,
+    150,
+    vim.schedule_wrap(function()
+      if not H.state.ui.is_loading_active then
+        H.state.ui.animation_timer:stop()
+        H.state.ui.animation_timer:close()
+        H.state.ui.animation_timer = nil
+        return
+      end
+
+      local win_check = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+      if not (win_check and vim.api.nvim_win_is_valid(win_check)) then
+        H.ui_stop_loading_indicator()
+        return
+      end
+
+      H.state.ui.current_animation_frame_idx = (H.state.ui.current_animation_frame_idx % #H.ANIMATION_FRAMES) + 1
+      local frame = H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx]
+      H.ui_update_winbar(string.format('%s %s', frame, H.state.ui.original_winbar_text))
+    end)
+  )
+end
+
+--- Stop the loading spinner and restore the original winbar text.
+---@return nil
+H.ui_stop_loading_indicator = function()
+  if not H.state.ui.is_loading_active then return end
+  H.state.ui.is_loading_active = false
+  if H.state.ui.animation_timer then
+    H.state.ui.animation_timer:stop()
+    H.state.ui.animation_timer:close()
+    H.state.ui.animation_timer = nil
+  end
+  if H.state.ui.original_winbar_text ~= '' then H.ui_update_winbar(H.state.ui.original_winbar_text) end
+  H.state.ui.original_winbar_text = ''
+end
+
+--- Clear the LLM buffer and stop any active loading animation.
+---@return nil
+H.ui_clean_llm_buffer = function()
+  if H.state.ui.is_loading_active then H.ui_stop_loading_indicator() end
+  if H.state.ui.llm_buf and H.utils_buf_is_valid(H.state.ui.llm_buf) then
+    vim.api.nvim_buf_set_lines(H.state.ui.llm_buf, 0, -1, false, {})
+  end
+end
+
+--- Show the LLM buffer, creating a window if needed.
+---@param window_type? string  `"float"|"horizontal"|"vertical"`.
+---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
+---@return integer win_id  Window handle where the buffer is shown.
+H.ui_show_llm_buffer = function(window_type, model_name, online_enabled)
+  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if win then
+    return win
+  else
+    return H.ui_create_llm_win(window_type, model_name, online_enabled)
+  end
+end
+
+--- Focus (enter) the LLM window, creating it if necessary.
+---@param window_type? string  `"float"|"horizontal"|"vertical"`.
+---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
+---@return nil
+H.ui_focus_llm_buffer = function(window_type, model_name, online_enabled)
+  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if win then
+    vim.api.nvim_set_current_win(win)
+  else
+    win = H.ui_show_llm_buffer(window_type, model_name, online_enabled)
+    vim.api.nvim_set_current_win(win)
+  end
+end
+
+--- Toggle the LLM window: close if open, open if closed.
+---@param window_type? string  `"float"|"horizontal"|"vertical"`.
+---@param model_name?  string  Model name for the title.
+---@param online_enabled? boolean  Whether online mode is enabled.
+---@return nil
+H.ui_toggle_llm_buffer = function(window_type, model_name, online_enabled)
+  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if win then
+    vim.api.nvim_win_close(win, false)
+  else
+    H.ui_show_llm_buffer(window_type, model_name, online_enabled)
+  end
+end
+
+--- Append lines to the end of the LLM buffer and scroll to bottom.
+---@param lines string[]  Lines to append.
+---@param scroll_to_bottom boolean  Whether or not to scroll to the bottom of the buffer
+---@return nil
+H.ui_append_to_llm_buffer = function(lines, scroll_to_bottom)
+  if not lines then return end
+  local buf = H.ui_ensure_llm_buffer()
+  vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
+  local win = H.utils_check_buffer_visible(buf)
+  if win and scroll_to_bottom then
+    local last = vim.api.nvim_buf_line_count(buf)
+    vim.api.nvim_win_set_cursor(win, { last, 0 })
+  end
+end
+
+--- Update the LLM window's title (winbar) with the given model name.
+---@param model_name? string  Name of the model, or `nil` for default.
+---@param online_enabled? boolean  Whether online mode is enabled.
+---@return nil
+H.ui_update_llm_win_title = function(model_name, online_enabled)
+  local display = model_name or '(default)'
+  local online_indicator = online_enabled and ' 🌐' or ''
+  local title = string.format('  sllm.nvim | Model: %s%s', display, online_indicator)
+  if H.state.ui.is_loading_active then
+    H.state.ui.original_winbar_text = title
+  else
+    H.ui_update_winbar(title)
+  end
+end
+
+--- Update the winbar to show accumulated session statistics.
+---@param stats table  Table with `input`, `output`, and `cost` fields.
+---@return nil
+H.ui_update_session_stats = function(stats)
+  local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
+
+  -- Get current winbar and strip any existing stats
+  local current_winbar = vim.api.nvim_get_option_value('winbar', { win = llm_win })
+  -- Remove any existing stats section (everything after " | 📊")
+  local base_winbar = current_winbar:match('^(.-)%s*|%s*📊') or current_winbar
+
+  -- Format stats: in/out tokens and cost
+  local stats_text = string.format(' | 📊 In: %d Out: %d Cost: $%.6f', stats.input, stats.output, stats.cost)
+
+  -- Append stats to base winbar
+  local new_winbar = base_winbar .. stats_text
+
+  if H.state.ui.is_loading_active then
+    H.state.ui.original_winbar_text = new_winbar
+  else
+    H.ui_update_winbar(new_winbar)
+  end
+end
+
+--- Copy the first code block from the LLM buffer to the clipboard.
+---@return boolean  `true` if a code block was found and copied; `false` otherwise.
+H.ui_copy_first_code_block = function()
+  local buf = H.ui_ensure_llm_buffer()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local code_blocks = H.utils_extract_code_blocks(lines)
+
+  if #code_blocks == 0 then return false end
+
+  vim.fn.setreg('+', code_blocks[1])
+  vim.fn.setreg('"', code_blocks[1])
+  return true
+end
+
+--- Copy the last code block from the LLM buffer to the clipboard.
+---@return boolean  `true` if a code block was found and copied; `false` otherwise.
+H.ui_copy_last_code_block = function()
+  local buf = H.ui_ensure_llm_buffer()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local code_blocks = H.utils_extract_code_blocks(lines)
+
+  if #code_blocks == 0 then return false end
+
+  vim.fn.setreg('+', code_blocks[#code_blocks])
+  vim.fn.setreg('"', code_blocks[#code_blocks])
+  return true
+end
+
+--- Copy the last response from the LLM buffer to the clipboard.
+--- Extracts content from the last response marker to the end.
+---@param response_header? string  The response header to search for (default: '> 🤖 Response').
+---@return boolean  `true` if content was copied; `false` if no response found.
+H.ui_copy_last_response = function(response_header)
+  response_header = response_header or '> 🤖 Response'
+  local buf = H.ui_ensure_llm_buffer()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+  if #lines == 0 then return false end
+
+  -- Find the last occurrence of the response marker
+  local last_response_idx = nil
+  for i = #lines, 1, -1 do
+    if lines[i]:match('^' .. vim.pesc(response_header)) then
+      last_response_idx = i
+      break
+    end
+  end
+
+  if not last_response_idx then return false end
+
+  -- Extract from the response marker to the end (skip the marker line and empty lines)
+  local response_lines = {}
+  for i = last_response_idx + 1, #lines do
+    table.insert(response_lines, lines[i])
+  end
+
+  -- Remove leading empty lines
+  while #response_lines > 0 and response_lines[1]:match('^%s*$') do
+    table.remove(response_lines, 1)
+  end
+
+  -- Remove trailing empty lines
+  while #response_lines > 0 and response_lines[#response_lines]:match('^%s*$') do
+    table.remove(response_lines)
+  end
+
+  if #response_lines == 0 then return false end
+
+  local content = table.concat(response_lines, '\n')
+  vim.fn.setreg('+', content)
+  vim.fn.setreg('"', content)
+  return true
 end
 
 -- Module setup ===============================================================
@@ -799,7 +1422,7 @@ end
 ---
 ---@return nil
 function Sllm.ask_llm()
-  if H.utils.is_mode_visual() then Sllm.add_sel_to_ctx() end
+  if H.utils_is_mode_visual() then Sllm.add_sel_to_ctx() end
   H.input({ prompt = Sllm.config.ui.ask_llm_prompt }, function(user_input)
     if user_input == '' then
       H.notify('[sllm] no prompt provided.', vim.log.levels.INFO)
@@ -810,15 +1433,15 @@ function Sllm.ask_llm()
       return
     end
 
-    H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
-    if H.job_manager.is_busy() then
+    H.ui_show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+    if H.job_is_busy() then
       H.notify('[sllm] already running, please wait.', vim.log.levels.WARN)
       return
     end
 
     if Sllm.config.pre_hooks then
       for _, hook in ipairs(Sllm.config.pre_hooks) do
-        local output = H.job_manager.exec_cmd_capture_output(hook.command)
+        local output = H.job_exec_cmd_capture_output(hook.command)
         if hook.add_to_context then
           H.context_add_snip(output, 'Pre-hook-> ' .. hook.command, 'text')
           H.notify('[sllm] pre-hook executed, added to context ' .. hook.command, vim.log.levels.INFO)
@@ -828,9 +1451,9 @@ function Sllm.ask_llm()
 
     local ctx = H.context_get()
     local prompt = H.context_render_prompt_ui(user_input)
-    H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_prompt_header, '' }, Sllm.config.scroll_to_bottom)
-    H.ui.append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
-    H.ui.start_loading_indicator()
+    H.ui_append_to_llm_buffer({ '', Sllm.config.ui.markdown_prompt_header, '' }, Sllm.config.scroll_to_bottom)
+    H.ui_append_to_llm_buffer(vim.split(prompt, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
+    H.ui_start_loading_indicator()
 
     local cmd = H.backend.build_command(H.state.backend_config, {
       prompt = prompt,
@@ -848,17 +1471,17 @@ function Sllm.ask_llm()
     H.state.continue = true
 
     local first_line = false
-    H.job_manager.start(
+    H.job_start(
       cmd,
       -- stdout handler: display LLM response
       ---@param line string
       function(line)
         if not first_line then
-          H.ui.stop_loading_indicator()
-          H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_response_header, '' }, Sllm.config.scroll_to_bottom)
+          H.ui_stop_loading_indicator()
+          H.ui_append_to_llm_buffer({ '', Sllm.config.ui.markdown_response_header, '' }, Sllm.config.scroll_to_bottom)
           first_line = true
         end
-        H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom)
+        H.ui_append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom)
       end,
       -- stderr handler: parse token usage and filter tool calls
       ---@param line string
@@ -869,7 +1492,7 @@ function Sllm.ask_llm()
           H.state.session_stats.input = H.state.session_stats.input + usage.input
           H.state.session_stats.output = H.state.session_stats.output + usage.output
           H.state.session_stats.cost = H.state.session_stats.cost + usage.cost
-          if Sllm.config.show_usage then H.ui.update_session_stats(H.state.session_stats) end
+          if Sllm.config.show_usage then H.ui_update_session_stats(H.state.session_stats) end
           return
         end
 
@@ -877,23 +1500,23 @@ function Sllm.ask_llm()
         if H.backend.is_tool_call_output(line) then return end
 
         -- Display other stderr lines if they're not filtered
-        if line ~= '' then H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom) end
+        if line ~= '' then H.ui_append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom) end
       end,
       -- exit handler
       ---@param exit_code integer
       function(exit_code)
-        H.ui.stop_loading_indicator()
+        H.ui_stop_loading_indicator()
         if not first_line then
-          H.ui.append_to_llm_buffer({ '', Sllm.config.ui.markdown_response_header, '' }, Sllm.config.scroll_to_bottom)
+          H.ui_append_to_llm_buffer({ '', Sllm.config.ui.markdown_response_header, '' }, Sllm.config.scroll_to_bottom)
           local msg = exit_code == 0 and '(empty response)' or string.format('(failed or canceled: exit %d)', exit_code)
-          H.ui.append_to_llm_buffer({ msg }, Sllm.config.scroll_to_bottom)
+          H.ui_append_to_llm_buffer({ msg }, Sllm.config.scroll_to_bottom)
         end
         H.notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
-        H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
+        H.ui_append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
         if Sllm.config.reset_ctx_each_prompt then H.context_reset() end
         if Sllm.config.post_hooks then
           for _, hook in ipairs(Sllm.config.post_hooks) do
-            local _ = H.job_manager.exec_cmd_capture_output(hook.command)
+            local _ = H.job_exec_cmd_capture_output(hook.command)
           end
         end
       end
@@ -904,8 +1527,8 @@ end
 --- Cancel the in-flight LLM request, if any.
 ---@return nil
 function Sllm.cancel()
-  if H.job_manager.is_busy() then
-    H.job_manager.stop()
+  if H.job_is_busy() then
+    H.job_stop()
     H.notify('[sllm] canceling request...', vim.log.levels.WARN)
   else
     H.notify('[sllm] no active llm job', vim.log.levels.INFO)
@@ -915,27 +1538,27 @@ end
 --- Start a new chat (clears buffer and state).
 ---@return nil
 function Sllm.new_chat()
-  if H.job_manager.is_busy() then
-    H.job_manager.stop()
+  if H.job_is_busy() then
+    H.job_stop()
     H.notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
   H.state.continue = false
   H.state.session_stats = { input = 0, output = 0, cost = 0 } -- Reset stats for new chat
-  H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
-  H.ui.clean_llm_buffer()
+  H.ui_show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui_clean_llm_buffer()
   H.notify('[sllm] new chat created', vim.log.levels.INFO)
 end
 
 --- Focus the existing LLM window or create it.
 ---@return nil
 function Sllm.focus_llm_buffer()
-  H.ui.focus_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui_focus_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
 end
 
 --- Toggle visibility of the LLM window.
 ---@return nil
 function Sllm.toggle_llm_buffer()
-  H.ui.toggle_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui_toggle_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
 end
 
 --- Prompt user to select an LLM model.
@@ -950,7 +1573,7 @@ function Sllm.select_model()
     if item then
       H.state.selected_model = item
       H.notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
-      H.ui.update_llm_win_title(H.state.selected_model, H.state.online_enabled)
+      H.ui_update_llm_win_title(H.state.selected_model, H.state.online_enabled)
     else
       H.notify('[sllm] llm model not changed', vim.log.levels.WARN)
     end
@@ -978,10 +1601,10 @@ end
 --- Add the current file (or URL) path to the context.
 ---@return nil
 function Sllm.add_file_to_ctx()
-  local buf_path = H.utils.get_path_of_buffer(0)
+  local buf_path = H.utils_get_path_of_buffer(0)
   if buf_path then
     H.context_add_fragment(buf_path)
-    H.notify('[sllm] context +' .. H.utils.get_relpath(buf_path), vim.log.levels.INFO)
+    H.notify('[sllm] context +' .. H.utils_get_relpath(buf_path), vim.log.levels.INFO)
   else
     H.notify('[sllm] buffer does not have a path.', vim.log.levels.WARN)
   end
@@ -1004,8 +1627,8 @@ end
 ---@return nil
 function Sllm.add_func_to_ctx()
   local text
-  if H.utils.is_mode_visual() then
-    text = H.utils.get_visual_selection()
+  if H.utils_is_mode_visual() then
+    text = H.utils_get_visual_selection()
     if text:match('^%s*$') then
       H.notify('[sllm] empty selection.', vim.log.levels.WARN)
       return
@@ -1025,13 +1648,13 @@ end
 --- Add the current visual selection as a code snippet.
 ---@return nil
 function Sllm.add_sel_to_ctx()
-  local text = H.utils.get_visual_selection()
+  local text = H.utils_get_visual_selection()
   if text:match('^%s*$') then
     H.notify('[sllm] empty selection.', vim.log.levels.WARN)
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
-  H.context_add_snip(text, H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)), vim.bo[bufnr].filetype)
+  H.context_add_snip(text, H.utils_get_relpath(H.utils_get_path_of_buffer(bufnr)), vim.bo[bufnr].filetype)
   H.notify('[sllm] added selection to context.', vim.log.levels.INFO)
 end
 
@@ -1052,7 +1675,7 @@ function Sllm.add_diag_to_ctx()
   end
   H.context_add_snip(
     'diagnostics:\n' .. table.concat(lines, '\n'),
-    H.utils.get_relpath(H.utils.get_path_of_buffer(bufnr)),
+    H.utils_get_relpath(H.utils_get_path_of_buffer(bufnr)),
     vim.bo[bufnr].filetype
   )
   H.notify('[sllm] added diagnostics to context.', vim.log.levels.INFO)
@@ -1063,7 +1686,7 @@ end
 function Sllm.add_cmd_out_to_ctx()
   H.input({ prompt = Sllm.config.ui.add_cmd_prompt }, function(cmd_raw)
     H.notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
-    local res_out = H.job_manager.exec_cmd_capture_output(cmd_raw)
+    local res_out = H.job_exec_cmd_capture_output(cmd_raw)
     H.context_add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
     H.notify('[sllm] added command output to context.', vim.log.levels.INFO)
   end)
@@ -1108,13 +1731,13 @@ function Sllm.show_model_options()
   local output = vim.fn.systemlist(cmd)
 
   -- Display in a floating window or show in the LLM buffer
-  H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
-  H.ui.append_to_llm_buffer(
+  H.ui_show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui_append_to_llm_buffer(
     { '', '> 📋 Available options for ' .. H.state.selected_model, '' },
     Sllm.config.scroll_to_bottom
   )
-  H.ui.append_to_llm_buffer(output, Sllm.config.scroll_to_bottom)
-  H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
+  H.ui_append_to_llm_buffer(output, Sllm.config.scroll_to_bottom)
+  H.ui_append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
   H.notify('[sllm] showing model options', vim.log.levels.INFO)
 end
 
@@ -1160,7 +1783,7 @@ function Sllm.toggle_online()
   end
 
   -- Update the UI title to reflect the change
-  H.ui.update_llm_win_title(H.state.selected_model, H.state.online_enabled)
+  H.ui_update_llm_win_title(H.state.selected_model, H.state.online_enabled)
 end
 
 --- Get online status for UI display.
@@ -1170,7 +1793,7 @@ function Sllm.is_online_enabled() return H.state.online_enabled end
 --- Copy the first code block from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_first_code_block()
-  if H.ui.copy_first_code_block() then
+  if H.ui_copy_first_code_block() then
     H.notify('[sllm] first code block copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
@@ -1180,7 +1803,7 @@ end
 --- Copy the last code block from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_last_code_block()
-  if H.ui.copy_last_code_block() then
+  if H.ui_copy_last_code_block() then
     H.notify('[sllm] last code block copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
@@ -1190,7 +1813,7 @@ end
 --- Copy the last response from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_last_response()
-  if H.ui.copy_last_response(Sllm.config.ui.markdown_response_header) then
+  if H.ui_copy_last_response(Sllm.config.ui.markdown_response_header) then
     H.notify('[sllm] last response copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no response found in LLM buffer.', vim.log.levels.WARN)
@@ -1200,7 +1823,7 @@ end
 --- Complete code at cursor position.
 ---@return nil
 function Sllm.complete_code()
-  if H.job_manager.is_busy() then
+  if H.job_is_busy() then
     H.notify('[sllm] already running, please wait.', vim.log.levels.WARN)
     return
   end
@@ -1252,7 +1875,7 @@ function Sllm.complete_code()
   -- Collect the completion output
   local completion_output = {}
 
-  H.job_manager.start(cmd, function(line)
+  H.job_start(cmd, function(line)
     if line ~= '' then table.insert(completion_output, line) end
   end, function(exit_code)
     if exit_code == 0 and #completion_output > 0 then
@@ -1390,20 +2013,20 @@ function Sllm.browse_history()
     H.state.continue = selected.id -- Store conversation ID for continuation
 
     -- Display the conversation
-    H.ui.show_llm_buffer(Sllm.config.window_type, selected.model, H.state.online_enabled)
-    H.ui.clean_llm_buffer()
+    H.ui_show_llm_buffer(Sllm.config.window_type, selected.model, H.state.online_enabled)
+    H.ui_clean_llm_buffer()
 
-    H.ui.append_to_llm_buffer({
+    H.ui_append_to_llm_buffer({
       '# Loaded conversation: ' .. selected.id:sub(1, 10) .. '...',
       '*(New prompts will continue this conversation)*',
       '',
     }, Sllm.config.scroll_to_bottom)
 
     for _, entry in ipairs(selected.entries) do
-      local formatted = H.history_manager.format_conversation_entry(entry, Sllm.config.ui)
+      local formatted = H.history_format_conversation_entry(entry, Sllm.config.ui)
       -- Ensure formatted is a table before appending
       if formatted and type(formatted) == 'table' and #formatted > 0 then
-        H.ui.append_to_llm_buffer(formatted, Sllm.config.scroll_to_bottom)
+        H.ui_append_to_llm_buffer(formatted, Sllm.config.scroll_to_bottom)
       end
     end
 
@@ -1460,10 +2083,10 @@ H.show_template_content = function(template_name)
     return
   end
 
-  H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
-  H.ui.append_to_llm_buffer({ '', '> 📋 Template: ' .. template.name, '' }, Sllm.config.scroll_to_bottom)
-  H.ui.append_to_llm_buffer(vim.split(template.content, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
-  H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
+  H.ui_show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui_append_to_llm_buffer({ '', '> 📋 Template: ' .. template.name, '' }, Sllm.config.scroll_to_bottom)
+  H.ui_append_to_llm_buffer(vim.split(template.content, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
+  H.ui_append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
   H.notify('[sllm] showing template: ' .. template.name, vim.log.levels.INFO)
 end
 

@@ -188,12 +188,13 @@
 ---
 --- ## Basic Workflow ~
 ---
---- 1. Press `<leader>ss` - Ask the LLM a question
---- 2. Press `<leader>sa` - Add current file to context
---- 3. Press `<leader>sv` (visual mode) - Add selection to context
---- 4. Press `<leader>sm` - Switch models
---- 5. Press `<leader>sh` - Browse and continue previous conversations
---- 6. Press `<leader><Tab>` - Complete code at cursor position
+--- 1. Press `<leader>sl` - Select a template (optional)
+--- 2. Press `<leader>ss` - Ask to LLM a question
+--- 3. Press `<leader>sa` - Add current file to context
+--- 4. Press `<leader>sv` (visual mode) - Add selection to context
+--- 5. Press `<leader>sm` - Switch models
+--- 6. Press `<leader>sh` - Browse and continue previous conversations
+--- 7. Press `<leader><Tab>` - Complete code at cursor position
 ---
 --- ## Code Completion ~
 ---
@@ -425,6 +426,10 @@
 ---@field copy_last_response string|false|nil     Keymap for copying the last response.
 ---@field complete_code string|false|nil          Keymap for triggering code completion at cursor.
 ---@field browse_history string|false|nil         Keymap for browsing chat history.
+---@field select_template string|false|nil        Keymap for selecting a template.
+---@field show_template string|false|nil         Keymap for showing template details.
+---@field edit_template string|false|nil          Keymap for editing a template.
+---@field clear_template string|false|nil         Keymap for clearing a template.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -436,6 +441,7 @@
 ---@class SllmConfig
 ---@field llm_cmd string                     Command to run the LLM CLI.
 ---@field default_model string               Default model name or `"default"`.
+---@field default_template string?           Default template to use.
 ---@field show_usage boolean                 Show usage examples flag.
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
 ---@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
@@ -490,6 +496,7 @@ Always answer with markdown.
 If the offered change is small, return only the changed part or function, not the entire file.]],
   history_max_entries = 1000,
   chain_limit = 100,
+  default_template = nil, -- Default template to use
   keymaps = {
     ask_llm = '<leader>ss',
     new_chat = '<leader>sn',
@@ -514,6 +521,10 @@ If the offered change is small, return only the changed part or function, not th
     copy_last_response = '<leader>sE',
     complete_code = '<leader><Tab>',
     browse_history = '<leader>sh',
+    select_template = '<leader>sl', -- Fuzzy select template (l for list/template)
+    show_template = '<leader>sL', -- Show template details
+    edit_template = '<leader>si', -- Edit template in editor (i for insert/edit)
+    clear_template = '<leader>sI', -- Clear template (capital I)
   },
   ui = {
     ask_llm_prompt = 'Prompt: ',
@@ -624,6 +635,10 @@ H.apply_config = function(config)
       copy_last_response = { modes = { 'n', 'v' }, func = Sllm.copy_last_response, desc = 'Copy last response' },
       complete_code = { modes = { 'n', 'v' }, func = Sllm.complete_code, desc = 'Complete code at cursor' },
       browse_history = { modes = { 'n', 'v' }, func = Sllm.browse_history, desc = 'Browse chat history' },
+      select_template = { modes = { 'n', 'v' }, func = Sllm.select_template, desc = 'Select template' },
+      show_template = { modes = { 'n', 'v' }, func = Sllm.show_template, desc = 'Show template details' },
+      edit_template = { modes = { 'n', 'v' }, func = Sllm.edit_template, desc = 'Edit template' },
+      clear_template = { modes = { 'n', 'v' }, func = Sllm.clear_template, desc = 'Clear template' },
     }
 
     for name, def in pairs(keymap_defs) do
@@ -658,6 +673,7 @@ H.apply_config = function(config)
   H.state.system_prompt = Sllm.config.system_prompt
   H.state.model_options = Sllm.config.model_options or {}
   H.state.online_enabled = Sllm.config.online_enabled or false
+  H.state.selected_template = Sllm.config.default_template or nil
 
   -- Set online option if enabled by default
   if H.state.online_enabled then H.state.model_options.online = 1 end
@@ -721,6 +737,7 @@ function Sllm.ask_llm()
       system_prompt = H.state.system_prompt,
       model_options = H.state.model_options,
       chain_limit = Sllm.config.chain_limit,
+      template = H.state.selected_template,
     })
     H.state.continue = true
 
@@ -1264,6 +1281,85 @@ function Sllm.browse_history()
 
     H.notify('[sllm] loaded ' .. #selected.entries .. ' messages, ready to continue', vim.log.levels.INFO)
   end)
+end
+
+--- Select a template to use for future prompts.
+---@return nil
+function Sllm.select_template()
+  local templates = H.backend.get_templates(H.state.backend_config)
+  if not (templates and #templates > 0) then
+    H.notify('[sllm] no templates found.', vim.log.levels.INFO)
+    return
+  end
+
+  H.pick(templates, { prompt = 'Select template:', default = H.state.selected_template }, function(item)
+    if item then
+      H.state.selected_template = item
+      H.notify('[sllm] template selected: ' .. item, vim.log.levels.INFO)
+    else
+      H.notify('[sllm] template not changed', vim.log.levels.WARN)
+    end
+  end)
+end
+
+--- Show details of the currently selected template or select one to show.
+---@return nil
+function Sllm.show_template()
+  local templates = H.backend.get_templates(H.state.backend_config)
+  if not (templates and #templates > 0) then
+    H.notify('[sllm] no templates found.', vim.log.levels.INFO)
+    return
+  end
+
+  local template_name = H.state.selected_template
+  if not template_name or not vim.tbl_contains(templates, template_name) then
+    H.pick(templates, { prompt = 'Select template to show:', default = template_name }, function(item)
+      if item then
+        H.show_template_content(item)
+      else
+        H.notify('[sllm] no template selected', vim.log.levels.WARN)
+      end
+    end)
+  else
+    H.show_template_content(template_name)
+  end
+end
+
+H.show_template_content = function(template_name)
+  local template = H.backend.get_template(H.state.backend_config, template_name)
+  if not template then
+    H.notify('[sllm] template not found: ' .. template_name, vim.log.levels.ERROR)
+    return
+  end
+
+  H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
+  H.ui.append_to_llm_buffer({ '', '> 📋 Template: ' .. template.name, '' }, Sllm.config.scroll_to_bottom)
+  H.ui.append_to_llm_buffer(vim.split(template.content, '\n', { plain = true }), Sllm.config.scroll_to_bottom)
+  H.ui.append_to_llm_buffer({ '' }, Sllm.config.scroll_to_bottom)
+  H.notify('[sllm] showing template: ' .. template.name, vim.log.levels.INFO)
+end
+
+--- Edit the currently selected template in your editor.
+---@return nil
+function Sllm.edit_template()
+  if not H.state.selected_template then
+    H.notify('[sllm] no template selected.', vim.log.levels.WARN)
+    return
+  end
+
+  local success = H.backend.edit_template(H.state.backend_config, H.state.selected_template)
+  if success then
+    H.notify('[sllm] template edited: ' .. H.state.selected_template, vim.log.levels.INFO)
+  else
+    H.notify('[sllm] failed to edit template: ' .. H.state.selected_template, vim.log.levels.ERROR)
+  end
+end
+
+--- Clear the selected template.
+---@return nil
+function Sllm.clear_template()
+  H.state.selected_template = nil
+  H.notify('[sllm] template cleared', vim.log.levels.INFO)
 end
 
 return Sllm

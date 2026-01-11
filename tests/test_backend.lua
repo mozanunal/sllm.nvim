@@ -79,6 +79,26 @@ T['base']['default get_history returns nil'] = function() MiniTest.expect.equali
 
 T['base']['default get_session returns nil'] = function() MiniTest.expect.equality(Base.get_session({}, 'conv-id'), nil) end
 
+T['base']['default supports_templates returns false'] = function()
+  MiniTest.expect.equality(Base.supports_templates(), false)
+end
+
+T['base']['default get_templates returns empty table'] = function()
+  local templates = Base.get_templates({})
+  MiniTest.expect.equality(type(templates), 'table')
+  MiniTest.expect.equality(#templates, 0)
+end
+
+T['base']['default get_template returns nil'] = function() MiniTest.expect.equality(Base.get_template({}, 'test'), nil) end
+
+T['base']['default get_templates_path returns nil'] = function()
+  MiniTest.expect.equality(Base.get_templates_path({}), nil)
+end
+
+T['base']['default edit_template returns false'] = function()
+  MiniTest.expect.equality(Base.edit_template({}, 'test'), false)
+end
+
 -- =============================================================================
 -- LLM backend tests
 -- =============================================================================
@@ -203,5 +223,32 @@ T['llm']['supports_history returns true'] = function() MiniTest.expect.equality(
 T['llm']['get_history is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_history), 'function') end
 
 T['llm']['get_session is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_session), 'function') end
+
+T['llm']['supports_templates returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_templates(), true) end
+
+T['llm']['get_templates is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.get_templates), 'function')
+end
+
+T['llm']['get_template is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_template), 'function') end
+
+T['llm']['get_templates_path is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.get_templates_path), 'function')
+end
+
+T['llm']['edit_template is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.edit_template), 'function')
+end
+
+T['llm']['build_command includes template flag'] = function()
+  local cmd = LlmBackend.build_command({ cmd = 'llm' }, {
+    prompt = 'test',
+    template = 'my-template',
+  })
+  MiniTest.expect.no_error(function()
+    assert(cmd:find('-t') ~= nil)
+    assert(cmd:find('my%-template') ~= nil)
+  end)
+end
 
 return T

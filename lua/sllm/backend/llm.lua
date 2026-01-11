@@ -9,6 +9,16 @@ local H = {}
 -- Helper data ================================================================
 H.utils = require('sllm.utils')
 
+---Get the templates directory path.
+---@param llm_cmd string LLM command path.
+---@return string? Path to templates directory or nil.
+H.get_templates_path = function(llm_cmd)
+  local output = vim.fn.system(llm_cmd .. ' templates path')
+  local path = vim.trim(output)
+  if path ~= '' and path:sub(1, 5) ~= 'Error' then return path end
+  return nil
+end
+
 ---Check if a file should be treated as an attachment (image, PDF, etc.)
 ---@param filename string File path to check.
 ---@return boolean True if the file should use `-a`, false if it should use `-f`.
@@ -154,6 +164,8 @@ local LlmBackend = Base.extend({
       end
     end
 
+    if options.template then cmd = cmd .. ' -t ' .. vim.fn.shellescape(options.template) end
+
     -- Always append the user's input prompt at the end
     cmd = cmd .. ' ' .. vim.fn.shellescape(options.prompt)
     return cmd
@@ -166,6 +178,10 @@ local LlmBackend = Base.extend({
   ---LLM CLI supports history.
   ---@return boolean True.
   supports_history = function() return true end,
+
+  ---LLM CLI supports templates.
+  ---@return boolean True.
+  supports_templates = function() return true end,
 
   ---Fetch history entries from llm logs.
   ---@param config BackendConfig Backend configuration with cmd field.
@@ -235,6 +251,66 @@ local LlmBackend = Base.extend({
     end
 
     return entries
+  end,
+
+  ---Get list of available templates from llm CLI.
+  ---@param config BackendConfig Backend configuration with cmd field.
+  ---@return string[] List of template names.
+  get_templates = function(config)
+    local llm_cmd = config.cmd or 'llm'
+    local output = vim.fn.systemlist(llm_cmd .. ' templates list')
+
+    local templates = {}
+    for _, line in ipairs(output) do
+      if line:match('^%S+%s*:') then
+        local name = line:match('^(%S+)%s*:')
+        if name then table.insert(templates, name) end
+      end
+    end
+
+    return templates
+  end,
+
+  ---Get detailed information about a template.
+  ---@param config BackendConfig Backend configuration with cmd field.
+  ---@param template_name string Name of the template.
+  ---@return table? Template data (yaml content) or nil.
+  get_template = function(config, template_name)
+    local llm_cmd = config.cmd or 'llm'
+    local output = vim.fn.system(llm_cmd .. ' templates show ' .. vim.fn.shellescape(template_name))
+
+    if output == '' then return nil end
+
+    return {
+      name = template_name,
+      content = output,
+    }
+  end,
+
+  ---Get the templates directory path.
+  ---@param config BackendConfig Backend configuration with cmd field.
+  ---@return string? Path to templates directory or nil.
+  get_templates_path = function(config)
+    local llm_cmd = config.cmd or 'llm'
+    return H.get_templates_path(llm_cmd)
+  end,
+
+  ---Open the template file in Neovim for editing.
+  ---@param config BackendConfig Backend configuration with cmd field.
+  ---@param template_name string Name of the template to edit.
+  ---@return boolean Success status.
+  edit_template = function(config, template_name)
+    local llm_cmd = config.cmd or 'llm'
+    local templates_path = H.get_templates_path(llm_cmd)
+    if not templates_path then return false end
+
+    local template_file = templates_path .. '/' .. template_name .. '.yaml'
+    if vim.fn.filereadable(template_file) == 1 then
+      vim.cmd('edit ' .. vim.fn.fnameescape(template_file))
+      return true
+    end
+
+    return false
   end,
 })
 

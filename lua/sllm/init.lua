@@ -756,15 +756,14 @@ H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_ex
       if not data then return end
       for _, chunk in ipairs(data) do
         if chunk ~= '' then
-          -- 1) Accumulate chunks
-          H.state.job.stdout_acc = H.state.job.stdout_acc .. chunk
+          -- 1) Accumulate chunks (normalize carriage returns)
+          local normalized = chunk:gsub('\r', '\n')
+          H.state.job.stdout_acc = H.state.job.stdout_acc .. normalized
 
           -- 2) Split on '\n' and flush each line
           local nl_pos = H.state.job.stdout_acc:find('\n', 1, true)
           while nl_pos do
             local line = H.state.job.stdout_acc:sub(1, nl_pos - 1)
-            -- Strip trailing \r if present (handles \r\n line endings)
-            line = line:gsub('\r$', '')
             local stripped = H.utils_strip_ansi_codes(line)
 
             -- With pty=true, stderr is merged into stdout
@@ -792,12 +791,26 @@ H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_ex
     on_exit = function(_, exit_code, _)
       -- Flush leftover stdout without a trailing '\n'
       if H.state.job.stdout_acc ~= '' then
-        local line = H.state.job.stdout_acc:gsub('\r$', '')
-        local stripped = H.utils_strip_ansi_codes(line)
-        if stripped:match('Token usage:') or stripped:match('^Tool call:') then
-          hook_on_stderr_line(stripped)
-        else
-          hook_on_stdout_line(stripped)
+        local stdout_acc = H.state.job.stdout_acc:gsub('\r', '\n')
+        local nl_pos = stdout_acc:find('\n', 1, true)
+        while nl_pos do
+          local line = stdout_acc:sub(1, nl_pos - 1)
+          local stripped = H.utils_strip_ansi_codes(line)
+          if stripped:match('Token usage:') or stripped:match('^Tool call:') then
+            hook_on_stderr_line(stripped)
+          else
+            hook_on_stdout_line(stripped)
+          end
+          stdout_acc = stdout_acc:sub(nl_pos + 1)
+          nl_pos = stdout_acc:find('\n', 1, true)
+        end
+        if stdout_acc ~= '' then
+          local stripped = H.utils_strip_ansi_codes(stdout_acc)
+          if stripped:match('Token usage:') or stripped:match('^Tool call:') then
+            hook_on_stderr_line(stripped)
+          else
+            hook_on_stdout_line(stripped)
+          end
         end
         H.state.job.stdout_acc = ''
       end

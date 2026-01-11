@@ -229,6 +229,31 @@ function UI.update_llm_win_title(model_name, online_enabled)
   end
 end
 
+--- Update the winbar to show accumulated session statistics.
+---@param stats table  Table with `input`, `output`, and `cost` fields.
+---@return nil
+function UI.update_session_stats(stats)
+  local llm_win = H.utils.check_buffer_visible(H.llm_buf)
+  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
+
+  -- Get current winbar and strip any existing stats
+  local current_winbar = vim.api.nvim_get_option_value('winbar', { win = llm_win })
+  -- Remove any existing stats section (everything after " | 📊")
+  local base_winbar = current_winbar:match('^(.-)%s*|%s*📊') or current_winbar
+
+  -- Format stats: in/out tokens and cost
+  local stats_text = string.format(' | 📊 In: %d Out: %d Cost: $%.6f', stats.input, stats.output, stats.cost)
+
+  -- Append stats to base winbar
+  local new_winbar = base_winbar .. stats_text
+
+  if H.is_loading_active then
+    H.original_winbar_text = new_winbar
+  else
+    H.update_winbar(new_winbar)
+  end
+end
+
 --- Copy the first code block from the LLM buffer to the clipboard.
 ---@return boolean  `true` if a code block was found and copied; `false` otherwise.
 function UI.copy_first_code_block()

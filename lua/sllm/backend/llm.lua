@@ -70,6 +70,32 @@ H.is_attachment = function(filename)
   return false
 end
 
+--- Parse token usage and cost from a stderr line.
+--- Expected format: "Token usage: 123 input, 456 output" or
+---                  "Token usage: 123 input, 456 output, {..., "cost": 0.001234, ...}"
+---@param line string The stderr line to parse
+---@return table|nil A table with input, output, and cost (optional), or nil if not found
+H.parse_token_usage = function(line)
+  local input, output = line:match('Token usage:%s*(%d+)%s+input,%s*(%d+)%s+output')
+  if not input or not output then return nil end
+
+  local result = { input = tonumber(input), output = tonumber(output), cost = 0 }
+
+  -- Try to extract cost from JSON-like format
+  local cost = line:match('"cost":%s*([%d%.]+)')
+  if cost then result.cost = tonumber(cost) end
+
+  return result
+end
+
+--- Detect if a line is part of tool call output.
+--- Tool call outputs start with "Tool call:" and can be followed by function names.
+---@param line string The stderr line to check
+---@return boolean True if the line appears to be tool call related
+H.is_tool_call_output = function(line)
+  return line:match('^Tool call:') ~= nil or line:match('^%s*[📁📄🔧]') ~= nil
+end
+
 -- Backend Implementation =====================================================
 local LlmBackend = Base.extend({
   ---Backend identifier.
@@ -312,6 +338,16 @@ local LlmBackend = Base.extend({
 
     return false
   end,
+
+  ---Parse token usage and cost from a stderr line.
+  ---@param line string The stderr line to parse.
+  ---@return table|nil A table with input, output, and cost (optional), or nil if not found.
+  parse_token_usage = function(line) return H.parse_token_usage(line) end,
+
+  ---Detect if a line is part of tool call output.
+  ---@param line string The stderr line to check.
+  ---@return boolean True if the line appears to be tool call related.
+  is_tool_call_output = function(line) return H.is_tool_call_output(line) end,
 })
 
 return LlmBackend

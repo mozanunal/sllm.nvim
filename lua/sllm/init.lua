@@ -553,6 +553,7 @@ H.state = {
   model_options = {},
   online_enabled = false,
   backend_config = {}, -- Backend-specific configuration
+  session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
 }
 
 -- Internal functions for UI
@@ -744,6 +745,7 @@ function Sllm.ask_llm()
     local first_line = false
     H.job_manager.start(
       cmd,
+      -- stdout handler: display LLM response
       ---@param line string
       function(line)
         if not first_line then
@@ -753,6 +755,26 @@ function Sllm.ask_llm()
         end
         H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom)
       end,
+      -- stderr handler: parse token usage and filter tool calls
+      ---@param line string
+      function(line)
+        -- Parse token usage and accumulate stats
+        local usage = H.backend.parse_token_usage(line)
+        if usage then
+          H.state.session_stats.input = H.state.session_stats.input + usage.input
+          H.state.session_stats.output = H.state.session_stats.output + usage.output
+          H.state.session_stats.cost = H.state.session_stats.cost + usage.cost
+          if Sllm.config.show_usage then H.ui.update_session_stats(H.state.session_stats) end
+          return
+        end
+
+        -- Filter out tool call outputs (they can be very large)
+        if H.backend.is_tool_call_output(line) then return end
+
+        -- Display other stderr lines if they're not filtered
+        if line ~= '' then H.ui.append_to_llm_buffer({ line }, Sllm.config.scroll_to_bottom) end
+      end,
+      -- exit handler
       ---@param exit_code integer
       function(exit_code)
         H.ui.stop_loading_indicator()
@@ -793,6 +815,7 @@ function Sllm.new_chat()
     H.notify('[sllm] previous request canceled for new chat.', vim.log.levels.INFO)
   end
   H.state.continue = false
+  H.state.session_stats = { input = 0, output = 0, cost = 0 } -- Reset stats for new chat
   H.ui.show_llm_buffer(Sllm.config.window_type, H.state.selected_model, H.state.online_enabled)
   H.ui.clean_llm_buffer()
   H.notify('[sllm] new chat created', vim.log.levels.INFO)

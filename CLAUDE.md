@@ -89,6 +89,7 @@ return ModuleName
 ```
 
 **State Organization Rules:**
+
 - Constants at the top using UPPERCASE naming
 - All state consolidated in `H.state` with logical nesting
 - Helper functions prefixed by domain (context_, ui_, job_, etc.)
@@ -96,20 +97,20 @@ return ModuleName
 
 **Module Responsibilities:**
 
-| Module              | Responsibility                                                                 | Exports  |
-| ------------------- | ------------------------------------------------------------------------------ | -------- |
-| `init.lua`          | Main module with all functionality:                                            | `Sllm`   |
-|                     | - Public API (config, keymaps, commands)                                       |          |
-|                     | - H.context\_\* (context tracking: files, snippets, tools)                     |          |
-|                     | - H.ui\_\* (buffer/window management, loading indicators)                      |          |
-|                     | - H.job\_\* (async job execution, streaming)                                   |          |
-|                     | - H.history\_\* (conversation history formatting)                              |          |
-|                     | - H.utils\_\* (utilities: JSON parsing, buffer ops, visual selection)          |          |
-|                     | - H.state (consolidated state: main, context, ui, job)                         |          |
-| `backend/base.lua`  | Base backend class with OOP-style inheritance                                  | `Base`   |
-| `backend/llm.lua`   | LLM CLI backend implementation (commands, models, tools, templates, history)   | `Backend`|
-| `backend/init.lua`  | Backend registry for pluggable backends                                        | `M`      |
-| `health.lua`        | Neovim health check (`:checkhealth sllm`)                                      | `M.check`|
+| Module             | Responsibility                                                               | Exports   |
+| ------------------ | ---------------------------------------------------------------------------- | --------- |
+| `init.lua`         | Main module with all functionality:                                          | `Sllm`    |
+|                    | - Public API (config, keymaps, commands)                                     |           |
+|                    | - H.context\_\* (context tracking: files, snippets, tools)                   |           |
+|                    | - H.ui\_\* (buffer/window management, loading indicators)                    |           |
+|                    | - H.job\_\* (async job execution, streaming)                                 |           |
+|                    | - H.history\_\* (conversation history formatting)                            |           |
+|                    | - H.utils\_\* (utilities: JSON parsing, buffer ops, visual selection)        |           |
+|                    | - H.state (consolidated state: main, context, ui, job)                       |           |
+| `backend/base.lua` | Base backend class with OOP-style inheritance                                | `Base`    |
+| `backend/llm.lua`  | LLM CLI backend implementation (commands, models, tools, templates, history) | `Backend` |
+| `backend/init.lua` | Backend registry for pluggable backends                                      | `M`       |
+| `health.lua`       | Neovim health check (`:checkhealth sllm`)                                    | `M.check` |
 
 ---
 
@@ -207,6 +208,7 @@ Run: `make test` or
 8. **Run checks**: `make format && make lint && make test && make doc`
 
 **Key Principles:**
+
 - Keep helper functions in logical domain groups (context_, ui_, job_, etc.)
 - Always use `H.state.*` for state access, never separate variables
 - Test at the public API level, not helper function level
@@ -229,7 +231,8 @@ Run: `make test` or
 
 ### Consolidated Module Design
 
-**Decision**: Merge separate modules (context, UI, job, history, utils) into init.lua as H.\* helpers
+**Decision**: Merge separate modules (context, UI, job, history, utils) into
+init.lua as H.\* helpers
 
 **Why**:
 

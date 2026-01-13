@@ -1047,11 +1047,11 @@ H.ui_render_winbar = function()
   -- Build winbar components
   local parts = {}
 
-  -- 1. Loading indicator or space
+  -- 1. Loading indicator or space (with trailing space for alignment)
   if H.state.ui.is_loading_active then
-    table.insert(parts, H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx])
+    table.insert(parts, H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx] .. ' ')
   else
-    table.insert(parts, ' ')
+    table.insert(parts, '  ')
   end
 
   -- 2. Model name
@@ -1480,7 +1480,6 @@ function Sllm.ask_llm()
           local msg = exit_code == 0 and '(empty response)' or string.format('(failed or canceled: exit %d)', exit_code)
           H.ui_append_to_llm_buffer({ msg })
         end
-        H.notify('[sllm] done ✅ exit code: ' .. exit_code, vim.log.levels.INFO)
         H.ui_append_to_llm_buffer({ '' })
         if Sllm.config.reset_ctx_each_prompt then H.context_reset() end
         if Sllm.config.post_hooks then

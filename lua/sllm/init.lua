@@ -1092,7 +1092,7 @@ H.ui_start_loading_indicator = function()
 
       H.state.ui.current_animation_frame_idx = (H.state.ui.current_animation_frame_idx % #H.ANIMATION_FRAMES) + 1
       local frame = H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx]
-      H.ui_update_winbar(string.format('%s %s', frame, H.state.ui.original_winbar_text))
+      H.ui_update_winbar(frame .. ' ' .. H.state.ui.original_winbar_text)
     end)
   )
 end
@@ -1107,7 +1107,7 @@ H.ui_stop_loading_indicator = function()
     H.state.ui.animation_timer:close()
     H.state.ui.animation_timer = nil
   end
-  if H.state.ui.original_winbar_text ~= '' then H.ui_update_winbar(H.state.ui.original_winbar_text) end
+  if H.state.ui.original_winbar_text ~= '' then H.ui_update_winbar(' ' .. H.state.ui.original_winbar_text) end
   H.state.ui.original_winbar_text = ''
 end
 
@@ -1171,13 +1171,29 @@ end
 --- Update the LLM window's title (winbar) with current model and online status.
 ---@return nil
 H.ui_update_llm_win_title = function()
-  local display = H.state.selected_model or '(default)'
+  local model = H.state.selected_model or '(default)'
+  -- Extract only the last part after '/' (e.g., "openai/gpt-4" -> "gpt-4")
+  local display = model:match('([^/]+)$') or model
   local online_indicator = H.state.online_enabled and ' 🌐' or ''
-  local title = string.format('  sllm.nvim | Model: %s%s', display, online_indicator)
+  local title = string.format('%s%s', display, online_indicator)
   if H.state.ui.is_loading_active then
     H.state.ui.original_winbar_text = title
+    -- Update the current display with animation frame
+    local frame = H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx]
+    H.ui_update_winbar(frame .. ' ' .. title)
   else
-    H.ui_update_winbar(title)
+    H.ui_update_winbar(' ' .. title)
+  end
+end
+
+--- Format number in k format (e.g., 0.14k for 140).
+---@param num number  The number to format.
+---@return string  Formatted string.
+local format_k = function(num)
+  if num >= 1000 then
+    return string.format('%.2fk', num / 1000)
+  else
+    return string.format('%d', num)
   end
 end
 
@@ -1188,21 +1204,31 @@ H.ui_update_session_stats = function(stats)
   local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
   if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
 
-  -- Get current winbar and strip any existing stats
-  local current_winbar = vim.api.nvim_get_option_value('winbar', { win = llm_win })
-  -- Remove any existing stats section (everything after " | 📊")
-  local base_winbar = current_winbar:match('^(.-)%s*|%s*📊') or current_winbar
+  -- Get base title (just model name)
+  local base_title
+  if H.state.ui.original_winbar_text ~= '' then
+    base_title = H.state.ui.original_winbar_text
+  else
+    local model = H.state.selected_model or '(default)'
+    -- Extract only the last part after '/' (e.g., "openai/gpt-4" -> "gpt-4")
+    local display = model:match('([^/]+)$') or model
+    base_title = string.format('%s%s', display, H.state.online_enabled and ' 🌐' or '')
+  end
 
-  -- Format stats: in/out tokens and cost
-  local stats_text = string.format(' | 📊 In: %d Out: %d Cost: $%.6f', stats.input, stats.output, stats.cost)
+  -- Remove any existing stats section from base title
+  base_title = base_title:match('^(.-)%s*|') or base_title
 
-  -- Append stats to base winbar
-  local new_winbar = base_winbar .. stats_text
+  -- Format stats: ⬇️ input ⬆️ output $ cost
+  local stats_text = string.format(' | ⬇️ %s ⬆️ %s $ %.2f',
+    format_k(stats.input), format_k(stats.output), stats.cost)
+
+  -- Update the title with stats
+  local new_title = base_title .. stats_text
 
   if H.state.ui.is_loading_active then
-    H.state.ui.original_winbar_text = new_winbar
+    H.state.ui.original_winbar_text = new_title
   else
-    H.ui_update_winbar(new_winbar)
+    H.ui_update_winbar(' ' .. new_title)
   end
 end
 

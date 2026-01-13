@@ -86,13 +86,16 @@ end
 ---@param line string The stderr line to parse
 ---@return table|nil A table with input, output, and cost (optional), or nil if not found
 H.parse_token_usage = function(line)
-  local input, output = line:match('Token usage:%s*(%d+)%s+input,%s*(%d+)%s+output')
+  local input, output = line:match('Token usage:%s*([%d,]+)%s+input,%s*([%d,]+)%s+output')
   if not input or not output then return nil end
+
+  input = input:gsub(',', '')
+  output = output:gsub(',', '')
 
   local result = { input = tonumber(input), output = tonumber(output), cost = 0 }
 
   -- Try to extract cost from JSON-like format
-  local cost = line:match('"cost":%s*([%d%.]+)')
+  local cost = line:match('"cost":%s*([%d%.eE%+%-]+)')
   if cost then result.cost = tonumber(cost) end
 
   return result

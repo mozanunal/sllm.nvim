@@ -474,6 +474,43 @@ local H = {}
 
 -- Constants ------------------------------------------------------------------
 H.ANIMATION_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
+H.WINBAR_DEBOUNCE_MS = 50
+
+-- Keymap definitions (name -> {modes, func_name, desc})
+-- func_name is resolved to Sllm[func_name] during apply_config
+H.KEYMAP_DEFS = {
+  ask_llm = { modes = { 'n', 'v' }, func_name = 'ask_llm', desc = 'Ask LLM' },
+  new_chat = { modes = { 'n', 'v' }, func_name = 'new_chat', desc = 'New LLM chat' },
+  cancel = { modes = { 'n', 'v' }, func_name = 'cancel', desc = 'Cancel LLM request' },
+  focus_llm_buffer = { modes = { 'n', 'v' }, func_name = 'focus_llm_buffer', desc = 'Focus LLM buffer' },
+  toggle_llm_buffer = { modes = { 'n', 'v' }, func_name = 'toggle_llm_buffer', desc = 'Toggle LLM buffer' },
+  select_model = { modes = { 'n', 'v' }, func_name = 'select_model', desc = 'Select LLM model' },
+  add_tool_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_tool_to_ctx', desc = 'Add tool to context' },
+  add_file_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_file_to_ctx', desc = 'Add file to context' },
+  add_url_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_url_to_ctx', desc = 'Add URL to context' },
+  add_diag_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_diag_to_ctx', desc = 'Add diagnostics to context' },
+  add_cmd_out_to_ctx = {
+    modes = { 'n', 'v' },
+    func_name = 'add_cmd_out_to_ctx',
+    desc = 'Add command output to context',
+  },
+  reset_context = { modes = { 'n', 'v' }, func_name = 'reset_context', desc = 'Reset LLM context' },
+  add_sel_to_ctx = { modes = 'v', func_name = 'add_sel_to_ctx', desc = 'Add visual selection to context' },
+  add_func_to_ctx = { modes = 'n', func_name = 'add_func_to_ctx', desc = 'Add selected function to context' },
+  set_system_prompt = { modes = { 'n', 'v' }, func_name = 'set_system_prompt', desc = 'Set system prompt' },
+  set_model_option = { modes = { 'n', 'v' }, func_name = 'set_model_option', desc = 'Set model option' },
+  show_model_options = { modes = { 'n', 'v' }, func_name = 'show_model_options', desc = 'Show available model options' },
+  toggle_online = { modes = { 'n', 'v' }, func_name = 'toggle_online', desc = 'Toggle online mode' },
+  copy_first_code_block = { modes = { 'n', 'v' }, func_name = 'copy_first_code_block', desc = 'Copy first code block' },
+  copy_last_code_block = { modes = { 'n', 'v' }, func_name = 'copy_last_code_block', desc = 'Copy last code block' },
+  copy_last_response = { modes = { 'n', 'v' }, func_name = 'copy_last_response', desc = 'Copy last response' },
+  complete_code = { modes = { 'n', 'v' }, func_name = 'complete_code', desc = 'Complete code at cursor' },
+  browse_history = { modes = { 'n', 'v' }, func_name = 'browse_history', desc = 'Browse chat history' },
+  select_template = { modes = { 'n', 'v' }, func_name = 'select_template', desc = 'Select template' },
+  show_template = { modes = { 'n', 'v' }, func_name = 'show_template', desc = 'Show template details' },
+  edit_template = { modes = { 'n', 'v' }, func_name = 'edit_template', desc = 'Edit template' },
+  clear_template = { modes = { 'n', 'v' }, func_name = 'clear_template', desc = 'Clear template' },
+}
 
 H.PROMPT_TEMPLATE = [[
 ${user_input}
@@ -571,9 +608,14 @@ H.state = {
   -- UI state
   ui = {
     llm_buf = nil,
-    animation_timer = nil,
-    current_animation_frame_idx = 1,
-    is_loading_active = false,
+    winbar_debounce_timer = nil,
+  },
+
+  -- Loading indicator state machine
+  loading = {
+    active = false,
+    timer = nil,
+    frame_idx = 1,
   },
 
   -- Job state
@@ -643,6 +685,14 @@ H.utils_check_buffer_visible = function(buf)
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == buf then return win end
   end
+  return nil
+end
+
+--- Get the valid LLM window, or nil if not visible/valid.
+---@return integer?  Window ID or nil.
+H.utils_get_llm_win = function()
+  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  if win and vim.api.nvim_win_is_valid(win) then return win end
   return nil
 end
 
@@ -1037,19 +1087,17 @@ H.ui_create_llm_float_win_opts = function()
   }
 end
 
---- Render the winbar declaratively from current state.
---- Computes: [spinner] model_name [🌐] [| ⬇️ input ⬆️ output $ cost]
+--- Internal: Actually render the winbar (called by debounced version).
 ---@return nil
-H.ui_render_winbar = function()
-  local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
+H.ui_render_winbar_impl = function()
+  local llm_win = H.utils_get_llm_win()
+  if not llm_win then return end
 
-  -- Build winbar components
   local parts = {}
 
-  -- 1. Loading indicator or space (with trailing space for alignment)
-  if H.state.ui.is_loading_active then
-    table.insert(parts, H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx] .. ' ')
+  -- 1. Loading indicator or space
+  if H.state.loading.active then
+    table.insert(parts, H.ANIMATION_FRAMES[H.state.loading.frame_idx] .. ' ')
   else
     table.insert(parts, '  ')
   end
@@ -1077,8 +1125,36 @@ H.ui_render_winbar = function()
   vim.api.nvim_set_option_value('winbar', table.concat(parts), { win = llm_win })
 end
 
+--- Render the winbar (debounced to avoid rapid updates).
+---@return nil
+H.ui_render_winbar = function()
+  -- Cancel pending debounce timer
+  if H.state.ui.winbar_debounce_timer then
+    H.state.ui.winbar_debounce_timer:stop()
+    H.state.ui.winbar_debounce_timer:close()
+    H.state.ui.winbar_debounce_timer = nil
+  end
+
+  -- During loading animation, render immediately (already throttled by animation timer)
+  if H.state.loading.active then
+    H.ui_render_winbar_impl()
+    return
+  end
+
+  -- Debounce non-animation updates
+  H.state.ui.winbar_debounce_timer = vim.loop.new_timer()
+  H.state.ui.winbar_debounce_timer:start(
+    H.WINBAR_DEBOUNCE_MS,
+    0,
+    vim.schedule_wrap(function()
+      H.state.ui.winbar_debounce_timer = nil
+      H.ui_render_winbar_impl()
+    end)
+  )
+end
+
 --- Create and configure a window for the LLM buffer.
----@return integer win_id      Window handle.
+---@return integer win_id  Window handle.
 H.ui_create_llm_win = function()
   local window_type = Sllm.config.window_type
   local buf = H.ui_ensure_llm_buffer()
@@ -1097,32 +1173,34 @@ H.ui_create_llm_win = function()
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  H.ui_render_winbar()
+  H.ui_render_winbar_impl() -- Immediate render for new window
   return win_id
 end
 
---- Start the loading animation in the winbar.
+-- Loading indicator state machine =============================================
+
+--- Start the loading animation.
 ---@return nil
 H.ui_start_loading_indicator = function()
-  if H.state.ui.is_loading_active then return end
+  if H.state.loading.active then return end
 
-  H.state.ui.is_loading_active = true
-  H.state.ui.current_animation_frame_idx = 1
+  H.state.loading.active = true
+  H.state.loading.frame_idx = 1
 
-  if H.state.ui.animation_timer then H.state.ui.animation_timer:close() end
-  H.state.ui.animation_timer = vim.loop.new_timer()
-  H.state.ui.animation_timer:start(
+  if H.state.loading.timer then H.state.loading.timer:close() end
+  H.state.loading.timer = vim.loop.new_timer()
+  H.state.loading.timer:start(
     0,
     150,
     vim.schedule_wrap(function()
-      if not H.state.ui.is_loading_active then
-        H.state.ui.animation_timer:stop()
-        H.state.ui.animation_timer:close()
-        H.state.ui.animation_timer = nil
+      if not H.state.loading.active then
+        H.state.loading.timer:stop()
+        H.state.loading.timer:close()
+        H.state.loading.timer = nil
         return
       end
-      H.state.ui.current_animation_frame_idx = (H.state.ui.current_animation_frame_idx % #H.ANIMATION_FRAMES) + 1
-      H.ui_render_winbar()
+      H.state.loading.frame_idx = (H.state.loading.frame_idx % #H.ANIMATION_FRAMES) + 1
+      H.ui_render_winbar_impl() -- Direct render during animation
     end)
   )
 end
@@ -1130,12 +1208,12 @@ end
 --- Stop the loading animation.
 ---@return nil
 H.ui_stop_loading_indicator = function()
-  if not H.state.ui.is_loading_active then return end
-  H.state.ui.is_loading_active = false
-  if H.state.ui.animation_timer then
-    H.state.ui.animation_timer:stop()
-    H.state.ui.animation_timer:close()
-    H.state.ui.animation_timer = nil
+  if not H.state.loading.active then return end
+  H.state.loading.active = false
+  if H.state.loading.timer then
+    H.state.loading.timer:stop()
+    H.state.loading.timer:close()
+    H.state.loading.timer = nil
   end
   H.ui_render_winbar()
 end
@@ -1295,53 +1373,14 @@ end
 H.apply_config = function(config)
   Sllm.config = config
 
+  -- Register keymaps from H.KEYMAP_DEFS constant
   local km = Sllm.config.keymaps
   if km then
-    local keymap_defs = {
-      ask_llm = { modes = { 'n', 'v' }, func = Sllm.ask_llm, desc = 'Ask LLM' },
-      new_chat = { modes = { 'n', 'v' }, func = Sllm.new_chat, desc = 'New LLM chat' },
-      cancel = { modes = { 'n', 'v' }, func = Sllm.cancel, desc = 'Cancel LLM request' },
-      focus_llm_buffer = { modes = { 'n', 'v' }, func = Sllm.focus_llm_buffer, desc = 'Focus LLM buffer' },
-      toggle_llm_buffer = { modes = { 'n', 'v' }, func = Sllm.toggle_llm_buffer, desc = 'Toggle LLM buffer' },
-      select_model = { modes = { 'n', 'v' }, func = Sllm.select_model, desc = 'Select LLM model' },
-      add_tool_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_tool_to_ctx, desc = 'Add tool to context' },
-      add_file_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_file_to_ctx, desc = 'Add file to context' },
-      add_url_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_url_to_ctx, desc = 'Add URL to context' },
-      add_diag_to_ctx = { modes = { 'n', 'v' }, func = Sllm.add_diag_to_ctx, desc = 'Add diagnostics to context' },
-      add_cmd_out_to_ctx = {
-        modes = { 'n', 'v' },
-        func = Sllm.add_cmd_out_to_ctx,
-        desc = 'Add command output to context',
-      },
-      reset_context = { modes = { 'n', 'v' }, func = Sllm.reset_context, desc = 'Reset LLM context' },
-      add_sel_to_ctx = { modes = 'v', func = Sllm.add_sel_to_ctx, desc = 'Add visual selection to context' },
-      add_func_to_ctx = { modes = 'n', func = Sllm.add_func_to_ctx, desc = 'Add selected function to context' },
-      set_system_prompt = { modes = { 'n', 'v' }, func = Sllm.set_system_prompt, desc = 'Set system prompt' },
-      set_model_option = { modes = { 'n', 'v' }, func = Sllm.set_model_option, desc = 'Set model option' },
-      show_model_options = {
-        modes = { 'n', 'v' },
-        func = Sllm.show_model_options,
-        desc = 'Show available model options',
-      },
-      toggle_online = { modes = { 'n', 'v' }, func = Sllm.toggle_online, desc = 'Toggle online mode' },
-      copy_first_code_block = {
-        modes = { 'n', 'v' },
-        func = Sllm.copy_first_code_block,
-        desc = 'Copy first code block',
-      },
-      copy_last_code_block = { modes = { 'n', 'v' }, func = Sllm.copy_last_code_block, desc = 'Copy last code block' },
-      copy_last_response = { modes = { 'n', 'v' }, func = Sllm.copy_last_response, desc = 'Copy last response' },
-      complete_code = { modes = { 'n', 'v' }, func = Sllm.complete_code, desc = 'Complete code at cursor' },
-      browse_history = { modes = { 'n', 'v' }, func = Sllm.browse_history, desc = 'Browse chat history' },
-      select_template = { modes = { 'n', 'v' }, func = Sllm.select_template, desc = 'Select template' },
-      show_template = { modes = { 'n', 'v' }, func = Sllm.show_template, desc = 'Show template details' },
-      edit_template = { modes = { 'n', 'v' }, func = Sllm.edit_template, desc = 'Edit template' },
-      clear_template = { modes = { 'n', 'v' }, func = Sllm.clear_template, desc = 'Clear template' },
-    }
-
-    for name, def in pairs(keymap_defs) do
+    for name, def in pairs(H.KEYMAP_DEFS) do
       local key = km[name]
-      if type(key) == 'string' and key ~= '' then vim.keymap.set(def.modes, key, def.func, { desc = def.desc }) end
+      if type(key) == 'string' and key ~= '' then
+        vim.keymap.set(def.modes, key, Sllm[def.func_name], { desc = def.desc })
+      end
     end
   end
 

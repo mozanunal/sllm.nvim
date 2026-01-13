@@ -574,7 +574,6 @@ H.state = {
     animation_timer = nil,
     current_animation_frame_idx = 1,
     is_loading_active = false,
-    original_winbar_text = '',
   },
 
   -- Job state
@@ -590,10 +589,6 @@ H.pick = vim.ui.select
 H.input = vim.ui.input
 
 -- Utils helpers -----------------------------------------------------------------
---- Print all elements of `t`, each on its own line separated by "===".
----@param t string[] List of strings to print.
-H.utils_print_table = function(t) print(table.concat(t, '\n===')) end
-
 --- Check if a buffer handle is valid.
 ---@param buf integer? Buffer handle (or `nil`).
 ---@return boolean
@@ -708,6 +703,25 @@ H.utils_parse_json = function(json_str)
   else
     return nil
   end
+end
+
+--- Format number in k format (e.g., 0.14k for 140).
+---@param num number  The number to format.
+---@return string  Formatted string.
+H.utils_format_k = function(num)
+  if num >= 1000 then
+    return string.format('%.2fk', num / 1000)
+  else
+    return string.format('%d', num)
+  end
+end
+
+--- Extract model display name (last part after '/').
+---@param model string?  Full model name (e.g., "openai/gpt-4").
+---@return string  Display name (e.g., "gpt-4").
+H.utils_get_model_display_name = function(model)
+  model = model or '(default)'
+  return model:match('([^/]+)$') or model
 end
 
 -- Job Manager helpers -----------------------------------------------------------
@@ -1023,13 +1037,44 @@ H.ui_create_llm_float_win_opts = function()
   }
 end
 
---- Update the winbar of the LLM window if it is visible.
----@param text string  New winbar text.
-H.ui_update_winbar = function(text)
+--- Render the winbar declaratively from current state.
+--- Computes: [spinner] model_name [🌐] [| ⬇️ input ⬆️ output $ cost]
+---@return nil
+H.ui_render_winbar = function()
   local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if llm_win and vim.api.nvim_win_is_valid(llm_win) then
-    vim.api.nvim_set_option_value('winbar', text, { win = llm_win })
+  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
+
+  -- Build winbar components
+  local parts = {}
+
+  -- 1. Loading indicator or space
+  if H.state.ui.is_loading_active then
+    table.insert(parts, H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx])
+  else
+    table.insert(parts, ' ')
   end
+
+  -- 2. Model name
+  table.insert(parts, H.utils_get_model_display_name(H.state.selected_model))
+
+  -- 3. Online indicator
+  if H.state.online_enabled then table.insert(parts, ' 🌐') end
+
+  -- 4. Stats (if available)
+  local stats = H.state.session_stats
+  if stats.input > 0 or stats.output > 0 or stats.cost > 0 then
+    table.insert(
+      parts,
+      string.format(
+        ' | ⬇️ %s ⬆️ %s $ %.2f',
+        H.utils_format_k(stats.input),
+        H.utils_format_k(stats.output),
+        stats.cost
+      )
+    )
+  end
+
+  vim.api.nvim_set_option_value('winbar', table.concat(parts), { win = llm_win })
 end
 
 --- Create and configure a window for the LLM buffer.
@@ -1038,7 +1083,6 @@ H.ui_create_llm_win = function()
   local window_type = Sllm.config.window_type
   local buf = H.ui_ensure_llm_buffer()
 
-  -- choose window options based on type
   local win_opts
   if window_type == 'float' then
     win_opts = H.ui_create_llm_float_win_opts()
@@ -1053,25 +1097,19 @@ H.ui_create_llm_win = function()
   vim.api.nvim_set_option_value('linebreak', true, { win = win_id })
   vim.api.nvim_set_option_value('number', false, { win = win_id })
 
-  H.ui_update_llm_win_title()
+  H.ui_render_winbar()
   return win_id
 end
 
---- Start the Braille spinner in the LLM window's winbar.
+--- Start the loading animation in the winbar.
 ---@return nil
 H.ui_start_loading_indicator = function()
   if H.state.ui.is_loading_active then return end
-  local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
 
   H.state.ui.is_loading_active = true
   H.state.ui.current_animation_frame_idx = 1
-  H.state.ui.original_winbar_text = vim.api.nvim_get_option_value('winbar', { win = llm_win })
 
-  if H.state.ui.animation_timer then
-    H.state.ui.animation_timer:close()
-    H.state.ui.animation_timer = nil
-  end
+  if H.state.ui.animation_timer then H.state.ui.animation_timer:close() end
   H.state.ui.animation_timer = vim.loop.new_timer()
   H.state.ui.animation_timer:start(
     0,
@@ -1083,21 +1121,13 @@ H.ui_start_loading_indicator = function()
         H.state.ui.animation_timer = nil
         return
       end
-
-      local win_check = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-      if not (win_check and vim.api.nvim_win_is_valid(win_check)) then
-        H.ui_stop_loading_indicator()
-        return
-      end
-
       H.state.ui.current_animation_frame_idx = (H.state.ui.current_animation_frame_idx % #H.ANIMATION_FRAMES) + 1
-      local frame = H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx]
-      H.ui_update_winbar(frame .. ' ' .. H.state.ui.original_winbar_text)
+      H.ui_render_winbar()
     end)
   )
 end
 
---- Stop the loading spinner and restore the original winbar text.
+--- Stop the loading animation.
 ---@return nil
 H.ui_stop_loading_indicator = function()
   if not H.state.ui.is_loading_active then return end
@@ -1107,8 +1137,7 @@ H.ui_stop_loading_indicator = function()
     H.state.ui.animation_timer:close()
     H.state.ui.animation_timer = nil
   end
-  if H.state.ui.original_winbar_text ~= '' then H.ui_update_winbar(' ' .. H.state.ui.original_winbar_text) end
-  H.state.ui.original_winbar_text = ''
+  H.ui_render_winbar()
 end
 
 --- Clear the LLM buffer and stop any active loading animation.
@@ -1168,95 +1197,19 @@ H.ui_append_to_llm_buffer = function(lines)
   end
 end
 
---- Update the LLM window's title (winbar) with current model and online status.
----@return nil
-H.ui_update_llm_win_title = function()
-  local model = H.state.selected_model or '(default)'
-  -- Extract only the last part after '/' (e.g., "openai/gpt-4" -> "gpt-4")
-  local display = model:match('([^/]+)$') or model
-  local online_indicator = H.state.online_enabled and ' 🌐' or ''
-  local title = string.format('%s%s', display, online_indicator)
-  if H.state.ui.is_loading_active then
-    H.state.ui.original_winbar_text = title
-    -- Update the current display with animation frame
-    local frame = H.ANIMATION_FRAMES[H.state.ui.current_animation_frame_idx]
-    H.ui_update_winbar(frame .. ' ' .. title)
-  else
-    H.ui_update_winbar(' ' .. title)
-  end
-end
-
---- Format number in k format (e.g., 0.14k for 140).
----@param num number  The number to format.
----@return string  Formatted string.
-local format_k = function(num)
-  if num >= 1000 then
-    return string.format('%.2fk', num / 1000)
-  else
-    return string.format('%d', num)
-  end
-end
-
---- Update the winbar to show accumulated session statistics.
----@param stats table  Table with `input`, `output`, and `cost` fields.
----@return nil
-H.ui_update_session_stats = function(stats)
-  local llm_win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if not (llm_win and vim.api.nvim_win_is_valid(llm_win)) then return end
-
-  -- Get base title (just model name)
-  local base_title
-  if H.state.ui.original_winbar_text ~= '' then
-    base_title = H.state.ui.original_winbar_text
-  else
-    local model = H.state.selected_model or '(default)'
-    -- Extract only the last part after '/' (e.g., "openai/gpt-4" -> "gpt-4")
-    local display = model:match('([^/]+)$') or model
-    base_title = string.format('%s%s', display, H.state.online_enabled and ' 🌐' or '')
-  end
-
-  -- Remove any existing stats section from base title
-  base_title = base_title:match('^(.-)%s*|') or base_title
-
-  -- Format stats: ⬇️ input ⬆️ output $ cost
-  local stats_text = string.format(' | ⬇️ %s ⬆️ %s $ %.2f',
-    format_k(stats.input), format_k(stats.output), stats.cost)
-
-  -- Update the title with stats
-  local new_title = base_title .. stats_text
-
-  if H.state.ui.is_loading_active then
-    H.state.ui.original_winbar_text = new_title
-  else
-    H.ui_update_winbar(' ' .. new_title)
-  end
-end
-
---- Copy the first code block from the LLM buffer to the clipboard.
+--- Copy a code block from the LLM buffer to the clipboard.
+---@param position "first"|"last"  Which code block to copy.
 ---@return boolean  `true` if a code block was found and copied; `false` otherwise.
-H.ui_copy_first_code_block = function()
+H.ui_copy_code_block = function(position)
   local buf = H.ui_ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local code_blocks = H.utils_extract_code_blocks(lines)
 
   if #code_blocks == 0 then return false end
 
-  vim.fn.setreg('+', code_blocks[1])
-  vim.fn.setreg('"', code_blocks[1])
-  return true
-end
-
---- Copy the last code block from the LLM buffer to the clipboard.
----@return boolean  `true` if a code block was found and copied; `false` otherwise.
-H.ui_copy_last_code_block = function()
-  local buf = H.ui_ensure_llm_buffer()
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local code_blocks = H.utils_extract_code_blocks(lines)
-
-  if #code_blocks == 0 then return false end
-
-  vim.fn.setreg('+', code_blocks[#code_blocks])
-  vim.fn.setreg('"', code_blocks[#code_blocks])
+  local block = position == 'first' and code_blocks[1] or code_blocks[#code_blocks]
+  vim.fn.setreg('+', block)
+  vim.fn.setreg('"', block)
   return true
 end
 
@@ -1508,7 +1461,7 @@ function Sllm.ask_llm()
           H.state.session_stats.input = H.state.session_stats.input + usage.input
           H.state.session_stats.output = H.state.session_stats.output + usage.output
           H.state.session_stats.cost = H.state.session_stats.cost + usage.cost
-          if Sllm.config.show_usage then H.ui_update_session_stats(H.state.session_stats) end
+          if Sllm.config.show_usage then H.ui_render_winbar() end
           return
         end
 
@@ -1585,7 +1538,7 @@ function Sllm.select_model()
     if item then
       H.state.selected_model = item
       H.notify('[sllm] selected model: ' .. item, vim.log.levels.INFO)
-      H.ui_update_llm_win_title()
+      H.ui_render_winbar()
     else
       H.notify('[sllm] llm model not changed', vim.log.levels.WARN)
     end
@@ -1795,7 +1748,7 @@ function Sllm.toggle_online()
   end
 
   -- Update the UI title to reflect the change
-  H.ui_update_llm_win_title()
+  H.ui_render_winbar()
 end
 
 --- Get online status for UI display.
@@ -1805,7 +1758,7 @@ function Sllm.is_online_enabled() return H.state.online_enabled end
 --- Copy the first code block from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_first_code_block()
-  if H.ui_copy_first_code_block() then
+  if H.ui_copy_code_block('first') then
     H.notify('[sllm] first code block copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
@@ -1815,7 +1768,7 @@ end
 --- Copy the last code block from the LLM buffer to the clipboard.
 ---@return nil
 function Sllm.copy_last_code_block()
-  if H.ui_copy_last_code_block() then
+  if H.ui_copy_code_block('last') then
     H.notify('[sllm] last code block copied to clipboard.', vim.log.levels.INFO)
   else
     H.notify('[sllm] no code blocks found in response.', vim.log.levels.WARN)
@@ -1887,57 +1840,62 @@ function Sllm.complete_code()
   -- Collect the completion output
   local completion_output = {}
 
-  H.job_start(cmd, function(line)
-    if line ~= '' then table.insert(completion_output, line) end
-  end, function(exit_code)
-    if exit_code == 0 and #completion_output > 0 then
-      -- Join all output lines
-      local completion = table.concat(completion_output, '\n')
+  H.job_start(
+    cmd,
+    function(line) -- stdout handler
+      if line ~= '' then table.insert(completion_output, line) end
+    end,
+    function() end, -- stderr handler (ignored for completion)
+    function(exit_code) -- exit handler
+      if exit_code == 0 and #completion_output > 0 then
+        -- Join all output lines
+        local completion = table.concat(completion_output, '\n')
 
-      -- Clean up common LLM formatting
-      completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
-      completion = completion:gsub('\n```$', '') -- Remove closing code fence
-      completion = vim.trim(completion)
+        -- Clean up common LLM formatting
+        completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
+        completion = completion:gsub('\n```$', '') -- Remove closing code fence
+        completion = vim.trim(completion)
 
-      if completion ~= '' then
-        -- Insert the completion at cursor position
-        local completion_lines = vim.split(completion, '\n', { plain = true })
+        if completion ~= '' then
+          -- Insert the completion at cursor position
+          local completion_lines = vim.split(completion, '\n', { plain = true })
 
-        -- Get the current line and rebuild it with the completion
-        local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
-        local line_before = current_line:sub(1, col)
-        local line_after = current_line:sub(col + 1)
+          -- Get the current line and rebuild it with the completion
+          local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+          local line_before = current_line:sub(1, col)
+          local line_after = current_line:sub(col + 1)
 
-        -- Build the new lines to insert
-        local new_lines = {}
-        if #completion_lines == 1 then
-          -- Single line completion
-          table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
-        else
-          -- Multi-line completion
-          table.insert(new_lines, line_before .. completion_lines[1])
-          for i = 2, #completion_lines - 1 do
-            table.insert(new_lines, completion_lines[i])
+          -- Build the new lines to insert
+          local new_lines = {}
+          if #completion_lines == 1 then
+            -- Single line completion
+            table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
+          else
+            -- Multi-line completion
+            table.insert(new_lines, line_before .. completion_lines[1])
+            for i = 2, #completion_lines - 1 do
+              table.insert(new_lines, completion_lines[i])
+            end
+            table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
           end
-          table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
+
+          -- Replace the current line with new lines
+          vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
+
+          -- Move cursor to end of completion
+          local new_row = row + #new_lines - 1
+          local new_col = #new_lines[#new_lines] - #line_after
+          vim.api.nvim_win_set_cursor(0, { new_row, new_col })
+
+          H.notify('[sllm] completion inserted', vim.log.levels.INFO)
+        else
+          H.notify('[sllm] received empty completion', vim.log.levels.WARN)
         end
-
-        -- Replace the current line with new lines
-        vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
-
-        -- Move cursor to end of completion
-        local new_row = row + #new_lines - 1
-        local new_col = #new_lines[#new_lines] - #line_after
-        vim.api.nvim_win_set_cursor(0, { new_row, new_col })
-
-        H.notify('[sllm] completion inserted', vim.log.levels.INFO)
       else
-        H.notify('[sllm] received empty completion', vim.log.levels.WARN)
+        H.notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
       end
-    else
-      H.notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
     end
-  end)
+  )
 end
 
 --- Browse chat history, load a conversation, and continue from it.

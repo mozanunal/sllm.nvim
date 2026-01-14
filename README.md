@@ -131,9 +131,9 @@ require("sllm").setup({
   reset_ctx_each_prompt    = true, -- clear file context each ask
   window_type              = "vertical", -- Default. Options: "vertical", "horizontal", "float"
   scroll_to_bottom         = true, -- whether to keep the cursor at the bottom of the LLM window
-  -- function for item selection (like vim.ui.select)
+  -- function for item selection (falls back to vim.ui.select if mini.pick is missing)
   pick_func                = require("mini.pick").ui_select,
-  -- function for notifications (like vim.notify)
+  -- function for notifications (falls back to vim.notify if mini.notify is missing)
   notify_func              = require("mini.notify").make_notify(),
   -- function for inputs (like vim.ui.input)
   input_func               = vim.ui.input,
@@ -141,8 +141,8 @@ require("sllm").setup({
   keymaps = {
     -- Change a default keymap
     ask = "<leader>a",
-    -- Disable a default keymap
-    add_context_extra = false,
+    -- Disable the command picker keymap
+    commands = false,
     -- Other keymaps will use their default values
   },
   -- Maximum number of history entries to fetch (default: 1000)
@@ -168,43 +168,42 @@ require("sllm").setup({
 })
 ```
 
-| Option                  | Type              | Default                                | Description                                                                                                                               |
-| ----------------------- | ----------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend_config`        | table             | `{ cmd = "llm" }`                      | Backend settings. Use `cmd` to specify the path to the `llm` CLI.                                                                         |
-| `default_model`         | string            | `"default"`                            | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
-| `default_mode`          | string            | `"sllm_chat"`                          | Template/mode to use on startup. See "Templates & Modes" section.                                                                         |
-| `on_start_new_chat`     | boolean           | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
-| `reset_ctx_each_prompt` | boolean           | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
-| `window_type`           | string            | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
-| `scroll_to_bottom`      | boolean           | `true`                                 | Whether to keep the cursor at the bottom of the LLM window.                                                                               |
-| `pick_func`             | function          | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
-| `notify_func`           | function          | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
-| `input_func`            | function          | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
-| `online_enabled`        | boolean           | `false`                                | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
-| `history_max_entries`   | integer           | `1000`                                 | Maximum number of history log entries to fetch when browsing conversations. Increase for more history, decrease for faster loading.       |
-| `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
-| `ui`                    | table             | (see defaults)                         | UI settings including `show_usage` (token stats) and prompt text.                                                                         |
+| Option                  | Type        | Default                                                          | Description                                                                                                                               |
+| ----------------------- | ----------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend_config`        | table       | `{ cmd = "llm" }`                                                | Backend settings. Use `cmd` to specify the path to the `llm` CLI.                                                                         |
+| `default_model`         | string      | `"default"`                                                      | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
+| `default_mode`          | string      | `"sllm_chat"`                                                    | Template/mode to use on startup. See "Templates & Modes" section.                                                                         |
+| `on_start_new_chat`     | boolean     | `true`                                                           | Begin with a fresh chat buffer on plugin setup                                                                                            |
+| `reset_ctx_each_prompt` | boolean     | `true`                                                           | Automatically clear file context after every prompt (if `true`)                                                                           |
+| `window_type`           | string      | `"vertical"`                                                     | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
+| `scroll_to_bottom`      | boolean     | `true`                                                           | Whether to keep the cursor at the bottom of the LLM window.                                                                               |
+| `pick_func`             | function    | `mini.pick.ui_select` if installed, otherwise `vim.ui.select`    | UI function for interactive model selection                                                                                               |
+| `notify_func`           | function    | `mini.notify.make_notify()` if installed, otherwise `vim.notify` | Notification function                                                                                                                     |
+| `input_func`            | function    | `vim.ui.input`                                                   | Input prompt function.                                                                                                                    |
+| `online_enabled`        | boolean     | `false`                                                          | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
+| `history_max_entries`   | integer     | `1000`                                                           | Maximum number of history log entries to fetch when browsing conversations. Increase for more history, decrease for faster loading.       |
+| `keymaps`               | table/false | (see defaults)                                                   | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
+| `ui`                    | table       | (see defaults)                                                   | UI settings including `show_usage` (token stats) and prompt text.                                                                         |
 
 ## Keybindings & Commands
 
-The following table lists the **default** keybindings (12 total). All of them
+The following table lists the **default** keybindings (11 total). All of them
 can be changed or disabled in your `setup` configuration (see
 [Customizing Keymaps](#customizing-keymaps)).
 
-| Keybind         | Keymap              | Mode | Action                                             |
-| --------------- | ------------------- | ---- | -------------------------------------------------- |
-| `<leader>ss`    | `ask`               | n,v  | Prompt the LLM with an input box                   |
-| `<leader>sm`    | `select_model`      | n,v  | Pick a different LLM model                         |
-| `<leader>sM`    | `select_mode`       | n,v  | Switch mode/template (sllm_chat, sllm_agent, etc.) |
-| `<leader>sa`    | `add_context`       | n,v  | Add file (normal) or selection (visual) to context |
-| `<leader>sA`    | `add_context_extra` | n,v  | Picker for url/diag/cmd/tool/func context          |
-| `<leader>sn`    | `new_chat`          | n,v  | Start a new chat (clears buffer)                   |
-| `<leader>sc`    | `cancel`            | n,v  | Cancel current request                             |
-| `<leader>st`    | `toggle_buffer`     | n,v  | Toggle LLM buffer visibility                       |
-| `<leader>sW`    | `toggle_online`     | n,v  | Toggle online/web mode (shows 🌐 in status)        |
-| `<leader>sh`    | `history`           | n,v  | Browse and continue previous conversations         |
-| `<leader>sy`    | `copy_code`         | n,v  | Copy last code block from response to clipboard    |
-| `<leader><Tab>` | `complete`          | n    | Inline code completion at cursor                   |
+| Keybind         | Keymap          | Mode | Action                                                          |
+| --------------- | --------------- | ---- | --------------------------------------------------------------- |
+| `<leader>ss`    | `ask`           | n,v  | Prompt the LLM with an input box                                |
+| `<leader>sm`    | `select_model`  | n,v  | Pick a different LLM model                                      |
+| `<leader>sM`    | `select_mode`   | n,v  | Switch mode/template (sllm_chat, sllm_agent, etc.)              |
+| `<leader>sa`    | `add_context`   | n,v  | Add file (normal) or selection (visual) to context              |
+| `<leader>sx`    | `commands`      | n,v  | Open command picker (contexts, templates, online toggle, tools) |
+| `<leader>sn`    | `new_chat`      | n,v  | Start a new chat (clears buffer)                                |
+| `<leader>sc`    | `cancel`        | n,v  | Cancel current request                                          |
+| `<leader>st`    | `toggle_buffer` | n,v  | Toggle LLM buffer visibility                                    |
+| `<leader>sh`    | `history`       | n,v  | Browse and continue previous conversations                      |
+| `<leader>sy`    | `copy_code`     | n,v  | Copy last code block from response to clipboard                 |
+| `<leader><Tab>` | `complete`      | n,v  | Inline code completion at cursor                                |
 
 ---
 
@@ -275,8 +274,8 @@ require("sllm").setup({
     -- CHANGE: Use <leader>a for asking the LLM instead of <leader>ss
     ask = "<leader>a",
 
-    -- DISABLE: I don't use the extra context picker
-    add_context_extra = false,
+    -- DISABLE: I don't use the command picker
+    commands = false,
   },
 })
 ```
@@ -294,7 +293,7 @@ require("sllm").setup({
 
 -- Now you can define your own from scratch
 local sllm = require("sllm")
-vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask, { desc = "Ask LLM [custom]" })
+vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
 ```
 
 ### Customizing the UI
@@ -442,9 +441,10 @@ post_hooks = {
 ## Online/Web Mode Toggle
 
 Some models may support an `online` option for web search capabilities. You can
-easily toggle this feature:
+easily toggle this feature via the command picker.
 
-**Quick Toggle**: Press `<leader>sW` to toggle online mode on/off
+**Quick Toggle**: Press `<leader>sx` and choose the `online` command (or map
+`require("sllm").toggle_online` yourself).
 
 When enabled, you'll see a 🌐 icon in the status bar next to the model name.
 
@@ -476,19 +476,17 @@ web search. Check your model provider's documentation.
    (shows loading indicator while processing).
 3. **Add context quickly:** `<leader>sa` adds file (normal mode) or selection
    (visual mode).
-4. **Add extra context types:** `<leader>sA` opens a picker for URLs,
-   diagnostics, shell commands, tools, or Python functions.
+4. **Open command picker:** `<leader>sx` for URLs, diagnostics, shell commands,
+   tools, Python functions, templates, or toggling online mode.
 5. **Switch modes:** `<leader>sM` to change between `sllm_chat`, `sllm_read`,
    `sllm_agent`, etc.
 6. **Switch models:** `<leader>sm` to pick a different LLM model.
 7. Start a new chat: `<leader>sn`.
 8. Cancel a running request: `<leader>sc`.
 9. Toggle LLM buffer: `<leader>st`.
-10. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
-    indicator).
-11. **Browse and continue conversations:** `<leader>sh` to select from up to
+10. **Browse and continue conversations:** `<leader>sh` to select from up to
     1000 recent conversations and continue chatting from any point.
-12. **Copy code blocks from response:** `<leader>sy` copies the last code block.
+11. **Copy code blocks from response:** `<leader>sy` copies the last code block.
 
 ### Visual Workflow
 
@@ -556,20 +554,18 @@ For more information: https://llm.datasette.io/en/stable/logging.html
 
 ## Internals
 
-- **Context Manager** (`sllm.context_manager`) Tracks a list of file paths, text
-  snippets, tool names, **and function definitions** to include in subsequent
-  prompts.
-- **Backend** (`sllm.backend.llm`) Builds and executes the `llm` CLI command,
-  optionally adding `-T <tool>` for each active tool or
-  `--functions <py_function>` for ad-hoc functions.
-- **Job Manager** (`sllm.job_manager`) Spawns a Neovim job for the CLI, streams
-  stdout line-by-line.
-- **UI** (`sllm.ui`) Creates and manages a scratch markdown buffer to display
-  streaming output.
-- **History Manager** (`sllm.history_manager`) Fetches and formats chat history
-  from `llm logs`.
-- **Utils** (`sllm.utils`) Helper functions for buffer/window checks, path
-  utilities, and more.
+The plugin follows a consolidated architecture (mini.nvim H-pattern):
+
+- **Main Module** (`lua/sllm/init.lua`) Contains all functionality:
+  - `Sllm.*` - Public API functions
+  - `H.context_*` - Context tracking (files, snippets, tools, functions)
+  - `H.ui_*` - Buffer/window management, loading indicators
+  - `H.job_*` - Async job execution, streaming
+  - `H.history_*` - Conversation history formatting
+  - `H.utils_*` - Utilities (JSON parsing, buffer ops, visual selection)
+- **Backend** (`lua/sllm/backend/llm.lua`) Builds and executes `llm` CLI
+  commands, handles models, tools, templates, and history.
+- **Templates** (`templates/`) Native `llm` YAML templates that define modes.
 
 ---
 

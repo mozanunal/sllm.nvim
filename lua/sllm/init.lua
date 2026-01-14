@@ -130,28 +130,27 @@
 ---
 --- Default keybindings (all can be customized or disabled):
 ---
---- Keymap              | Default Key     | Modes | Description
---- ------------------- | --------------- | ----- | ---------------------------
---- `ask`               | `<leader>ss`    | n,v   | Prompt the LLM
---- `select_model`      | `<leader>sm`    | n,v   | Select model
---- `select_mode`       | `<leader>sM`    | n,v   | Select mode/template
---- `add_context`       | `<leader>sa`    | n,v   | Add file (normal) or selection (visual)
---- `add_context_extra` | `<leader>sA`    | n,v   | Add extra context (picker)
---- `new_chat`          | `<leader>sn`    | n,v   | Start new chat
---- `cancel`            | `<leader>sc`    | n,v   | Cancel current request
---- `toggle_buffer`     | `<leader>st`    | n,v   | Toggle LLM buffer
---- `toggle_online`     | `<leader>sW`    | n,v   | Toggle online/web mode
---- `history`           | `<leader>sh`    | n,v   | Browse history
---- `copy_code`         | `<leader>sy`    | n,v   | Copy last code block
---- `complete`          | `<leader><Tab>` | n,v   | Complete code at cursor
+--- Keymap          | Default Key     | Modes | Description
+--- --------------- | --------------- | ----- | ----------------------------------------------
+--- `ask`           | `<leader>ss`    | n,v   | Prompt the LLM
+--- `select_model`  | `<leader>sm`    | n,v   | Select model
+--- `select_mode`   | `<leader>sM`    | n,v   | Select mode/template
+--- `add_context`   | `<leader>sa`    | n,v   | Add file (normal) or selection (visual)
+--- `commands`      | `<leader>sx`    | n,v   | Open command picker (context, templates, tools)
+--- `new_chat`      | `<leader>sn`    | n,v   | Start new chat
+--- `cancel`        | `<leader>sc`    | n,v   | Cancel current request
+--- `toggle_buffer` | `<leader>st`    | n,v   | Toggle LLM buffer
+--- `history`       | `<leader>sh`    | n,v   | Browse history
+--- `copy_code`     | `<leader>sy`    | n,v   | Copy last code block
+--- `complete`      | `<leader><Tab>` | n,v   | Complete code at cursor
 ---
 --- ## Customizing Keymaps ~
 ---
 --- Change specific keymaps: >lua
 ---   require("sllm").setup({
 ---     keymaps = {
----       ask_llm = "<leader>a",    -- Change to <leader>a
----       add_url_to_ctx = false,   -- Disable this keymap
+---       ask = "<leader>a",  -- Change to <leader>a
+---       commands = false,    -- Disable command picker keymap
 ---     },
 ---   })
 --- <
@@ -170,10 +169,10 @@
 ---
 --- ## Basic Workflow ~
 ---
---- 1. Press `<leader>sl` - Select a template (optional)
---- 2. Press `<leader>ss` - Ask to LLM a question
---- 3. Press `<leader>sa` - Add current file to context
---- 4. Press `<leader>sv` (visual mode) - Add selection to context
+--- 1. Press `<leader>sM` - Select a template/mode (optional)
+--- 2. Press `<leader>ss` - Ask the LLM a question
+--- 3. Press `<leader>sa` - Add file (normal) or selection (visual) to context
+--- 4. Press `<leader>sx` - Open command picker (URL, diagnostics, tools, templates, online toggle)
 --- 5. Press `<leader>sm` - Switch models
 --- 6. Press `<leader>sh` - Browse and continue previous conversations
 --- 7. Press `<leader><Tab>` - Complete code at cursor position
@@ -190,14 +189,14 @@
 --- ## Context Management ~
 ---
 --- Build context for better LLM responses:
---- - `<leader>sa` - Add entire current file
---- - `<leader>sv` - Add visual selection (in visual mode)
---- - `<leader>sd` - Add diagnostics (errors/warnings)
---- - `<leader>su` - Add content from a URL
---- - `<leader>sx` - Add output from shell command
---- - `<leader>sT` - Add an installed llm tool
---- - `<leader>sF` - Add Python function as a tool
---- - `<leader>sr` - Clear all context
+--- - `<leader>sa` - Add current file (normal) or selection (visual)
+--- - `<leader>sx` - Open command picker for extra context types:
+---   - URL - Fetch and add web content
+---   - Diagnostics - Add LSP errors/warnings
+---   - Command - Run shell command and add output
+---   - Tool - Add an installed llm tool
+---   - Function - Add Python function as a tool
+---   - Template - Switch templates/modes
 ---
 --- Context is automatically cleared after each prompt by default
 --- (configurable with `reset_ctx_each_prompt`).
@@ -212,82 +211,43 @@
 --- The `llm` CLI logs all interactions automatically. You can manage logs
 --- with: `llm logs list`, `llm logs off`, etc.
 ---
----@toc_entry System Prompt
+---@toc_entry Templates
 ---@text
----                                                          *Sllm-system-prompt*
---- # System Prompt ~
+---                                                              *Sllm-templates*
+--- # Templates & Modes ~
 ---
---- The system prompt is prepended to all queries using the `-s` flag. This
---- ensures consistent behavior and output formatting.
+--- sllm.nvim uses native `llm` templates as modes. The plugin ships with
+--- default templates that are symlinked to your llm templates directory:
 ---
---- ## Default System Prompt ~
---- >
----   You are a sllm plugin living within neovim.
----   Always answer with markdown.
----   If the offered change is small, return only the changed part or
----   function, not the entire file.
+--- Template         | Description
+--- ---------------- | -----------------------------------------
+--- `sllm_chat`      | Simple conversation, no tools
+--- `sllm_read`      | Code review with read-only file tools
+--- `sllm_agent`     | Full agentic mode with bash, edit, write
+--- `sllm_complete`  | Inline code completion
+---
+--- ## Switching Modes ~
+---
+--- Press `<leader>sM` to switch templates/modes. The current mode is shown
+--- in the winbar: `sllm.nvim | Model: gpt-4o [sllm_agent]`
+---
+--- ## Customizing Templates ~
+---
+--- Templates are standard `llm` YAML files: >bash
+---   # Edit existing template
+---   llm templates edit sllm_agent
+---
+---   # Create custom template
+---   cp ~/.config/io.datasette.llm/templates/sllm_read.yaml \
+---      ~/.config/io.datasette.llm/templates/my_reviewer.yaml
+---   llm templates edit my_reviewer
+---
+---   # View template contents
+---   llm templates show sllm_agent
 --- <
---- ## Configure in setup() ~
---- >lua
----   require("sllm").setup({
----     system_prompt = [[You are an expert code reviewer.
----   Always provide constructive feedback.
----   Format code suggestions using markdown code blocks.]],
----   })
---- <
---- ## Update on-the-fly ~
+--- Custom templates appear in the mode picker alongside defaults.
 ---
---- Press `<leader>sS` to interactively update the system prompt during a
---- session. This allows you to adapt the LLM's behavior without restarting
---- Neovim. Submit an empty string to clear the system prompt.
----
----@toc_entry Model Options
----@text
----                                                          *Sllm-model-options*
---- # Model Options ~
----
---- Models support specific options passed via `-o` flags. Common options
---- include temperature, max_tokens, and more.
----
---- ## Discover Options ~
----
---- Press `<leader>sO` (capital O) to see available options for your current
---- model, or run: `llm models --options -m <model-name>`
----
---- ## Set Options in Config ~
---- >lua
----   require("sllm").setup({
----     model_options = {
----       temperature = 0.7,     -- Control randomness (0-2)
----       max_tokens = 1000,     -- Limit response length
----       top_p = 0.9,          -- Nucleus sampling
----       seed = 42,            -- Deterministic sampling
----     },
----   })
---- <
---- ## Set Options at Runtime ~
----
---- Press `<leader>so` to set an option on-the-fly:
---- 1. Enter option key (e.g., `temperature`)
---- 2. Enter option value (e.g., `0.7`)
----
---- Or use Lua: >lua
----   require("sllm").set_model_option()
----   require("sllm").reset_model_options()  -- Clear all options
---- <
---- ## Common Options ~
----
---- - `temperature` (0-2) - Randomness: higher = creative, lower = focused
---- - `max_tokens` - Maximum tokens to generate
---- - `top_p` (0-1) - Nucleus sampling (alternative to temperature)
---- - `frequency_penalty` (-2 to 2) - Penalize repeated tokens
---- - `presence_penalty` (-2 to 2) - Encourage new topics
---- - `seed` - Integer for deterministic outputs
---- - `json_object` (boolean) - Force JSON output
---- - `reasoning_effort` (low/medium/high) - For reasoning models
---- - `image_detail` (low/high/auto) - For vision models
----
---- Not all options are available for all models.
+--- For more info: https://llm.datasette.io/en/stable/templates.html
 ---
 ---@toc_entry Pre/Post Hooks
 ---@text
@@ -346,8 +306,8 @@
 ---
 --- ## Toggle Online Mode ~
 ---
---- Press `<leader>sW` to toggle online mode. When enabled, you'll see a 🌐
---- icon in the status bar.
+--- Use the command picker (`<leader>sx`) and choose `online` to toggle. You can
+--- also map `require("sllm").toggle_online` manually.
 ---
 --- Status bar examples:
 ---   `sllm.nvim | Model: gpt-4o 🌐`    (online mode enabled)
@@ -371,12 +331,12 @@
 --- can be overriden:
 --- >lua
 ---   ui = {
+---     show_usage = true,  -- Show token usage stats after responses
 ---     ask_llm_prompt = 'Prompt: ',
 ---     add_url_prompt = 'URL: ',
 ---     add_cmd_prompt = 'Command: ',
 ---     markdown_prompt_header = '> 💬 Prompt:',
 ---     markdown_response_header = '> 🤖 Response',
----     set_system_prompt = 'System Prompt: ',
 ---     -- Note: markdown headers are used in both live chat and history
 ---   }
 --- <
@@ -389,11 +349,10 @@
 ---@field select_model string|false|nil    Keymap for selecting an LLM model.
 ---@field select_mode string|false|nil     Keymap for selecting a mode/template.
 ---@field add_context string|false|nil     Keymap for adding file (normal) or selection (visual).
----@field add_context_extra string|false|nil  Keymap for adding extra context via picker.
+---@field commands string|false|nil        Keymap for opening the command picker.
 ---@field new_chat string|false|nil        Keymap for starting a new chat.
 ---@field cancel string|false|nil          Keymap for canceling a request.
 ---@field toggle_buffer string|false|nil   Keymap for toggling the LLM window.
----@field toggle_online string|false|nil   Keymap for toggling online mode.
 ---@field history string|false|nil         Keymap for browsing chat history.
 ---@field copy_code string|false|nil       Keymap for copying the last code block.
 ---@field complete string|false|nil        Keymap for triggering code completion at cursor.

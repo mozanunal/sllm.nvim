@@ -1047,9 +1047,7 @@ H.ui_render_winbar_impl = function()
   table.insert(parts, H.utils_get_model_display_name(H.state.selected_model))
 
   -- 3. Template/mode name (if set)
-  if H.state.selected_template then
-    table.insert(parts, ' [' .. H.state.selected_template .. ']')
-  end
+  if H.state.selected_template then table.insert(parts, ' [' .. H.state.selected_template .. ']') end
 
   -- 4. Online indicator
   if H.state.online_enabled then table.insert(parts, ' 🌐') end
@@ -1404,9 +1402,7 @@ H.install_default_templates = function()
     if vim.fn.filereadable(dst_file) == 0 then
       -- Create symlink with absolute path
       vim.fn.system({ 'ln', '-s', src_file, dst_file })
-      if vim.v.shell_error == 0 then
-        H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO)
-      end
+      if vim.v.shell_error == 0 then H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO) end
     elseif vim.fn.getftype(dst_file) == 'link' then
       -- It's a symlink, check if it points to our file
       local target = vim.fn.resolve(dst_file)
@@ -2094,9 +2090,7 @@ end
 --- Select a mode (template) to configure the session.
 --- Modes are llm templates. Use `llm templates edit <name>` to customize.
 ---@return nil
-function Sllm.select_mode()
-  Sllm.select_template()
-end
+function Sllm.select_mode() Sllm.select_template() end
 
 --- Show details of the currently selected template or select one to show.
 ---@return nil

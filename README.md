@@ -198,20 +198,20 @@ The following table lists the **default** keybindings (12 total). All of them
 can be changed or disabled in your `setup` configuration (see
 [Customizing Keymaps](#customizing-keymaps)).
 
-| Keybind        | Keymap          | Mode | Action                                              |
-| -------------- | --------------- | ---- | --------------------------------------------------- |
-| `<leader>ss`   | `ask`           | n,v  | Prompt the LLM with an input box                    |
-| `<leader>sm`   | `select_model`  | n,v  | Pick a different LLM model                          |
-| `<leader>sM`   | `select_mode`   | n,v  | Switch mode/template (sllm_chat, sllm_agent, etc.)  |
-| `<leader>sa`   | `add_context`   | n,v  | Add file (normal) or selection (visual) to context  |
-| `<leader>sA`   | `add_context_extra` | n,v | Picker for url/diag/cmd/tool/func context       |
-| `<leader>sn`   | `new_chat`      | n,v  | Start a new chat (clears buffer)                    |
-| `<leader>sc`   | `cancel`        | n,v  | Cancel current request                              |
-| `<leader>st`   | `toggle_buffer` | n,v  | Toggle LLM buffer visibility                        |
-| `<leader>sW`   | `toggle_online` | n,v  | Toggle online/web mode (shows 🌐 in status)         |
-| `<leader>sh`   | `history`       | n,v  | Browse and continue previous conversations          |
-| `<leader>sy`   | `copy_code`     | n,v  | Copy last code block from response to clipboard     |
-| `<leader><Tab>`| `complete`      | n    | Inline code completion at cursor                    |
+| Keybind         | Keymap              | Mode | Action                                             |
+| --------------- | ------------------- | ---- | -------------------------------------------------- |
+| `<leader>ss`    | `ask`               | n,v  | Prompt the LLM with an input box                   |
+| `<leader>sm`    | `select_model`      | n,v  | Pick a different LLM model                         |
+| `<leader>sM`    | `select_mode`       | n,v  | Switch mode/template (sllm_chat, sllm_agent, etc.) |
+| `<leader>sa`    | `add_context`       | n,v  | Add file (normal) or selection (visual) to context |
+| `<leader>sA`    | `add_context_extra` | n,v  | Picker for url/diag/cmd/tool/func context          |
+| `<leader>sn`    | `new_chat`          | n,v  | Start a new chat (clears buffer)                   |
+| `<leader>sc`    | `cancel`            | n,v  | Cancel current request                             |
+| `<leader>st`    | `toggle_buffer`     | n,v  | Toggle LLM buffer visibility                       |
+| `<leader>sW`    | `toggle_online`     | n,v  | Toggle online/web mode (shows 🌐 in status)        |
+| `<leader>sh`    | `history`           | n,v  | Browse and continue previous conversations         |
+| `<leader>sy`    | `copy_code`         | n,v  | Copy last code block from response to clipboard    |
+| `<leader><Tab>` | `complete`          | n    | Inline code completion at cursor                   |
 
 ---
 
@@ -221,12 +221,12 @@ sllm.nvim uses native `llm` templates as modes. The plugin ships with four
 default templates that are automatically symlinked to your llm templates
 directory on setup:
 
-| Template          | Description                                      |
-| ----------------- | ------------------------------------------------ |
-| `sllm_chat`       | Simple conversation, no tools                    |
-| `sllm_read`       | Code review with read-only file tools            |
-| `sllm_agent`      | Full agentic mode with bash, edit, write tools   |
-| `sllm_complete`   | Inline code completion (used by `<leader><Tab>`) |
+| Template        | Description                                      |
+| --------------- | ------------------------------------------------ |
+| `sllm_chat`     | Simple conversation, no tools                    |
+| `sllm_read`     | Code review with read-only file tools            |
+| `sllm_agent`    | Full agentic mode with bash, edit, write tools   |
+| `sllm_complete` | Inline code completion (used by `<leader><Tab>`) |
 
 ### Switching Modes
 

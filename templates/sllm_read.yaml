@@ -3,18 +3,23 @@ system: |
   Analyze code for clarity, correctness, performance, and best practices.
   Be constructive and specific in your feedback.
   Use your tools to explore the codebase when needed.
+
+  **Token efficiency tips:**
+  - Use grep() to find relevant lines before reading files
+  - Use read() with start_line/end_line for targeted reads
+  - Avoid reading entire large files - read in chunks of ~100-200 lines
 functions: |
   import os
   import subprocess
-  import urllib.request
   from pathlib import Path
   from typing import Optional
 
-  def list(path: str = ".") -> str:
+  def list(path: str = ".", max_items: int = 50) -> str:
     """List directory contents.
 
     Args:
         path: Directory path to list (default: current directory)
+        max_items: Maximum number of items to show (default: 50)
     """
     dir_path = Path.cwd() / path
 
@@ -32,9 +37,11 @@ functions: |
         i for i in items if not i.name.startswith(".") and i.name != "node_modules"
       ]
 
+      total_items = len(items)
       if not items:
         return "Empty directory"
 
+      items = items[:max_items]
       lines = []
       for item in items:
         if item.is_dir():
@@ -49,6 +56,8 @@ functions: |
             size_str = f"{size / (1024 * 1024):.1f}MB"
           lines.append(f"📄 {item.name} ({size_str})")
 
+      if total_items > max_items:
+        lines.append(f"\n... ({total_items - max_items} more items)")
       return "\n".join(lines)
 
     except PermissionError:
@@ -57,7 +66,8 @@ functions: |
       return f"Error listing directory: {str(e)}"
 
   def read(
-    path: str, start_line: Optional[int] = None, end_line: Optional[int] = None
+    path: str, start_line: Optional[int] = None, end_line: Optional[int] = None,
+    max_lines: int = 200
   ) -> str:
     """Read file contents. Supports reading specific line ranges.
 
@@ -65,20 +75,30 @@ functions: |
         path: Path to the file to read
         start_line: Optional starting line number (1-indexed)
         end_line: Optional ending line number (1-indexed)
+        max_lines: Maximum lines to return when no range specified (default: 200)
     """
     try:
       with open(path, "r", encoding="utf-8") as f:
-        if start_line is None and end_line is None:
-          return f.read()
-
         lines = f.readlines()
+      total_lines = len(lines)
 
-        if start_line is not None and end_line is not None:
-          return "".join(lines[start_line - 1 : end_line])
-        elif start_line is not None:
-          return "".join(lines[start_line - 1 :])
-        else:
-          return "".join(lines[:end_line])
+      if start_line is not None and end_line is not None:
+        selected = lines[start_line - 1 : end_line]
+        remaining = total_lines - end_line
+      elif start_line is not None:
+        selected = lines[start_line - 1 : start_line - 1 + max_lines]
+        remaining = total_lines - (start_line - 1) - len(selected)
+      elif end_line is not None:
+        selected = lines[:end_line]
+        remaining = total_lines - end_line
+      else:
+        selected = lines[:max_lines]
+        remaining = total_lines - len(selected)
+
+      result = "".join(selected)
+      if remaining > 0:
+        result += f"\n\n... ({remaining} more lines, total: {total_lines}. Use start_line/end_line to read more)"
+      return result
 
     except FileNotFoundError:
       return f"Error: File not found: {path}"
@@ -87,13 +107,23 @@ functions: |
     except Exception as e:
       return f"Error reading file: {str(e)}"
 
-  def grep(pattern: str, path: Optional[str] = None, file_pattern: str = "*") -> str:
+  def head(path: str, lines: int = 50) -> str:
+    """Quick preview of file's first N lines.
+
+    Args:
+        path: Path to the file to read
+        lines: Number of lines to return (default: 50)
+    """
+    return read(path, start_line=1, end_line=lines)
+
+  def grep(pattern: str, path: Optional[str] = None, file_pattern: str = "*", max_matches: int = 50) -> str:
     """Search file contents using regular expressions with ripgrep (rg).
 
     Args:
         pattern: Regex pattern to search for
         path: Optional specific file path to search in
         file_pattern: File pattern to match (e.g., '*.py')
+        max_matches: Maximum number of matches to return (default: 50)
     """
     try:
       cmd = ["rg", "--line-number", "--no-heading", "--color", "never"]
@@ -106,7 +136,10 @@ functions: |
 
       result = subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, text=True)
       if result.returncode == 0:
-        return result.stdout.rstrip()
+        lines = result.stdout.rstrip().split('\n')
+        if len(lines) > max_matches:
+          return '\n'.join(lines[:max_matches]) + f"\n\n... ({len(lines) - max_matches} more matches)"
+        return '\n'.join(lines)
       elif result.returncode == 1:
         return "No matches found"
       else:
@@ -121,22 +154,29 @@ functions: |
           cmd.extend(["--include", file_pattern])
       result = subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, text=True)
       if result.returncode == 0:
-        return result.stdout.rstrip()
+        lines = result.stdout.rstrip().split('\n')
+        if len(lines) > max_matches:
+          return '\n'.join(lines[:max_matches]) + f"\n\n... ({len(lines) - max_matches} more matches)"
+        return '\n'.join(lines)
       return "No matches found"
     except Exception as e:
       return f"Error during search: {str(e)}"
 
-  def glob(pattern: str) -> str:
+  def glob(pattern: str, max_files: int = 100) -> str:
     """Find files by pattern matching.
 
     Args:
         pattern: Glob pattern to match files (e.g., '*.py', '**/*.js')
+        max_files: Maximum number of files to return (default: 100)
     """
     try:
       matches = Path.cwd().glob(pattern)
       files = [str(p.relative_to(Path.cwd())) for p in matches if p.is_file()]
+      files = sorted(files)
+      if len(files) > max_files:
+        return "\n".join(files[:max_files]) + f"\n\n... ({len(files) - max_files} more files)"
       if files:
-        return "\n".join(sorted(files))
+        return "\n".join(files)
       return "No files found"
     except Exception as e:
       return f"Error finding files: {str(e)}"

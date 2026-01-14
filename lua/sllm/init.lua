@@ -415,7 +415,7 @@
 ---@class SllmConfig
 ---@field llm_cmd string                     Command to run the LLM CLI.
 ---@field default_model string               Default model name or `"default"`.
----@field default_template string?           Default template to use.
+---@field default_mode string?               Default mode/template to use on startup.
 ---@field show_usage boolean                 Show usage examples flag.
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
 ---@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
@@ -449,52 +449,6 @@ local H = {}
 -- Constants ------------------------------------------------------------------
 H.ANIMATION_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 H.WINBAR_DEBOUNCE_MS = 50
-
--- Built-in modes (each mode bundles system_prompt, tools, functions, model_options, template)
-H.MODES = {
-  chat = {
-    name = 'chat',
-    desc = 'Simple conversation, no tools',
-    system_prompt = nil, -- Use default
-    tools = {},
-    functions = {},
-    model_options = {},
-    template = nil,
-  },
-  read = {
-    name = 'read',
-    desc = 'Code review/explanation, context-heavy',
-    system_prompt = [[You are a code reviewer. Analyze the provided code carefully.
-Focus on: clarity, correctness, performance, and best practices.
-Be constructive and specific in your feedback.]],
-    tools = {},
-    functions = {},
-    model_options = {},
-    template = nil,
-  },
-  agent = {
-    name = 'agent',
-    desc = 'Tools enabled, multi-step reasoning',
-    system_prompt = [[You are an AI agent with access to tools.
-Use the available tools to accomplish tasks step by step.
-Think carefully before each action and explain your reasoning.]],
-    tools = {}, -- Will be populated from backend
-    functions = {},
-    model_options = {},
-    template = nil,
-  },
-  complete = {
-    name = 'complete',
-    desc = 'Inline code completion',
-    system_prompt = [[Complete the code at the cursor position.
-Output ONLY the completion code, no explanations or markdown.
-Match the existing code style and indentation.]],
-    tools = {},
-    functions = {},
-    model_options = { temperature = 0.2 },
-    template = nil,
-  },
-}
 
 -- Keymap definitions (name -> {modes, func_name, desc})
 -- func_name is resolved to Sllm[func_name] during apply_config
@@ -544,7 +498,7 @@ Always answer with markdown.
 If the offered change is small, return only the changed part or function, not the entire file.]],
   history_max_entries = 1000,
   chain_limit = 100,
-  default_template = nil, -- Default template to use
+  default_mode = 'sllm_chat', -- Default mode/template to use on startup
   keymaps = {
     ask = '<leader>ss',
     select_model = '<leader>sm',
@@ -583,7 +537,6 @@ H.state = {
   online_enabled = false,
   backend_config = {}, -- Backend-specific configuration
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
-  current_mode = nil, -- Current mode name (chat, read, agent, complete, or custom)
 
   -- Context
   context = {
@@ -1093,13 +1046,9 @@ H.ui_render_winbar_impl = function()
   -- 2. Model name
   table.insert(parts, H.utils_get_model_display_name(H.state.selected_model))
 
-  -- 3. Mode name (if set)
-  if H.state.current_mode then
-    local mode_display = H.state.current_mode
-    if mode_display:match('^template:') then
-      mode_display = mode_display:gsub('^template:', '')
-    end
-    table.insert(parts, ' [' .. mode_display .. ']')
+  -- 3. Template/mode name (if set)
+  if H.state.selected_template then
+    table.insert(parts, ' [' .. H.state.selected_template .. ']')
   end
 
   -- 4. Online indicator
@@ -1407,7 +1356,6 @@ H.apply_config = function(config)
   H.state.system_prompt = Sllm.config.system_prompt
   H.state.model_options = Sllm.config.model_options or {}
   H.state.online_enabled = Sllm.config.online_enabled or false
-  H.state.selected_template = Sllm.config.default_template or nil
 
   -- Set online option if enabled by default
   if H.state.online_enabled then H.state.model_options.online = 1 end
@@ -1415,6 +1363,61 @@ H.apply_config = function(config)
   H.notify = Sllm.config.notify_func
   H.pick = Sllm.config.pick_func
   H.input = Sllm.config.input_func
+
+  -- Install default templates and set default mode
+  H.install_default_templates()
+  H.state.selected_template = Sllm.config.default_mode or nil
+end
+
+--- Install default templates by symlinking from plugin directory to llm templates dir.
+---@return nil
+H.install_default_templates = function()
+  -- Get llm templates path
+  local templates_path = H.backend.get_templates_path(H.state.backend_config)
+  if not templates_path then
+    -- Silently skip if llm templates path not available
+    return
+  end
+
+  -- Get plugin templates path (absolute)
+  local plugin_path = debug.getinfo(1, 'S').source:sub(2):match('(.*/)')
+  if not plugin_path then return end
+
+  -- Go up from lua/sllm/ to plugin root, then to templates/
+  local plugin_templates_path = plugin_path:gsub('lua/sllm/$', '') .. 'templates'
+  -- Ensure absolute path
+  plugin_templates_path = vim.fn.fnamemodify(plugin_templates_path, ':p'):gsub('/$', '')
+
+  -- Check if plugin templates directory exists
+  if vim.fn.isdirectory(plugin_templates_path) == 0 then return end
+
+  -- Get list of template files (returns absolute paths)
+  local template_files = vim.fn.glob(plugin_templates_path .. '/sllm_*.yaml', false, true)
+
+  for _, src_file in ipairs(template_files) do
+    -- Ensure src_file is absolute
+    src_file = vim.fn.fnamemodify(src_file, ':p')
+    local filename = vim.fn.fnamemodify(src_file, ':t')
+    local dst_file = templates_path .. '/' .. filename
+
+    -- Only create symlink if destination doesn't exist or is already a symlink to our file
+    if vim.fn.filereadable(dst_file) == 0 then
+      -- Create symlink with absolute path
+      vim.fn.system({ 'ln', '-s', src_file, dst_file })
+      if vim.v.shell_error == 0 then
+        H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO)
+      end
+    elseif vim.fn.getftype(dst_file) == 'link' then
+      -- It's a symlink, check if it points to our file
+      local target = vim.fn.resolve(dst_file)
+      if target ~= src_file then
+        -- Different target, remove and recreate
+        vim.fn.delete(dst_file)
+        vim.fn.system({ 'ln', '-s', src_file, dst_file })
+      end
+    end
+    -- If it's a regular file, leave it alone (user customized it)
+  end
 end
 
 -- Public API =================================================================
@@ -2084,108 +2087,11 @@ function Sllm.select_template()
   end)
 end
 
---- Apply a mode configuration to the current session.
----@param mode_name string Mode name (chat, read, agent, complete, or custom)
----@return nil
-H.mode_apply = function(mode_name)
-  local mode = H.MODES[mode_name]
-  if not mode then
-    H.notify('[sllm] unknown mode: ' .. mode_name, vim.log.levels.ERROR)
-    return
-  end
-
-  H.state.current_mode = mode_name
-
-  -- Apply mode configuration
-  if mode.system_prompt then
-    H.state.system_prompt = mode.system_prompt
-  end
-
-  -- Merge mode model options with existing
-  if mode.model_options and next(mode.model_options) then
-    for k, v in pairs(mode.model_options) do
-      H.state.model_options[k] = v
-    end
-  end
-
-  -- Set template if specified
-  if mode.template then
-    H.state.selected_template = mode.template
-  end
-
-  -- Apply tools (clear and set)
-  if mode.tools and #mode.tools > 0 then
-    H.state.context.tools = vim.deepcopy(mode.tools)
-  end
-
-  -- Apply functions (clear and set)
-  if mode.functions and #mode.functions > 0 then
-    H.state.context.functions = vim.deepcopy(mode.functions)
-  end
-
-  H.ui_render_winbar()
-  H.notify('[sllm] mode: ' .. mode.name .. ' - ' .. mode.desc, vim.log.levels.INFO)
-end
-
---- Select a mode (built-in or template) to configure the session.
+--- Select a mode (template) to configure the session.
+--- Modes are llm templates. Use `llm templates edit <name>` to customize.
 ---@return nil
 function Sllm.select_mode()
-  -- Build list: built-in modes + backend templates
-  local items = {}
-
-  -- Add built-in modes
-  for name, mode in pairs(H.MODES) do
-    table.insert(items, {
-      label = name,
-      desc = mode.desc,
-      is_builtin = true,
-    })
-  end
-
-  -- Sort built-in modes by name
-  table.sort(items, function(a, b)
-    return a.label < b.label
-  end)
-
-  -- Add backend templates
-  local templates = H.backend.get_templates(H.state.backend_config)
-  if templates and #templates > 0 then
-    for _, template in ipairs(templates) do
-      table.insert(items, {
-        label = template,
-        desc = 'Template',
-        is_builtin = false,
-      })
-    end
-  end
-
-  if #items == 0 then
-    H.notify('[sllm] no modes or templates found.', vim.log.levels.INFO)
-    return
-  end
-
-  -- Format for picker
-  local labels = vim.tbl_map(function(item)
-    local prefix = item.is_builtin and '● ' or '◌ '
-    return prefix .. item.label .. ' - ' .. item.desc
-  end, items)
-
-  H.pick(labels, { prompt = 'Select mode:', default = H.state.current_mode }, function(_, idx)
-    if idx then
-      local selected = items[idx]
-      if selected.is_builtin then
-        H.mode_apply(selected.label)
-      else
-        -- Template selected - set template and mark as custom mode
-        H.state.selected_template = selected.label
-        H.state.current_mode = 'template:' .. selected.label
-        H.ui_render_winbar()
-        H.notify('[sllm] template: ' .. selected.label, vim.log.levels.INFO)
-      end
-    else
-      H.notify('[sllm] mode not changed', vim.log.levels.WARN)
-    end
-  end)
+  Sllm.select_template()
 end
 
 --- Show details of the currently selected template or select one to show.

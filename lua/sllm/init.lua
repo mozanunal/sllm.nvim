@@ -137,31 +137,20 @@
 ---
 --- Default keybindings (all can be customized or disabled):
 ---
---- Keymap                  | Default Key   | Modes | Description
---- ----------------------- | ------------- | ----- | ---------------------------
---- `ask_llm`               | `<leader>ss`  | n,v   | Prompt the LLM
---- `new_chat`              | `<leader>sn`  | n,v   | Start new chat
---- `cancel`                | `<leader>sc`  | n,v   | Cancel current request
---- `focus_llm_buffer`      | `<leader>sf`  | n,v   | Focus LLM buffer
---- `toggle_llm_buffer`     | `<leader>st`  | n,v   | Toggle LLM buffer
---- `select_model`          | `<leader>sm`  | n,v   | Select model
---- `toggle_online`         | `<leader>sW`  | n,v   | Toggle online/web mode
---- `set_model_option`      | `<leader>so`  | n,v   | Set model option
---- `show_model_options`    | `<leader>sO`  | n,v   | Show model options
---- `add_file_to_ctx`       | `<leader>sa`  | n,v   | Add current file
---- `add_url_to_ctx`        | `<leader>su`  | n,v   | Add URL content
---- `add_sel_to_ctx`        | `<leader>sv`  | v     | Add visual selection
---- `add_diag_to_ctx`       | `<leader>sd`  | n,v   | Add diagnostics
---- `add_cmd_out_to_ctx`    | `<leader>sx`  | n,v   | Add command output
---- `add_tool_to_ctx`       | `<leader>sT`  | n,v   | Add tool
---- `add_func_to_ctx`       | `<leader>sF`  | n,v   | Add Python function
---- `reset_context`         | `<leader>sr`  | n,v   | Reset context
---- `set_system_prompt`     | `<leader>sS`  | n,v   | Set system prompt
---- `browse_history`        | `<leader>sh`  | n,v   | Browse history
---- `copy_last_code_block`  | `<leader>sy`  | n,v   | Copy last code block
---- `copy_first_code_block` | `<leader>sY`  | n,v   | Copy first code block
---- `copy_last_response`    | `<leader>sE`  | n,v   | Copy last response
---- `complete_code`         | `<leader><Tab>` | n,v | Complete code at cursor
+--- Keymap              | Default Key     | Modes | Description
+--- ------------------- | --------------- | ----- | ---------------------------
+--- `ask`               | `<leader>ss`    | n,v   | Prompt the LLM
+--- `select_model`      | `<leader>sm`    | n,v   | Select model
+--- `select_mode`       | `<leader>sM`    | n,v   | Select mode/template
+--- `add_context`       | `<leader>sa`    | n,v   | Add file (normal) or selection (visual)
+--- `add_context_extra` | `<leader>sA`    | n,v   | Add extra context (picker)
+--- `new_chat`          | `<leader>sn`    | n,v   | Start new chat
+--- `cancel`            | `<leader>sc`    | n,v   | Cancel current request
+--- `toggle_buffer`     | `<leader>st`    | n,v   | Toggle LLM buffer
+--- `toggle_online`     | `<leader>sW`    | n,v   | Toggle online/web mode
+--- `history`           | `<leader>sh`    | n,v   | Browse history
+--- `copy_code`         | `<leader>sy`    | n,v   | Copy last code block
+--- `complete`          | `<leader><Tab>` | n,v   | Complete code at cursor
 ---
 --- ## Customizing Keymaps ~
 ---
@@ -403,33 +392,18 @@
 ---@tag sllm
 
 ---@class SllmKeymaps
----@field ask_llm string|false|nil             Keymap for asking the LLM.
----@field new_chat string|false|nil            Keymap for starting a new chat.
----@field cancel string|false|nil              Keymap for canceling a request.
----@field focus_llm_buffer string|false|nil    Keymap for focusing the LLM window.
----@field toggle_llm_buffer string|false|nil   Keymap for toggling the LLM window.
----@field select_model string|false|nil        Keymap for selecting an LLM model.
----@field add_file_to_ctx string|false|nil     Keymap for adding current file to context.
----@field add_url_to_ctx string|false|nil      Keymap for adding a URL to context.
----@field add_sel_to_ctx string|false|nil      Keymap for adding visual selection.
----@field add_diag_to_ctx string|false|nil     Keymap for adding diagnostics.
----@field add_cmd_out_to_ctx string|false|nil  Keymap for adding command output.
----@field add_tool_to_ctx string|false|nil     Keymap for adding a tool.
----@field add_func_to_ctx string|false|nil     Keymap for adding a function.
----@field reset_context string|false|nil       Keymap for resetting the context.
----@field set_system_prompt string|false|nil   Keymap for setting the system prompt.
----@field set_model_option string|false|nil    Keymap for setting model options.
----@field show_model_options string|false|nil  Keymap for showing available model options.
----@field toggle_online string|false|nil       Keymap for toggling online mode.
----@field copy_first_code_block string|false|nil  Keymap for copying the first code block.
----@field copy_last_code_block string|false|nil   Keymap for copying the last code block.
----@field copy_last_response string|false|nil     Keymap for copying the last response.
----@field complete_code string|false|nil          Keymap for triggering code completion at cursor.
----@field browse_history string|false|nil         Keymap for browsing chat history.
----@field select_template string|false|nil        Keymap for selecting a template.
----@field show_template string|false|nil         Keymap for showing template details.
----@field edit_template string|false|nil          Keymap for editing a template.
----@field clear_template string|false|nil         Keymap for clearing a template.
+---@field ask string|false|nil             Keymap for asking the LLM.
+---@field select_model string|false|nil    Keymap for selecting an LLM model.
+---@field select_mode string|false|nil     Keymap for selecting a mode/template.
+---@field add_context string|false|nil     Keymap for adding file (normal) or selection (visual).
+---@field add_context_extra string|false|nil  Keymap for adding extra context via picker.
+---@field new_chat string|false|nil        Keymap for starting a new chat.
+---@field cancel string|false|nil          Keymap for canceling a request.
+---@field toggle_buffer string|false|nil   Keymap for toggling the LLM window.
+---@field toggle_online string|false|nil   Keymap for toggling online mode.
+---@field history string|false|nil         Keymap for browsing chat history.
+---@field copy_code string|false|nil       Keymap for copying the last code block.
+---@field complete string|false|nil        Keymap for triggering code completion at cursor.
 
 ---@class PreHook
 ---@field command string                     Shell command to execute.
@@ -476,40 +450,68 @@ local H = {}
 H.ANIMATION_FRAMES = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 H.WINBAR_DEBOUNCE_MS = 50
 
+-- Built-in modes (each mode bundles system_prompt, tools, functions, model_options, template)
+H.MODES = {
+  chat = {
+    name = 'chat',
+    desc = 'Simple conversation, no tools',
+    system_prompt = nil, -- Use default
+    tools = {},
+    functions = {},
+    model_options = {},
+    template = nil,
+  },
+  read = {
+    name = 'read',
+    desc = 'Code review/explanation, context-heavy',
+    system_prompt = [[You are a code reviewer. Analyze the provided code carefully.
+Focus on: clarity, correctness, performance, and best practices.
+Be constructive and specific in your feedback.]],
+    tools = {},
+    functions = {},
+    model_options = {},
+    template = nil,
+  },
+  agent = {
+    name = 'agent',
+    desc = 'Tools enabled, multi-step reasoning',
+    system_prompt = [[You are an AI agent with access to tools.
+Use the available tools to accomplish tasks step by step.
+Think carefully before each action and explain your reasoning.]],
+    tools = {}, -- Will be populated from backend
+    functions = {},
+    model_options = {},
+    template = nil,
+  },
+  complete = {
+    name = 'complete',
+    desc = 'Inline code completion',
+    system_prompt = [[Complete the code at the cursor position.
+Output ONLY the completion code, no explanations or markdown.
+Match the existing code style and indentation.]],
+    tools = {},
+    functions = {},
+    model_options = { temperature = 0.2 },
+    template = nil,
+  },
+}
+
 -- Keymap definitions (name -> {modes, func_name, desc})
 -- func_name is resolved to Sllm[func_name] during apply_config
+-- Simplified to 11 core keymaps (was 25+)
 H.KEYMAP_DEFS = {
-  ask_llm = { modes = { 'n', 'v' }, func_name = 'ask_llm', desc = 'Ask LLM' },
-  new_chat = { modes = { 'n', 'v' }, func_name = 'new_chat', desc = 'New LLM chat' },
-  cancel = { modes = { 'n', 'v' }, func_name = 'cancel', desc = 'Cancel LLM request' },
-  focus_llm_buffer = { modes = { 'n', 'v' }, func_name = 'focus_llm_buffer', desc = 'Focus LLM buffer' },
-  toggle_llm_buffer = { modes = { 'n', 'v' }, func_name = 'toggle_llm_buffer', desc = 'Toggle LLM buffer' },
-  select_model = { modes = { 'n', 'v' }, func_name = 'select_model', desc = 'Select LLM model' },
-  add_tool_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_tool_to_ctx', desc = 'Add tool to context' },
-  add_file_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_file_to_ctx', desc = 'Add file to context' },
-  add_url_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_url_to_ctx', desc = 'Add URL to context' },
-  add_diag_to_ctx = { modes = { 'n', 'v' }, func_name = 'add_diag_to_ctx', desc = 'Add diagnostics to context' },
-  add_cmd_out_to_ctx = {
-    modes = { 'n', 'v' },
-    func_name = 'add_cmd_out_to_ctx',
-    desc = 'Add command output to context',
-  },
-  reset_context = { modes = { 'n', 'v' }, func_name = 'reset_context', desc = 'Reset LLM context' },
-  add_sel_to_ctx = { modes = 'v', func_name = 'add_sel_to_ctx', desc = 'Add visual selection to context' },
-  add_func_to_ctx = { modes = 'n', func_name = 'add_func_to_ctx', desc = 'Add selected function to context' },
-  set_system_prompt = { modes = { 'n', 'v' }, func_name = 'set_system_prompt', desc = 'Set system prompt' },
-  set_model_option = { modes = { 'n', 'v' }, func_name = 'set_model_option', desc = 'Set model option' },
-  show_model_options = { modes = { 'n', 'v' }, func_name = 'show_model_options', desc = 'Show available model options' },
+  ask = { modes = { 'n', 'v' }, func_name = 'ask_llm', desc = 'Ask LLM' },
+  select_model = { modes = { 'n', 'v' }, func_name = 'select_model', desc = 'Select model' },
+  select_mode = { modes = { 'n', 'v' }, func_name = 'select_mode', desc = 'Select mode/template' },
+  add_context = { modes = { 'n', 'v' }, func_name = 'add_context', desc = 'Add file/selection to context' },
+  add_context_extra = { modes = { 'n', 'v' }, func_name = 'add_context_extra', desc = 'Add extra context (picker)' },
+  new_chat = { modes = { 'n', 'v' }, func_name = 'new_chat', desc = 'New chat' },
+  cancel = { modes = { 'n', 'v' }, func_name = 'cancel', desc = 'Cancel request' },
+  toggle_buffer = { modes = { 'n', 'v' }, func_name = 'toggle_llm_buffer', desc = 'Toggle LLM buffer' },
   toggle_online = { modes = { 'n', 'v' }, func_name = 'toggle_online', desc = 'Toggle online mode' },
-  copy_first_code_block = { modes = { 'n', 'v' }, func_name = 'copy_first_code_block', desc = 'Copy first code block' },
-  copy_last_code_block = { modes = { 'n', 'v' }, func_name = 'copy_last_code_block', desc = 'Copy last code block' },
-  copy_last_response = { modes = { 'n', 'v' }, func_name = 'copy_last_response', desc = 'Copy last response' },
-  complete_code = { modes = { 'n', 'v' }, func_name = 'complete_code', desc = 'Complete code at cursor' },
-  browse_history = { modes = { 'n', 'v' }, func_name = 'browse_history', desc = 'Browse chat history' },
-  select_template = { modes = { 'n', 'v' }, func_name = 'select_template', desc = 'Select template' },
-  show_template = { modes = { 'n', 'v' }, func_name = 'show_template', desc = 'Show template details' },
-  edit_template = { modes = { 'n', 'v' }, func_name = 'edit_template', desc = 'Edit template' },
-  clear_template = { modes = { 'n', 'v' }, func_name = 'clear_template', desc = 'Clear template' },
+  history = { modes = { 'n', 'v' }, func_name = 'browse_history', desc = 'Browse chat history' },
+  copy_code = { modes = { 'n', 'v' }, func_name = 'copy_last_code_block', desc = 'Copy last code block' },
+  complete = { modes = { 'n', 'v' }, func_name = 'complete_code', desc = 'Complete code at cursor' },
 }
 
 H.PROMPT_TEMPLATE = [[
@@ -544,33 +546,18 @@ If the offered change is small, return only the changed part or function, not th
   chain_limit = 100,
   default_template = nil, -- Default template to use
   keymaps = {
-    ask_llm = '<leader>ss',
+    ask = '<leader>ss',
+    select_model = '<leader>sm',
+    select_mode = '<leader>sM',
+    add_context = '<leader>sa',
+    add_context_extra = '<leader>sA',
     new_chat = '<leader>sn',
     cancel = '<leader>sc',
-    focus_llm_buffer = '<leader>sf',
-    toggle_llm_buffer = '<leader>st',
-    select_model = '<leader>sm',
-    add_file_to_ctx = '<leader>sa',
-    add_url_to_ctx = '<leader>su',
-    add_sel_to_ctx = '<leader>sv',
-    add_diag_to_ctx = '<leader>sd',
-    add_cmd_out_to_ctx = '<leader>sx',
-    add_tool_to_ctx = '<leader>sT',
-    add_func_to_ctx = '<leader>sF',
-    reset_context = '<leader>sr',
-    set_system_prompt = '<leader>sS',
-    set_model_option = '<leader>so',
-    show_model_options = '<leader>sO',
+    toggle_buffer = '<leader>st',
     toggle_online = '<leader>sW',
-    copy_first_code_block = '<leader>sY',
-    copy_last_code_block = '<leader>sy',
-    copy_last_response = '<leader>sE',
-    complete_code = '<leader><Tab>',
-    browse_history = '<leader>sh',
-    select_template = '<leader>sl', -- Fuzzy select template (l for list/template)
-    show_template = '<leader>sL', -- Show template details
-    edit_template = '<leader>si', -- Edit template in editor (i for insert/edit)
-    clear_template = '<leader>sI', -- Clear template (capital I)
+    history = '<leader>sh',
+    copy_code = '<leader>sy',
+    complete = '<leader><Tab>',
   },
   ui = {
     ask_llm_prompt = 'Prompt: ',
@@ -596,6 +583,7 @@ H.state = {
   online_enabled = false,
   backend_config = {}, -- Backend-specific configuration
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
+  current_mode = nil, -- Current mode name (chat, read, agent, complete, or custom)
 
   -- Context
   context = {
@@ -1105,7 +1093,16 @@ H.ui_render_winbar_impl = function()
   -- 2. Model name
   table.insert(parts, H.utils_get_model_display_name(H.state.selected_model))
 
-  -- 3. Online indicator
+  -- 3. Mode name (if set)
+  if H.state.current_mode then
+    local mode_display = H.state.current_mode
+    if mode_display:match('^template:') then
+      mode_display = mode_display:gsub('^template:', '')
+    end
+    table.insert(parts, ' [' .. mode_display .. ']')
+  end
+
+  -- 4. Online indicator
   if H.state.online_enabled then table.insert(parts, ' 🌐') end
 
   -- 4. Stats (if available)
@@ -1702,6 +1699,34 @@ function Sllm.reset_context()
   H.notify('[sllm] context reset.', vim.log.levels.INFO)
 end
 
+--- Smart context add: file (normal mode) or selection (visual mode).
+---@return nil
+function Sllm.add_context()
+  if H.utils_is_mode_visual() then
+    Sllm.add_sel_to_ctx()
+  else
+    Sllm.add_file_to_ctx()
+  end
+end
+
+--- Advanced context add: picker for url, diagnostics, command, tool, function.
+---@return nil
+function Sllm.add_context_extra()
+  local items = {
+    { label = 'url', desc = 'Fetch URL content', action = Sllm.add_url_to_ctx },
+    { label = 'diagnostics', desc = 'Buffer diagnostics', action = Sllm.add_diag_to_ctx },
+    { label = 'command', desc = 'Shell command output', action = Sllm.add_cmd_out_to_ctx },
+    { label = 'tool', desc = 'LLM tool', action = Sllm.add_tool_to_ctx },
+    { label = 'function', desc = 'Python function', action = Sllm.add_func_to_ctx },
+  }
+
+  local labels = vim.tbl_map(function(item) return item.label .. ' - ' .. item.desc end, items)
+
+  H.pick(labels, { prompt = 'Add to context:' }, function(_, idx)
+    if idx then items[idx].action() end
+  end)
+end
+
 --- Set the system prompt on-the-fly.
 ---@return nil
 function Sllm.set_system_prompt()
@@ -2055,6 +2080,110 @@ function Sllm.select_template()
       H.notify('[sllm] template selected: ' .. item, vim.log.levels.INFO)
     else
       H.notify('[sllm] template not changed', vim.log.levels.WARN)
+    end
+  end)
+end
+
+--- Apply a mode configuration to the current session.
+---@param mode_name string Mode name (chat, read, agent, complete, or custom)
+---@return nil
+H.mode_apply = function(mode_name)
+  local mode = H.MODES[mode_name]
+  if not mode then
+    H.notify('[sllm] unknown mode: ' .. mode_name, vim.log.levels.ERROR)
+    return
+  end
+
+  H.state.current_mode = mode_name
+
+  -- Apply mode configuration
+  if mode.system_prompt then
+    H.state.system_prompt = mode.system_prompt
+  end
+
+  -- Merge mode model options with existing
+  if mode.model_options and next(mode.model_options) then
+    for k, v in pairs(mode.model_options) do
+      H.state.model_options[k] = v
+    end
+  end
+
+  -- Set template if specified
+  if mode.template then
+    H.state.selected_template = mode.template
+  end
+
+  -- Apply tools (clear and set)
+  if mode.tools and #mode.tools > 0 then
+    H.state.context.tools = vim.deepcopy(mode.tools)
+  end
+
+  -- Apply functions (clear and set)
+  if mode.functions and #mode.functions > 0 then
+    H.state.context.functions = vim.deepcopy(mode.functions)
+  end
+
+  H.ui_render_winbar()
+  H.notify('[sllm] mode: ' .. mode.name .. ' - ' .. mode.desc, vim.log.levels.INFO)
+end
+
+--- Select a mode (built-in or template) to configure the session.
+---@return nil
+function Sllm.select_mode()
+  -- Build list: built-in modes + backend templates
+  local items = {}
+
+  -- Add built-in modes
+  for name, mode in pairs(H.MODES) do
+    table.insert(items, {
+      label = name,
+      desc = mode.desc,
+      is_builtin = true,
+    })
+  end
+
+  -- Sort built-in modes by name
+  table.sort(items, function(a, b)
+    return a.label < b.label
+  end)
+
+  -- Add backend templates
+  local templates = H.backend.get_templates(H.state.backend_config)
+  if templates and #templates > 0 then
+    for _, template in ipairs(templates) do
+      table.insert(items, {
+        label = template,
+        desc = 'Template',
+        is_builtin = false,
+      })
+    end
+  end
+
+  if #items == 0 then
+    H.notify('[sllm] no modes or templates found.', vim.log.levels.INFO)
+    return
+  end
+
+  -- Format for picker
+  local labels = vim.tbl_map(function(item)
+    local prefix = item.is_builtin and '● ' or '◌ '
+    return prefix .. item.label .. ' - ' .. item.desc
+  end, items)
+
+  H.pick(labels, { prompt = 'Select mode:', default = H.state.current_mode }, function(_, idx)
+    if idx then
+      local selected = items[idx]
+      if selected.is_builtin then
+        H.mode_apply(selected.label)
+      else
+        -- Template selected - set template and mark as custom mode
+        H.state.selected_template = selected.label
+        H.state.current_mode = 'template:' .. selected.label
+        H.ui_render_winbar()
+        H.notify('[sllm] template: ' .. selected.label, vim.log.levels.INFO)
+      end
+    else
+      H.notify('[sllm] mode not changed', vim.log.levels.WARN)
     end
   end)
 end

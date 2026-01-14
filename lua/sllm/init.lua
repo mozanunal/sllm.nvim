@@ -481,6 +481,9 @@ H.COMMANDS = {
   { cmd = 'mode', desc = 'Switch template/mode', action = 'select_mode', category = 'Model' },
   { cmd = 'online', desc = 'Toggle online mode', action = 'toggle_online', category = 'Model' },
   { cmd = 'options', desc = 'Show model options', action = 'show_model_options', category = 'Model' },
+  { cmd = 'system', desc = 'Set system prompt', action = 'set_system_prompt', category = 'Model' },
+  { cmd = 'option', desc = 'Set model option', action = 'set_model_option', category = 'Model' },
+  { cmd = 'reset-options', desc = 'Reset model options', action = 'reset_model_options', category = 'Model' },
   -- Template
   { cmd = 'template', desc = 'Show template content', action = 'show_template', category = 'Template' },
   { cmd = 'edit', desc = 'Edit template file', action = 'edit_template', category = 'Template' },
@@ -539,6 +542,7 @@ H.DEFAULT_CONFIG = vim.deepcopy({
     add_cmd_prompt = 'Command: ',
     markdown_prompt_header = '> 💬 Prompt:',
     markdown_response_header = '> 🤖 Response',
+    set_system_prompt = 'System Prompt: ',
   },
 })
 
@@ -551,6 +555,8 @@ H.state = {
   -- Main state
   continue = nil, -- Can be boolean or conversation_id string
   selected_model = nil,
+  system_prompt = nil,
+  model_options = {},
   online_enabled = false,
   backend_config = {}, -- Backend-specific configuration
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
@@ -1457,6 +1463,8 @@ function Sllm.ask_llm()
       chain_limit = Sllm.config.chain_limit,
       template = H.state.selected_template,
       online = H.state.online_enabled,
+      system_prompt = H.state.system_prompt,
+      model_options = H.state.model_options,
     })
     H.state.continue = true
 
@@ -1762,6 +1770,52 @@ function Sllm.show_model_options()
   H.ui_append_to_llm_buffer(output)
   H.ui_append_to_llm_buffer({ '' })
   H.notify('[sllm] showing model options', vim.log.levels.INFO)
+end
+
+--- Set or update the system prompt.
+---@return nil
+function Sllm.set_system_prompt()
+  H.input({ prompt = Sllm.config.ui.set_system_prompt, default = H.state.system_prompt or '' }, function(user_input)
+    if user_input == nil then
+      H.notify('[sllm] system prompt not changed.', vim.log.levels.INFO)
+      return
+    end
+    if user_input == '' then
+      H.state.system_prompt = nil
+      H.notify('[sllm] system prompt cleared.', vim.log.levels.INFO)
+    else
+      H.state.system_prompt = user_input
+      H.notify('[sllm] system prompt updated.', vim.log.levels.INFO)
+    end
+  end)
+end
+
+--- Set or update a model option.
+---@return nil
+function Sllm.set_model_option()
+  H.input({ prompt = 'Option key: ' }, function(key)
+    if not key or key == '' then
+      H.notify('[sllm] no key provided.', vim.log.levels.INFO)
+      return
+    end
+    H.input({ prompt = 'Option value for "' .. key .. '": ' }, function(value)
+      if not value or value == '' then
+        H.notify('[sllm] no value provided.', vim.log.levels.INFO)
+        return
+      end
+      -- Try to convert to number if it looks like a number
+      local num_value = tonumber(value)
+      H.state.model_options[key] = num_value or value
+      H.notify('[sllm] set option: ' .. key .. ' = ' .. value, vim.log.levels.INFO)
+    end)
+  end)
+end
+
+--- Reset all model options.
+---@return nil
+function Sllm.reset_model_options()
+  H.state.model_options = {}
+  H.notify('[sllm] model options reset.', vim.log.levels.INFO)
 end
 
 --- Toggle the online feature.

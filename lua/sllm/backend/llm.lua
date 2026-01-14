@@ -195,6 +195,14 @@ local LlmBackend = Base.extend({
 
     if options.online then cmd = cmd .. ' -o online 1' end
 
+    if options.system_prompt then cmd = cmd .. ' -s ' .. vim.fn.shellescape(options.system_prompt) end
+
+    if options.model_options then
+      for key, value in pairs(options.model_options) do
+        cmd = cmd .. ' -o ' .. vim.fn.shellescape(key) .. ' ' .. vim.fn.shellescape(tostring(value))
+      end
+    end
+
     if options.template then cmd = cmd .. ' -t ' .. vim.fn.shellescape(options.template) end
 
     -- Always append the user's input prompt at the end

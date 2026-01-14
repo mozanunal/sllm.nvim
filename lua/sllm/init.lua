@@ -1901,7 +1901,9 @@ function Sllm.complete_code()
   if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
   cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
 
-  H.notify('[sllm] requesting completion...', vim.log.levels.INFO)
+  -- Start loading indicator (shows in winbar if LLM buffer is visible)
+  H.ui_start_loading_indicator()
+  H.notify('[sllm] completing...', vim.log.levels.INFO)
 
   -- Collect the completion output
   local completion_output = {}
@@ -1913,6 +1915,7 @@ function Sllm.complete_code()
     end,
     function() end, -- stderr handler (ignored for completion)
     function(exit_code) -- exit handler
+      H.ui_stop_loading_indicator()
       if exit_code == 0 and #completion_output > 0 then
         -- Join all output lines
         local completion = table.concat(completion_output, '\n')
@@ -2080,6 +2083,7 @@ function Sllm.select_template()
   H.pick(templates, { prompt = 'Select template:', default = H.state.selected_template }, function(item)
     if item then
       H.state.selected_template = item
+      H.ui_render_winbar()
       H.notify('[sllm] template selected: ' .. item, vim.log.levels.INFO)
     else
       H.notify('[sllm] template not changed', vim.log.levels.WARN)

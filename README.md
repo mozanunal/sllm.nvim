@@ -25,6 +25,7 @@ the [**PREFACE.md**](./PREFACE.md).
   replies line by line.
 - **Code Completion** Press `<leader><Tab>` to complete code at cursor position.
   Automatically includes current file context and inserts completion inline.
+  Shows a loading indicator while processing.
 - **History Navigation** Browse and load previous conversations using
   `llm logs`. View up to 1000 recent conversation threads (configurable) and
   continue chatting from any point.
@@ -124,6 +125,8 @@ require("sllm").setup({
   llm_cmd                  = "llm", -- command or path for the llm CLI
   -- model to use on startup. This setting uses the default model set for the llm CLI
   default_model            = "default",
+  -- template/mode to use on startup (see "Templates & Modes" section)
+  default_mode             = "sllm_chat",
   show_usage               = true, -- append usage stats to responses
   on_start_new_chat        = true, -- start fresh chat on setup
   reset_ctx_each_prompt    = true, -- clear file context each ask
@@ -138,9 +141,9 @@ require("sllm").setup({
   -- See the "Customizing Keymaps" section for more details
   keymaps = {
     -- Change a default keymap
-    ask_llm = "<leader>a",
+    ask = "<leader>a",
     -- Disable a default keymap
-    add_url_to_ctx = false,
+    add_context_extra = false,
     -- Other keymaps will use their default values
   },
   -- System prompt prepended to all queries (via -s flag)
@@ -162,7 +165,7 @@ If the offered change is small, return only the changed part or function, not th
   ui = {
     -- Text displayed above the LLM response
     markdown_prompt_header = '# 󰄛',
-    -- Prompt displayed by 'ask_llm'
+    -- Prompt displayed by 'ask'
     ask_llm_prompt = ' 󰄛  > ',
     -- Other UI elements will use their default values
   },
@@ -173,6 +176,7 @@ If the offered change is small, return only the changed part or function, not th
 | ----------------------- | ----------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `llm_cmd`               | string            | `"llm"`                                | Command or path for the `llm` CLI.                                                                                                        |
 | `default_model`         | string            | `"default"`                            | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
+| `default_mode`          | string            | `"sllm_chat"`                          | Template/mode to use on startup. See "Templates & Modes" section.                                                                         |
 | `show_usage`            | boolean           | `true`                                 | Include token usage summary in responses. If `true`, you'll see details after each interaction.                                           |
 | `on_start_new_chat`     | boolean           | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
 | `reset_ctx_each_prompt` | boolean           | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
@@ -190,34 +194,69 @@ If the offered change is small, return only the changed part or function, not th
 
 ## Keybindings & Commands
 
-The following table lists the **default** keybindings. All of them can be
-changed or disabled in your `setup` configuration (see
+The following table lists the **default** keybindings (12 total). All of them
+can be changed or disabled in your `setup` configuration (see
 [Customizing Keymaps](#customizing-keymaps)).
 
-| Keybind      | Keymap                  | Mode | Action                                              |
-| ------------ | ----------------------- | ---- | --------------------------------------------------- |
-| `<leader>ss` | `ask_llm`               | n,v  | Prompt the LLM with an input box                    |
-| `<leader>sn` | `new_chat`              | n,v  | Start a new chat (clears buffer)                    |
-| `<leader>sc` | `cancel`                | n,v  | Cancel current request                              |
-| `<leader>sf` | `focus_llm_buffer`      | n,v  | Focus the LLM output buffer                         |
-| `<leader>st` | `toggle_llm_buffer`     | n,v  | Toggle LLM buffer visibility                        |
-| `<leader>sm` | `select_model`          | n,v  | Pick a different LLM model                          |
-| `<leader>sW` | `toggle_online`         | n,v  | Toggle online/web mode (shows 🌐 in status)         |
-| `<leader>so` | `set_model_option`      | n,v  | Set a model-specific option (e.g., temperature)     |
-| `<leader>sO` | `show_model_options`    | n,v  | Show available options for current model            |
-| `<leader>sa` | `add_file_to_ctx`       | n,v  | Add current file to context                         |
-| `<leader>su` | `add_url_to_ctx`        | n,v  | Add content of a URL to context                     |
-| `<leader>sv` | `add_sel_to_ctx`        | v    | Add visual selection to context                     |
-| `<leader>sd` | `add_diag_to_ctx`       | n,v  | Add diagnostics to context                          |
-| `<leader>sx` | `add_cmd_out_to_ctx`    | n,v  | Add shell command output to context                 |
-| `<leader>sT` | `add_tool_to_ctx`       | n,v  | Add an installed tool to context                    |
-| `<leader>sF` | `add_func_to_ctx`       | n,v  | Add Python function from buffer/selection as a tool |
-| `<leader>sr` | `reset_context`         | n,v  | Reset/clear all context files                       |
-| `<leader>sS` | `set_system_prompt`     | n,v  | Set/update the system prompt on-the-fly             |
-| `<leader>sh` | `browse_history`        | n,v  | Browse and continue previous conversations          |
-| `<leader>sy` | `copy_last_code_block`  | n,v  | Copy last code block from response to clipboard     |
-| `<leader>sY` | `copy_first_code_block` | n,v  | Copy first code block from response to clipboard    |
-| `<leader>sE` | `copy_last_response`    | n,v  | Copy last LLM response to clipboard                 |
+| Keybind        | Keymap          | Mode | Action                                              |
+| -------------- | --------------- | ---- | --------------------------------------------------- |
+| `<leader>ss`   | `ask`           | n,v  | Prompt the LLM with an input box                    |
+| `<leader>sm`   | `select_model`  | n,v  | Pick a different LLM model                          |
+| `<leader>sM`   | `select_mode`   | n,v  | Switch mode/template (sllm_chat, sllm_agent, etc.)  |
+| `<leader>sa`   | `add_context`   | n,v  | Add file (normal) or selection (visual) to context  |
+| `<leader>sA`   | `add_context_extra` | n,v | Picker for url/diag/cmd/tool/func context       |
+| `<leader>sn`   | `new_chat`      | n,v  | Start a new chat (clears buffer)                    |
+| `<leader>sc`   | `cancel`        | n,v  | Cancel current request                              |
+| `<leader>st`   | `toggle_buffer` | n,v  | Toggle LLM buffer visibility                        |
+| `<leader>sW`   | `toggle_online` | n,v  | Toggle online/web mode (shows 🌐 in status)         |
+| `<leader>sh`   | `history`       | n,v  | Browse and continue previous conversations          |
+| `<leader>sy`   | `copy_code`     | n,v  | Copy last code block from response to clipboard     |
+| `<leader><Tab>`| `complete`      | n    | Inline code completion at cursor                    |
+
+---
+
+## Templates & Modes
+
+sllm.nvim uses native `llm` templates as modes. The plugin ships with four
+default templates that are automatically symlinked to your llm templates
+directory on setup:
+
+| Template          | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| `sllm_chat`       | Simple conversation, no tools                    |
+| `sllm_read`       | Code review with read-only file tools            |
+| `sllm_agent`      | Full agentic mode with bash, edit, write tools   |
+| `sllm_complete`   | Inline code completion (used by `<leader><Tab>`) |
+
+### Switching Modes
+
+Press `<leader>sM` to switch between templates/modes. The current mode is
+displayed in the winbar: `sllm.nvim | Model: gpt-4o [sllm_agent]`
+
+### Customizing Templates
+
+Templates are standard `llm` YAML files. You can:
+
+1. **Edit existing templates:**
+   ```bash
+   llm templates edit sllm_agent
+   ```
+
+2. **Create custom templates:**
+   ```bash
+   cp ~/.config/io.datasette.llm/templates/sllm_read.yaml ~/.config/io.datasette.llm/templates/my_reviewer.yaml
+   llm templates edit my_reviewer
+   ```
+
+3. **View template contents:**
+   ```bash
+   llm templates show sllm_agent
+   ```
+
+Custom templates appear in the mode picker alongside the defaults.
+
+For more information on llm templates:
+https://llm.datasette.io/en/stable/templates.html
 
 ---
 
@@ -241,11 +280,10 @@ keep their default values.
 require("sllm").setup({
   keymaps = {
     -- CHANGE: Use <leader>a for asking the LLM instead of <leader>ss
-    ask_llm = "<leader>a",
+    ask = "<leader>a",
 
-    -- DISABLE: I don't use the "add URL" or "add tool" features
-    add_url_to_ctx = false,
-    add_tool_to_ctx = nil, -- `nil` also works for disabling
+    -- DISABLE: I don't use the extra context picker
+    add_context_extra = false,
   },
 })
 ```
@@ -263,7 +301,7 @@ require("sllm").setup({
 
 -- Now you can define your own from scratch
 local sllm = require("sllm")
-vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask_llm, { desc = "Ask LLM [custom]" })
+vim.keymap.set({"n", "v"}, "<leader>a", sllm.ask, { desc = "Ask LLM [custom]" })
 ```
 
 ### Customizing the UI
@@ -584,30 +622,24 @@ require("sllm").setup({
 
 ## Workflow Example
 
-1. Open any file and press `<leader>ss`; type your prompt and hit Enter.
-2. **Complete code at cursor:** Press `<leader><Tab>` to auto-complete code.
-3. Add the entire file to context: `<leader>sa`.
-4. Add only a visual selection: (Visual mode) `<leader>sv`.
-5. Add diagnostics: `<leader>sd`.
-6. Add the content of a URL: `<leader>su`.
-7. Add a shell command output: `<leader>sx`.
-8. **Add an installed tool to the context:** `<leader>sT`, then pick from the
-   list.
-9. **Define a tool from a Python function:** `<leader>sF` (use visual mode for a
-   selection, or normal mode for the whole file).
-10. Reset context: `<leader>sr`.
-11. Switch models: `<leader>sm`.
-12. **Check available model options:** `<leader>sO` (capital O).
-13. **Set model options (e.g., temperature):** `<leader>so`, enter
-    `temperature`, then `0.7`.
-14. Cancel a running request: `<leader>sc`.
-15. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
+1. Open any file and press `<leader>ss` (ask); type your prompt and hit Enter.
+2. **Complete code at cursor:** Press `<leader><Tab>` to auto-complete code
+   (shows loading indicator while processing).
+3. **Add context quickly:** `<leader>sa` adds file (normal mode) or selection
+   (visual mode).
+4. **Add extra context types:** `<leader>sA` opens a picker for URLs,
+   diagnostics, shell commands, tools, or Python functions.
+5. **Switch modes:** `<leader>sM` to change between `sllm_chat`, `sllm_read`,
+   `sllm_agent`, etc.
+6. **Switch models:** `<leader>sm` to pick a different LLM model.
+7. Start a new chat: `<leader>sn`.
+8. Cancel a running request: `<leader>sc`.
+9. Toggle LLM buffer: `<leader>st`.
+10. **Toggle online/web mode:** `<leader>sW` (check status bar for 🌐
     indicator).
-16. **Browse and continue conversations:** `<leader>sh` to select from up to
+11. **Browse and continue conversations:** `<leader>sh` to select from up to
     1000 recent conversations and continue chatting from any point.
-17. **Copy code blocks from response:** Use `<leader>sy` for the last code
-    block, `<leader>sY` for the first code block, or `<leader>sE` for the entire
-    last response.
+12. **Copy code blocks from response:** `<leader>sy` copies the last code block.
 
 ### Visual Workflow
 

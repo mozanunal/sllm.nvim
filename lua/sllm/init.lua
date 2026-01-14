@@ -61,9 +61,9 @@
 ---
 --- All configuration options with their defaults: >lua
 ---   require("sllm").setup({
----     llm_cmd = "llm",            -- Command or path for the llm CLI
+---     backend_config = { cmd = "llm" }, -- Backend settings (cmd = llm CLI path)
 ---     default_model = "default",  -- Model to use (or "default" for llm's default)
----     show_usage = true,          -- Show token usage stats after responses
+---     default_mode = "sllm_chat", -- Template/mode to use on startup
 ---     on_start_new_chat = true,   -- Start with fresh chat on setup
 ---     reset_ctx_each_prompt = true, -- Clear context after each prompt
 ---     window_type = "vertical",   -- "vertical", "horizontal", or "float"
@@ -74,8 +74,6 @@
 ---     keymaps = { ... },          -- See |Sllm-keymaps|
 ---     pre_hooks = nil,            -- Commands before LLM execution
 ---     post_hooks = nil,           -- Commands after LLM execution
----     system_prompt = "...",      -- System prompt for all queries
----     model_options = {},         -- Model-specific options (-o flags)
 ---     online_enabled = false,     -- Enable web search by default
 ---     history_max_entries = 1000, -- Max history entries to fetch
 ---     chain_limit = 100,          -- Max conversation chain length
@@ -84,13 +82,14 @@
 --- <
 --- ## Configuration Options ~
 ---
---- `llm_cmd` - Command or full path to the `llm` CLI executable.
+--- `backend_config` - Backend-specific settings. Use `backend_config.cmd` to
+--- specify the path to the `llm` CLI if not in PATH.
 ---
 --- `default_model` - Model to use on startup. Set to "default" to use the
 --- default model configured in `llm`.
 ---
---- `show_usage` - When `true`, displays token usage and estimated cost after
---- each response.
+--- `default_mode` - Template/mode to use on startup. The plugin ships with
+--- sllm_chat, sllm_read, sllm_agent, and sllm_complete templates.
 ---
 --- `on_start_new_chat` - When `true`, starts with a fresh chat buffer on setup.
 ---
@@ -111,12 +110,6 @@
 ---
 --- `keymaps` - Table of keybindings. See |Sllm-keymaps|. Set to `false` to
 --- disable all default keymaps.
----
---- `system_prompt` - Text prepended to all queries via `-s` flag. Useful for
---- ensuring consistent output formatting. See |Sllm-system-prompt|.
----
---- `model_options` - Table of model-specific options passed via `-o` flags.
---- Example: `{ temperature = 0.7, max_tokens = 1000 }`. See |Sllm-model-options|.
 ---
 --- `online_enabled` - When `true`, enables web search capabilities (shows 🌐
 --- in status bar). Not all models support this.
@@ -412,11 +405,13 @@
 ---@class PostHook
 ---@field command string                     Shell command to execute.
 
+---@class SllmBackendConfig
+---@field cmd string?                        Command or path to the LLM CLI (default: "llm").
+
 ---@class SllmConfig
----@field llm_cmd string                     Command to run the LLM CLI.
+---@field backend_config SllmBackendConfig?  Backend-specific configuration.
 ---@field default_model string               Default model name or `"default"`.
 ---@field default_mode string?               Default mode/template to use on startup.
----@field show_usage boolean                 Show usage examples flag.
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
 ---@field reset_ctx_each_prompt boolean      Whether to clear context after each prompt.
 ---@field window_type "'vertical'"|"'horizontal'"|"'float'"  How to open the chat window.
@@ -427,20 +422,18 @@
 ---@field keymaps SllmKeymaps|false|nil      Collection of keybindings.
 ---@field pre_hooks PreHook[]?               Commands to run before llm execution.
 ---@field post_hooks PostHook[]?             Commands to run after llm execution.
----@field system_prompt string?              System prompt to prepend to all queries.
----@field model_options table<string,any>?   Model-specific options to pass with -o flag.
 ---@field online_enabled boolean?            Enable online/web mode by default.
 ---@field history_max_entries integer?       Maximum number of history entries to fetch (default: 1000).
 ---@field chain_limit integer?               Maximum number of chained tool responses (default: 100).
 ---@field ui SllmUIConfig|nil                Prompts and text used in the UI.
 ---
 ---@class SllmUIConfig
+---@field show_usage boolean                 Show token usage stats after responses.
 ---@field ask_llm_prompt string              Prompt displayed by the ask_llm function
 ---@field add_url_prompt string              Prompt displayed by the add_url_to_ctx function
 ---@field add_cmd_prompt string              Prompt displayed by the add_cmd_out_to_ctx function
 ---@field markdown_prompt_header string      Text displayed above the user prompt
 ---@field markdown_response_header string    Text displayed above the LLM response
----@field set_system_prompt string           Prompt displayed when modifying the system prompt
 ---
 -- Module definition ==========================================================
 local Sllm = {}
@@ -452,20 +445,52 @@ H.WINBAR_DEBOUNCE_MS = 50
 
 -- Keymap definitions (name -> {modes, func_name, desc})
 -- func_name is resolved to Sllm[func_name] during apply_config
--- Simplified to 11 core keymaps (was 25+)
+-- 11 core keymaps
 H.KEYMAP_DEFS = {
   ask = { modes = { 'n', 'v' }, func_name = 'ask_llm', desc = 'Ask LLM' },
   select_model = { modes = { 'n', 'v' }, func_name = 'select_model', desc = 'Select model' },
   select_mode = { modes = { 'n', 'v' }, func_name = 'select_mode', desc = 'Select mode/template' },
   add_context = { modes = { 'n', 'v' }, func_name = 'add_context', desc = 'Add file/selection to context' },
-  add_context_extra = { modes = { 'n', 'v' }, func_name = 'add_context_extra', desc = 'Add extra context (picker)' },
+  commands = { modes = { 'n', 'v' }, func_name = 'run_command', desc = 'Command picker' },
   new_chat = { modes = { 'n', 'v' }, func_name = 'new_chat', desc = 'New chat' },
   cancel = { modes = { 'n', 'v' }, func_name = 'cancel', desc = 'Cancel request' },
   toggle_buffer = { modes = { 'n', 'v' }, func_name = 'toggle_llm_buffer', desc = 'Toggle LLM buffer' },
-  toggle_online = { modes = { 'n', 'v' }, func_name = 'toggle_online', desc = 'Toggle online mode' },
   history = { modes = { 'n', 'v' }, func_name = 'browse_history', desc = 'Browse chat history' },
   copy_code = { modes = { 'n', 'v' }, func_name = 'copy_last_code_block', desc = 'Copy last code block' },
   complete = { modes = { 'n', 'v' }, func_name = 'complete_code', desc = 'Complete code at cursor' },
+}
+
+-- Command registry for unified command picker
+-- Each command: { cmd, desc, action (function or func_name string), category }
+H.COMMANDS = {
+  -- Chat
+  { cmd = 'new', desc = 'Start new chat', action = 'new_chat', category = 'Chat' },
+  { cmd = 'history', desc = 'Browse chat history', action = 'browse_history', category = 'Chat' },
+  { cmd = 'cancel', desc = 'Cancel current request', action = 'cancel', category = 'Chat' },
+  -- Context
+  { cmd = 'file', desc = 'Add current file', action = 'add_file_to_ctx', category = 'Context' },
+  { cmd = 'url', desc = 'Add URL content', action = 'add_url_to_ctx', category = 'Context' },
+  { cmd = 'selection', desc = 'Add visual selection', action = 'add_sel_to_ctx', category = 'Context' },
+  { cmd = 'diagnostics', desc = 'Add buffer diagnostics', action = 'add_diag_to_ctx', category = 'Context' },
+  { cmd = 'command', desc = 'Add shell command output', action = 'add_cmd_out_to_ctx', category = 'Context' },
+  { cmd = 'tool', desc = 'Add llm tool', action = 'add_tool_to_ctx', category = 'Context' },
+  { cmd = 'function', desc = 'Add Python function', action = 'add_func_to_ctx', category = 'Context' },
+  { cmd = 'clear', desc = 'Reset all context', action = 'reset_context', category = 'Context' },
+  -- Model
+  { cmd = 'model', desc = 'Switch model', action = 'select_model', category = 'Model' },
+  { cmd = 'mode', desc = 'Switch template/mode', action = 'select_mode', category = 'Model' },
+  { cmd = 'online', desc = 'Toggle online mode', action = 'toggle_online', category = 'Model' },
+  { cmd = 'options', desc = 'Show model options', action = 'show_model_options', category = 'Model' },
+  -- Template
+  { cmd = 'template', desc = 'Show template content', action = 'show_template', category = 'Template' },
+  { cmd = 'edit', desc = 'Edit template file', action = 'edit_template', category = 'Template' },
+  -- Copy
+  { cmd = 'code', desc = 'Copy last code block', action = 'copy_last_code_block', category = 'Copy' },
+  { cmd = 'code-first', desc = 'Copy first code block', action = 'copy_first_code_block', category = 'Copy' },
+  { cmd = 'response', desc = 'Copy entire last response', action = 'copy_last_response', category = 'Copy' },
+  -- UI
+  { cmd = 'focus', desc = 'Focus LLM window', action = 'focus_llm_buffer', category = 'UI' },
+  { cmd = 'toggle', desc = 'Toggle LLM buffer', action = 'toggle_llm_buffer', category = 'UI' },
 }
 
 H.PROMPT_TEMPLATE = [[
@@ -481,9 +506,8 @@ H.DEFAULT_CONFIG = vim.deepcopy({
   backend_config = {
     cmd = 'llm',
   },
-  llm_cmd = 'llm', -- Deprecated: use backend_config.cmd instead
   default_model = 'default',
-  show_usage = true,
+  default_mode = 'sllm_chat', -- Default mode/template to use on startup
   on_start_new_chat = true,
   reset_ctx_each_prompt = true,
   window_type = 'vertical',
@@ -493,33 +517,28 @@ H.DEFAULT_CONFIG = vim.deepcopy({
   input_func = vim.ui.input,
   pre_hooks = nil,
   post_hooks = nil,
-  system_prompt = [[You are a sllm plugin living within neovim.
-Always answer with markdown.
-If the offered change is small, return only the changed part or function, not the entire file.]],
   history_max_entries = 1000,
   chain_limit = 100,
-  default_mode = 'sllm_chat', -- Default mode/template to use on startup
   keymaps = {
     ask = '<leader>ss',
     select_model = '<leader>sm',
     select_mode = '<leader>sM',
     add_context = '<leader>sa',
-    add_context_extra = '<leader>sA',
+    commands = '<leader>sx',
     new_chat = '<leader>sn',
     cancel = '<leader>sc',
     toggle_buffer = '<leader>st',
-    toggle_online = '<leader>sW',
     history = '<leader>sh',
     copy_code = '<leader>sy',
     complete = '<leader><Tab>',
   },
   ui = {
+    show_usage = true, -- Show token usage stats after responses
     ask_llm_prompt = 'Prompt: ',
     add_url_prompt = 'URL: ',
     add_cmd_prompt = 'Command: ',
     markdown_prompt_header = '> 💬 Prompt:',
     markdown_response_header = '> 🤖 Response',
-    set_system_prompt = 'System Prompt: ',
   },
 })
 
@@ -532,8 +551,6 @@ H.state = {
   -- Main state
   continue = nil, -- Can be boolean or conversation_id string
   selected_model = nil,
-  system_prompt = nil,
-  model_options = {},
   online_enabled = false,
   backend_config = {}, -- Backend-specific configuration
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
@@ -682,18 +699,6 @@ end
 H.utils_strip_ansi_codes = function(text)
   local ansi_escape_pattern = '[\27\155][][()#;?%][0-9;]*[A-Za-z@^_`{|}~]'
   return text:gsub(ansi_escape_pattern, '')
-end
-
---- Parse JSON string safely with error handling.
----@param json_str string  JSON string to parse.
----@return table?  Parsed table or nil on error.
-H.utils_parse_json = function(json_str)
-  local ok, result = pcall(vim.fn.json_decode, json_str)
-  if ok then
-    return result
-  else
-    return nil
-  end
 end
 
 --- Format number in k format (e.g., 0.14k for 140).
@@ -923,16 +928,6 @@ H.context_render_prompt_ui = function(user_input)
 end
 
 -- History helpers ---------------------------------------------------------------
---- Format a history entry for display in a picker.
----@param entry BackendHistoryEntry History entry to format.
----@return string Formatted display string.
-H.history_format_entry_for_picker = function(entry)
-  local timestamp = entry.timestamp:gsub('T', ' '):gsub('Z', ''):sub(1, 19)
-  local prompt_preview = entry.prompt:gsub('\n', ' '):sub(1, 60)
-  if #entry.prompt > 60 then prompt_preview = prompt_preview .. '...' end
-  return string.format('[%s] %s | %s', timestamp, entry.model, prompt_preview)
-end
-
 --- Format a conversation entry for display.
 ---@param entry BackendHistoryEntry History entry to format.
 ---@return string[] Lines to display in buffer.
@@ -979,19 +974,6 @@ H.history_format_conversation_entry = function(entry)
   table.insert(lines, '')
 
   return lines
-end
-
---- Get unique conversation IDs from history entries.
----@param entries BackendHistoryEntry[] List of history entries.
----@return table<string, integer> Map of conversation_id to count.
-H.history_get_conversations = function(entries)
-  local conversations = {}
-  for _, entry in ipairs(entries) do
-    if entry.conversation_id and entry.conversation_id ~= '' then
-      conversations[entry.conversation_id] = (conversations[entry.conversation_id] or 0) + 1
-    end
-  end
-  return conversations
 end
 
 -- UI helpers --------------------------------------------------------------------
@@ -1341,22 +1323,13 @@ H.apply_config = function(config)
     )
   end
 
-  -- Set up backend config (with backward compatibility for llm_cmd)
+  -- Set up backend config
   H.state.backend_config = Sllm.config.backend_config or {}
-  if Sllm.config.llm_cmd and Sllm.config.llm_cmd ~= 'llm' then
-    -- User specified llm_cmd directly (deprecated), use it
-    H.state.backend_config.cmd = Sllm.config.llm_cmd
-  end
 
   H.state.continue = not Sllm.config.on_start_new_chat
   H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model
     or H.backend.get_default_model(H.state.backend_config)
-  H.state.system_prompt = Sllm.config.system_prompt
-  H.state.model_options = Sllm.config.model_options or {}
   H.state.online_enabled = Sllm.config.online_enabled or false
-
-  -- Set online option if enabled by default
-  if H.state.online_enabled then H.state.model_options.online = 1 end
 
   H.notify = Sllm.config.notify_func
   H.pick = Sllm.config.pick_func
@@ -1437,6 +1410,20 @@ function Sllm.ask_llm()
       return
     end
 
+    -- Handle slash commands
+    if user_input == '/' then
+      -- Just "/" shows the command picker
+      Sllm.run_command()
+      return
+    elseif user_input:match('^/') then
+      -- "/cmd" executes the command directly
+      local cmd = user_input:match('^/(%S+)')
+      if cmd then
+        Sllm.run_command(cmd)
+        return
+      end
+    end
+
     H.ui_show_llm_buffer()
     if H.job_is_busy() then
       H.notify('[sllm] already running, please wait.', vim.log.levels.WARN)
@@ -1462,15 +1449,14 @@ function Sllm.ask_llm()
     local cmd = H.backend.build_command(H.state.backend_config, {
       prompt = prompt,
       continue = H.state.continue,
-      show_usage = Sllm.config.show_usage,
+      show_usage = Sllm.config.ui.show_usage,
       model = H.state.selected_model,
       ctx_files = ctx.fragments,
       tools = ctx.tools,
       functions = ctx.functions,
-      system_prompt = H.state.system_prompt,
-      model_options = H.state.model_options,
       chain_limit = Sllm.config.chain_limit,
       template = H.state.selected_template,
+      online = H.state.online_enabled,
     })
     H.state.continue = true
 
@@ -1496,7 +1482,7 @@ function Sllm.ask_llm()
           H.state.session_stats.input = H.state.session_stats.input + usage.input
           H.state.session_stats.output = H.state.session_stats.output + usage.output
           H.state.session_stats.cost = H.state.session_stats.cost + usage.cost
-          if Sllm.config.show_usage then H.ui_render_winbar() end
+          if Sllm.config.ui.show_usage then H.ui_render_winbar() end
           return
         end
 
@@ -1708,38 +1694,48 @@ function Sllm.add_context()
   end
 end
 
---- Advanced context add: picker for url, diagnostics, command, tool, function.
+--- Unified command picker. Shows all available commands grouped by category.
+--- Also handles slash commands when called with a command string.
+---@param cmd_input string? Optional command to execute directly (e.g., "new", "model").
 ---@return nil
-function Sllm.add_context_extra()
-  local items = {
-    { label = 'url', desc = 'Fetch URL content', action = Sllm.add_url_to_ctx },
-    { label = 'diagnostics', desc = 'Buffer diagnostics', action = Sllm.add_diag_to_ctx },
-    { label = 'command', desc = 'Shell command output', action = Sllm.add_cmd_out_to_ctx },
-    { label = 'tool', desc = 'LLM tool', action = Sllm.add_tool_to_ctx },
-    { label = 'function', desc = 'Python function', action = Sllm.add_func_to_ctx },
-  }
-
-  local labels = vim.tbl_map(function(item) return item.label .. ' - ' .. item.desc end, items)
-
-  H.pick(labels, { prompt = 'Add to context:' }, function(_, idx)
-    if idx then items[idx].action() end
-  end)
-end
-
---- Set the system prompt on-the-fly.
----@return nil
-function Sllm.set_system_prompt()
-  H.input({ prompt = Sllm.config.ui.set_system_prompt, default = H.state.system_prompt or '' }, function(user_input)
-    if user_input == nil then
-      H.notify('[sllm] system prompt not changed.', vim.log.levels.INFO)
-      return
+function Sllm.run_command(cmd_input)
+  -- If a command is provided directly, execute it
+  if cmd_input and cmd_input ~= '' then
+    for _, cmd_def in ipairs(H.COMMANDS) do
+      if cmd_def.cmd == cmd_input then
+        local action = cmd_def.action
+        if type(action) == 'string' then
+          Sllm[action]()
+        else
+          action()
+        end
+        return
+      end
     end
-    if user_input == '' then
-      H.state.system_prompt = nil
-      H.notify('[sllm] system prompt cleared.', vim.log.levels.INFO)
-    else
-      H.state.system_prompt = user_input
-      H.notify('[sllm] system prompt updated.', vim.log.levels.INFO)
+    H.notify('[sllm] unknown command: ' .. cmd_input, vim.log.levels.WARN)
+    return
+  end
+
+  -- Build picker items from command registry
+  local items = {}
+  for _, cmd_def in ipairs(H.COMMANDS) do
+    table.insert(items, {
+      label = string.format('[%s] /%s - %s', cmd_def.category, cmd_def.cmd, cmd_def.desc),
+      cmd_def = cmd_def,
+    })
+  end
+
+  local labels = vim.tbl_map(function(item) return item.label end, items)
+
+  H.pick(labels, { prompt = 'Command:' }, function(_, idx)
+    if idx then
+      local cmd_def = items[idx].cmd_def
+      local action = cmd_def.action
+      if type(action) == 'string' then
+        Sllm[action]()
+      else
+        action()
+      end
     end
   end)
 end
@@ -1768,44 +1764,14 @@ function Sllm.show_model_options()
   H.notify('[sllm] showing model options', vim.log.levels.INFO)
 end
 
---- Set or update a model option.
----@return nil
-function Sllm.set_model_option()
-  H.input({ prompt = 'Option key: ' }, function(key)
-    if not key or key == '' then
-      H.notify('[sllm] no key provided.', vim.log.levels.INFO)
-      return
-    end
-    H.input({ prompt = 'Option value for "' .. key .. '": ' }, function(value)
-      if not value or value == '' then
-        H.notify('[sllm] no value provided.', vim.log.levels.INFO)
-        return
-      end
-      -- Try to convert to number if it looks like a number
-      local num_value = tonumber(value)
-      H.state.model_options[key] = num_value or value
-      H.notify('[sllm] set option: ' .. key .. ' = ' .. value, vim.log.levels.INFO)
-    end)
-  end)
-end
-
---- Reset all model options.
----@return nil
-function Sllm.reset_model_options()
-  H.state.model_options = {}
-  H.notify('[sllm] model options reset.', vim.log.levels.INFO)
-end
-
---- Toggle the online feature (adds/removes online=1 option).
+--- Toggle the online feature.
 ---@return nil
 function Sllm.toggle_online()
   H.state.online_enabled = not H.state.online_enabled
 
   if H.state.online_enabled then
-    H.state.model_options.online = 1
     H.notify('[sllm] 🌐 Online mode enabled', vim.log.levels.INFO)
   else
-    H.state.model_options.online = nil
     H.notify('[sllm] 📴 Online mode disabled', vim.log.levels.INFO)
   end
 
@@ -2143,13 +2109,6 @@ function Sllm.edit_template()
   else
     H.notify('[sllm] failed to edit template: ' .. H.state.selected_template, vim.log.levels.ERROR)
   end
-end
-
---- Clear the selected template.
----@return nil
-function Sllm.clear_template()
-  H.state.selected_template = nil
-  H.notify('[sllm] template cleared', vim.log.levels.INFO)
 end
 
 return Sllm

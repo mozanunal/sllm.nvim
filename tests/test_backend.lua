@@ -128,12 +128,12 @@ T['llm']['build_command includes model flag'] = function()
   end)
 end
 
-T['llm']['build_command includes system prompt'] = function()
+T['llm']['build_command includes online flag'] = function()
   local cmd = LlmBackend.build_command({ cmd = 'llm' }, {
     prompt = 'test',
-    system_prompt = 'You are helpful',
+    online = true,
   })
-  MiniTest.expect.no_error(function() assert(cmd:find('-s') ~= nil) end)
+  MiniTest.expect.no_error(function() assert(cmd:find('-o online 1') ~= nil) end)
 end
 
 T['llm']['build_command includes continue flag'] = function()
@@ -164,17 +164,6 @@ T['llm']['build_command includes tools'] = function()
     assert(cmd:find('-T') ~= nil)
     assert(cmd:find('tool1') ~= nil)
     assert(cmd:find('tool2') ~= nil)
-  end)
-end
-
-T['llm']['build_command includes model options'] = function()
-  local cmd = LlmBackend.build_command({ cmd = 'llm' }, {
-    prompt = 'test',
-    model_options = { temperature = 0.7 },
-  })
-  MiniTest.expect.no_error(function()
-    assert(cmd:find('-o') ~= nil)
-    assert(cmd:find('temperature') ~= nil)
   end)
 end
 

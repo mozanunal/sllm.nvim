@@ -173,10 +173,6 @@ local LlmBackend = Base.extend({
     if options.show_usage then cmd = cmd .. ' -u' end
     if options.model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(options.model) end
 
-    if options.system_prompt and options.system_prompt ~= '' then
-      cmd = cmd .. ' -s ' .. vim.fn.shellescape(options.system_prompt)
-    end
-
     if options.ctx_files then
       for _, filename in ipairs(options.ctx_files) do
         -- Use -a for attachments (images, PDFs, etc.), -f for text files
@@ -197,11 +193,7 @@ local LlmBackend = Base.extend({
       end
     end
 
-    if options.model_options then
-      for key, value in pairs(options.model_options) do
-        cmd = cmd .. ' -o ' .. vim.fn.shellescape(key) .. ' ' .. vim.fn.shellescape(tostring(value)) .. ' '
-      end
-    end
+    if options.online then cmd = cmd .. ' -o online 1' end
 
     if options.template then cmd = cmd .. ' -t ' .. vim.fn.shellescape(options.template) end
 

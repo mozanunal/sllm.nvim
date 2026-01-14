@@ -56,7 +56,7 @@ the [**PREFACE.md**](./PREFACE.md).
    https://github.com/simonw/llm e.g. `brew install llm` or `pip install llm`.
 
    > 💡 If `llm` is not in your system's `PATH`, you can set the full path in
-   > the configuration via the `llm_cmd` option.
+   > the configuration via `backend_config = { cmd = "/path/to/llm" }`.
 
 2. **Install one or more `llm` extensions**
    - `llm install llm-openai`
@@ -122,12 +122,11 @@ Call `require("sllm").setup()` with an optional table of overrides:
 
 ```lua
 require("sllm").setup({
-  llm_cmd                  = "llm", -- command or path for the llm CLI
+  backend_config           = { cmd = "llm" }, -- backend settings (cmd = llm CLI path)
   -- model to use on startup. This setting uses the default model set for the llm CLI
   default_model            = "default",
   -- template/mode to use on startup (see "Templates & Modes" section)
   default_mode             = "sllm_chat",
-  show_usage               = true, -- append usage stats to responses
   on_start_new_chat        = true, -- start fresh chat on setup
   reset_ctx_each_prompt    = true, -- clear file context each ask
   window_type              = "vertical", -- Default. Options: "vertical", "horizontal", "float"
@@ -146,10 +145,6 @@ require("sllm").setup({
     add_context_extra = false,
     -- Other keymaps will use their default values
   },
-  -- System prompt prepended to all queries (via -s flag)
-  system_prompt = [[You are a sllm plugin living within neovim.
-Always answer with markdown.
-If the offered change is small, return only the changed part or function, not the entire file.]],
   -- Maximum number of history entries to fetch (default: 1000)
   history_max_entries = 1000,
   -- See the "Pre-Hooks and Post-Hooks" section for more details
@@ -163,6 +158,7 @@ If the offered change is small, return only the changed part or function, not th
   },
   -- See the "Customizing the UI" section for more details
   ui = {
+    show_usage = true, -- append usage stats to responses
     -- Text displayed above the LLM response
     markdown_prompt_header = '# 󰄛',
     -- Prompt displayed by 'ask'
@@ -174,10 +170,9 @@ If the offered change is small, return only the changed part or function, not th
 
 | Option                  | Type              | Default                                | Description                                                                                                                               |
 | ----------------------- | ----------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `llm_cmd`               | string            | `"llm"`                                | Command or path for the `llm` CLI.                                                                                                        |
+| `backend_config`        | table             | `{ cmd = "llm" }`                      | Backend settings. Use `cmd` to specify the path to the `llm` CLI.                                                                         |
 | `default_model`         | string            | `"default"`                            | Model to use on startup. If "default", uses the default model set for the `llm` CLI.                                                      |
 | `default_mode`          | string            | `"sllm_chat"`                          | Template/mode to use on startup. See "Templates & Modes" section.                                                                         |
-| `show_usage`            | boolean           | `true`                                 | Include token usage summary in responses. If `true`, you'll see details after each interaction.                                           |
 | `on_start_new_chat`     | boolean           | `true`                                 | Begin with a fresh chat buffer on plugin setup                                                                                            |
 | `reset_ctx_each_prompt` | boolean           | `true`                                 | Automatically clear file context after every prompt (if `true`)                                                                           |
 | `window_type`           | string            | `"vertical"`                           | Window style: `"vertical"`, `"horizontal"`, or `"float"`.                                                                                 |
@@ -185,12 +180,10 @@ If the offered change is small, return only the changed part or function, not th
 | `pick_func`             | function          | `require('mini.pick').ui_select`       | UI function for interactive model selection                                                                                               |
 | `notify_func`           | function          | `require('mini.notify').make_notify()` | Notification function                                                                                                                     |
 | `input_func`            | function          | `vim.ui.input`                         | Input prompt function.                                                                                                                    |
-| `model_options`         | table<string,any> | `{}`                                   | Model-specific options (e.g., `{online = 1}`). These are passed to the `llm` CLI with `-o` flags.                                         |
 | `online_enabled`        | boolean           | `false`                                | Enable online/web mode by default (shows 🌐 in status bar).                                                                               |
 | `history_max_entries`   | integer           | `1000`                                 | Maximum number of history log entries to fetch when browsing conversations. Increase for more history, decrease for faster loading.       |
-| `system_prompt`         | string/nil        | (see config example)                   | System prompt prepended to all queries via `-s` flag. Can be updated on-the-fly with `<leader>sS`.                                        |
 | `keymaps`               | table/false       | (see defaults)                         | A table of keybindings. Set any key to `false` or `nil` to disable it. Set the whole `keymaps` option to `false` to disable all defaults. |
-| `ui`                    | table             | (see defaults)                         | A table of UI elements.                                                                                                                   |
+| `ui`                    | table             | (see defaults)                         | UI settings including `show_usage` (token stats) and prompt text.                                                                         |
 
 ## Keybindings & Commands
 
@@ -323,59 +316,6 @@ require("sllm").setup({
   },
 })
 ```
-
----
-
-## System Prompt
-
-The `system_prompt` option allows you to define instructions that are prepended
-to all LLM queries using the `-s` flag. This is useful for ensuring consistent
-output formatting and behavior across all interactions.
-
-### Default System Prompt
-
-```lua
-system_prompt = [[You are a sllm plugin living within neovim.
-Always answer with markdown.
-If the offered change is small, return only the changed part or function, not the entire file.]]
-```
-
-### Configuring System Prompt
-
-You can customize the system prompt in your setup configuration:
-
-```lua
-require("sllm").setup({
-  system_prompt = [[You are an expert code reviewer.
-Always provide constructive feedback.
-Format code suggestions using markdown code blocks.]],
-})
-```
-
-### On-the-fly System Prompt Updates
-
-Press `<leader>sS` (or your custom keybinding for `set_system_prompt`) to
-interactively update the system prompt during a session. This allows you to:
-
-- Temporarily override the default system prompt
-- Clear the system prompt by submitting an empty string
-- Adapt the LLM's behavior for different tasks without restarting Neovim
-
-**Example workflow:**
-
-1. Press `<leader>sS`
-2. Enter your new system prompt (or clear it with an empty string)
-3. Future queries will use the updated system prompt
-
-### Benefits
-
-- **Consistent formatting:** Ensure the LLM always responds in markdown
-- **Model-specific tuning:** Different models may benefit from different
-  instructions
-- **Context-appropriate behavior:** For small changes, request only the modified
-  function instead of the entire file
-- **Flexibility:** Update the prompt on-the-fly without changing your
-  configuration
 
 ---
 
@@ -526,97 +466,6 @@ require("sllm").setup({
 **Note**: The `online` option may not be available for all models. If you get
 errors when using this feature, the model you're using likely doesn't support
 web search. Check your model provider's documentation.
-
----
-
-## Model Options
-
-Models support specific options that can be passed via the `-o` flag in the
-`llm` CLI. These options control various aspects of model behavior like
-temperature, max tokens, and more.
-
-### Discovering Available Options
-
-To see what options are available for your current model:
-
-1. Press `<leader>sO` (capital O) to display available options in the LLM buffer
-2. Or run `llm models --options -m <model-name>` in your terminal
-
-### Setting Model Options
-
-There are two ways to set model options:
-
-#### 1. Via Configuration (Persistent)
-
-Set options in your `setup()` call that will apply to all LLM requests:
-
-```lua
-require("sllm").setup({
-  model_options = {
-    temperature = 0.7,     -- Control randomness (0-2)
-    max_tokens = 1000,     -- Limit response length
-    -- Add other model-specific options here
-  },
-})
-```
-
-#### 2. Via Keymap (Runtime)
-
-Use the `<leader>so` keymap to set options on-the-fly:
-
-1. Press `<leader>so`
-2. Enter the option key (e.g., `temperature`)
-3. Enter the option value (e.g., `0.7`)
-
-You can also programmatically set options:
-
-```lua
--- Show available options for current model
-require("sllm").show_model_options()
-
--- Set an option
-require("sllm").set_model_option()
-
--- Reset all options
-require("sllm").reset_model_options()
-```
-
-### Common Model Options
-
-- `temperature` (0-2): Controls randomness. Higher = more creative, lower = more
-  focused
-- `max_tokens`: Maximum number of tokens to generate
-- `top_p` (0-1): Nucleus sampling parameter (alternative to temperature)
-- `frequency_penalty` (-2 to 2): Penalize repeated tokens
-- `presence_penalty` (-2 to 2): Encourage talking about new topics
-- `seed`: Integer seed for deterministic sampling
-- `json_object` (boolean): Force JSON output (must mention JSON in prompt)
-- `reasoning_effort` (low/medium/high): For reasoning models like o1, o3
-  (controls thinking depth)
-- `image_detail` (low/high/auto): For vision models (controls image token usage)
-
-**Note**: Not all options are available for all models. Use `<leader>sO` to see
-what's supported by your current model.
-
-### Example Usage
-
-```lua
--- In your config:
-require("sllm").setup({
-  model_options = {
-    temperature = 0.3,  -- More focused responses
-    max_tokens = 2000,  -- Longer responses
-  },
-})
-```
-
-```vim
-" Or at runtime:
-" 1. Press <leader>so
-" 2. Enter: temperature
-" 3. Enter: 0.8
-" Now your next prompt will use temperature 0.8
-```
 
 ---
 

@@ -1,0 +1,142 @@
+system: |
+  You are a code reviewer with file access in Neovim.
+  Analyze code for clarity, correctness, performance, and best practices.
+  Be constructive and specific in your feedback.
+  Use your tools to explore the codebase when needed.
+functions: |
+  import os
+  import subprocess
+  import urllib.request
+  from pathlib import Path
+  from typing import Optional
+
+  def list(path: str = ".") -> str:
+    """List directory contents.
+
+    Args:
+        path: Directory path to list (default: current directory)
+    """
+    dir_path = Path.cwd() / path
+
+    try:
+      if not dir_path.exists():
+        return f"Error: Directory not found: {path}"
+
+      if not dir_path.is_dir():
+        return f"Error: Not a directory: {path}"
+
+      items = sorted(dir_path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
+
+      # Filter out hidden files and node_modules
+      items = [
+        i for i in items if not i.name.startswith(".") and i.name != "node_modules"
+      ]
+
+      if not items:
+        return "Empty directory"
+
+      lines = []
+      for item in items:
+        if item.is_dir():
+          lines.append(f"📁 {item.name}/")
+        else:
+          size = item.stat().st_size
+          if size < 1024:
+            size_str = f"{size}B"
+          elif size < 1024 * 1024:
+            size_str = f"{size / 1024:.1f}KB"
+          else:
+            size_str = f"{size / (1024 * 1024):.1f}MB"
+          lines.append(f"📄 {item.name} ({size_str})")
+
+      return "\n".join(lines)
+
+    except PermissionError:
+      return f"Error: Permission denied: {path}"
+    except Exception as e:
+      return f"Error listing directory: {str(e)}"
+
+  def read(
+    path: str, start_line: Optional[int] = None, end_line: Optional[int] = None
+  ) -> str:
+    """Read file contents. Supports reading specific line ranges.
+
+    Args:
+        path: Path to the file to read
+        start_line: Optional starting line number (1-indexed)
+        end_line: Optional ending line number (1-indexed)
+    """
+    try:
+      with open(path, "r", encoding="utf-8") as f:
+        if start_line is None and end_line is None:
+          return f.read()
+
+        lines = f.readlines()
+
+        if start_line is not None and end_line is not None:
+          return "".join(lines[start_line - 1 : end_line])
+        elif start_line is not None:
+          return "".join(lines[start_line - 1 :])
+        else:
+          return "".join(lines[:end_line])
+
+    except FileNotFoundError:
+      return f"Error: File not found: {path}"
+    except UnicodeDecodeError:
+      return f"Error: Cannot read file {path} (not a text file)"
+    except Exception as e:
+      return f"Error reading file: {str(e)}"
+
+  def grep(pattern: str, path: Optional[str] = None, file_pattern: str = "*") -> str:
+    """Search file contents using regular expressions with ripgrep (rg).
+
+    Args:
+        pattern: Regex pattern to search for
+        path: Optional specific file path to search in
+        file_pattern: File pattern to match (e.g., '*.py')
+    """
+    try:
+      cmd = ["rg", "--line-number", "--no-heading", "--color", "never"]
+      if path:
+        cmd.extend([pattern, path])
+      else:
+        if file_pattern != "*":
+          cmd.extend(["--glob", file_pattern])
+        cmd.append(pattern)
+
+      result = subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, text=True)
+      if result.returncode == 0:
+        return result.stdout.rstrip()
+      elif result.returncode == 1:
+        return "No matches found"
+      else:
+        return f"Error: {result.stderr.rstrip()}"
+    except FileNotFoundError:
+      # Fallback to grep
+      if path:
+        cmd = ["grep", "-n", "-E", pattern, path]
+      else:
+        cmd = ["grep", "-r", "-n", "-E", pattern, "."]
+        if file_pattern != "*":
+          cmd.extend(["--include", file_pattern])
+      result = subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, text=True)
+      if result.returncode == 0:
+        return result.stdout.rstrip()
+      return "No matches found"
+    except Exception as e:
+      return f"Error during search: {str(e)}"
+
+  def glob(pattern: str) -> str:
+    """Find files by pattern matching.
+
+    Args:
+        pattern: Glob pattern to match files (e.g., '*.py', '**/*.js')
+    """
+    try:
+      matches = Path.cwd().glob(pattern)
+      files = [str(p.relative_to(Path.cwd())) for p in matches if p.is_file()]
+      if files:
+        return "\n".join(sorted(files))
+      return "No files found"
+    except Exception as e:
+      return f"Error finding files: {str(e)}"

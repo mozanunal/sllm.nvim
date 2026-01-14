@@ -1,0 +1,4 @@
+system: |
+  Complete the code at the cursor position.
+  Output ONLY the completion code, no explanations or markdown.
+  Match the existing code style and indentation.

@@ -133,6 +133,21 @@ function Base.get_templates_path(_config) return nil end
 ---@return boolean Success status.
 function Base.edit_template(_config, _name) return false end
 
+---Parse token usage from a stderr line.
+---@param line string The line to parse.
+---@return table|nil Token usage table or nil.
+function Base.parse_token_usage(_line) return nil end
+
+---Check if a line is a Tool call header.
+---@param line string The line to check.
+---@return boolean True if it's a Tool call header.
+function Base.is_tool_call_header(_line) return false end
+
+---Check if a line is tool call output.
+---@param line string The line to check.
+---@return boolean True if it's tool output.
+function Base.is_tool_call_output(_line) return false end
+
 ---Create a new backend instance that inherits from base.
 ---@param impl table Backend implementation table.
 ---@return BackendInterface New backend instance.

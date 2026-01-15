@@ -101,12 +101,20 @@ H.parse_token_usage = function(line)
   return result
 end
 
---- Detect if a line is part of tool call output.
---- Tool call outputs start with "Tool call:" and can be followed by function names.
----@param line string The stderr line to check
----@return boolean True if the line appears to be tool call related
+--- Detect if a line is the Tool call header (not the output).
+---@param line string The line to check
+---@return boolean True if the line is a Tool call header
+H.is_tool_call_header = function(line)
+  return line:match('^Tool call:') ~= nil
+end
+
+--- Detect if a line is tool call output (indented content following a Tool call header).
+--- Tool output lines are typically indented with spaces and may contain file listing emojis.
+---@param line string The line to check
+---@return boolean True if the line appears to be tool output (not header)
 H.is_tool_call_output = function(line)
-  return line:match('^Tool call:') ~= nil or line:match('^%s*[📁📄🔧]') ~= nil
+  -- Lines starting with spaces (indented tool output)
+  return line:match('^%s+') ~= nil
 end
 
 -- Backend Implementation =====================================================
@@ -357,9 +365,14 @@ local LlmBackend = Base.extend({
   ---@return table|nil A table with input, output, and cost (optional), or nil if not found.
   parse_token_usage = function(line) return H.parse_token_usage(line) end,
 
-  ---Detect if a line is part of tool call output.
-  ---@param line string The stderr line to check.
-  ---@return boolean True if the line appears to be tool call related.
+  ---Detect if a line is a Tool call header.
+  ---@param line string The line to check.
+  ---@return boolean True if the line is a Tool call header.
+  is_tool_call_header = function(line) return H.is_tool_call_header(line) end,
+
+  ---Detect if a line is part of tool call output (indented lines after header).
+  ---@param line string The line to check.
+  ---@return boolean True if the line appears to be tool output.
   is_tool_call_output = function(line) return H.is_tool_call_output(line) end,
 })
 

@@ -202,6 +202,7 @@ H.state = {
   job = {
     llm_job_id = nil,
     stdout_acc = '',
+    in_tool_output = false, -- Track if we're inside tool output block
   },
 }
 
@@ -375,6 +376,38 @@ end
 ---@return nil
 H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_exit)
   H.state.job.stdout_acc = ''
+  H.state.job.in_tool_output = false
+
+  -- Helper to route a line to the appropriate handler with tool output state tracking
+  local function route_line(stripped)
+    -- Token usage always goes to stderr
+    if stripped:match('Token usage:') then
+      H.state.job.in_tool_output = false
+      hook_on_stderr_line(stripped)
+      return
+    end
+
+    -- Tool call header: show it and enter tool output mode
+    if stripped:match('^Tool call:') then
+      H.state.job.in_tool_output = true
+      hook_on_stderr_line(stripped)
+      return
+    end
+
+    -- If we're in tool output mode, check if this line is tool output
+    if H.state.job.in_tool_output then
+      -- Indented lines are tool output - send to stderr (will be filtered)
+      if stripped:match('^%s+') or stripped == '' then
+        hook_on_stderr_line(stripped)
+        return
+      end
+      -- Non-indented, non-empty line: exit tool output mode
+      H.state.job.in_tool_output = false
+    end
+
+    -- Regular output goes to stdout
+    hook_on_stdout_line(stripped)
+  end
 
   -- Merge current environment with unbuffered settings
   local job_env = vim.fn.environ()
@@ -397,15 +430,7 @@ H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_ex
           while nl_pos do
             local line = H.state.job.stdout_acc:sub(1, nl_pos - 1)
             local stripped = H.utils_strip_ansi_codes(line)
-
-            -- With pty=true, stderr is merged into stdout
-            -- Detect token usage lines and route to stderr handler
-            if stripped:match('Token usage:') or stripped:match('^Tool call:') then
-              hook_on_stderr_line(stripped)
-            else
-              hook_on_stdout_line(stripped)
-            end
-
+            route_line(stripped)
             H.state.job.stdout_acc = H.state.job.stdout_acc:sub(nl_pos + 1)
             nl_pos = H.state.job.stdout_acc:find('\n', 1, true)
           end
@@ -428,25 +453,18 @@ H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_ex
         while nl_pos do
           local line = stdout_acc:sub(1, nl_pos - 1)
           local stripped = H.utils_strip_ansi_codes(line)
-          if stripped:match('Token usage:') or stripped:match('^Tool call:') then
-            hook_on_stderr_line(stripped)
-          else
-            hook_on_stdout_line(stripped)
-          end
+          route_line(stripped)
           stdout_acc = stdout_acc:sub(nl_pos + 1)
           nl_pos = stdout_acc:find('\n', 1, true)
         end
         if stdout_acc ~= '' then
           local stripped = H.utils_strip_ansi_codes(stdout_acc)
-          if stripped:match('Token usage:') or stripped:match('^Tool call:') then
-            hook_on_stderr_line(stripped)
-          else
-            hook_on_stdout_line(stripped)
-          end
+          route_line(stripped)
         end
         H.state.job.stdout_acc = ''
       end
       H.state.job.llm_job_id = nil
+      H.state.job.in_tool_output = false
       hook_on_exit(exit_code)
     end,
   })
@@ -1097,7 +1115,7 @@ function Sllm.ask_llm()
         end
         H.ui_append_to_llm_buffer({ line })
       end,
-      -- stderr handler: parse token usage and filter tool calls
+      -- stderr handler: parse token usage, show tool call headers, filter tool output
       ---@param line string
       function(line)
         -- Parse token usage and accumulate stats
@@ -1110,7 +1128,13 @@ function Sllm.ask_llm()
           return
         end
 
-        -- Filter out tool call outputs (they can be very large)
+        -- Show Tool call headers
+        if H.backend.is_tool_call_header(line) then
+          H.ui_append_to_llm_buffer({ line })
+          return
+        end
+
+        -- Filter out tool call outputs (indented lines following Tool call headers)
         if H.backend.is_tool_call_output(line) then return end
 
         -- Display other stderr lines if they're not filtered

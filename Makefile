@@ -7,12 +7,12 @@ dev_install:
 format:
 	@echo "------------------ format  -------------------------"
 	stylua lua/ tests/
-	deno fmt *.md
+	deno fmt */*.md
 
 format-check:
 	@echo "------------------ format-check --------------------"
 	stylua --check lua/ tests/
-	deno fmt --check *.md
+	deno fmt --check */*.md
 
 lint:
 	@echo "------------------ lint  ---------------------------"
@@ -38,4 +38,13 @@ gif:
 
 docs:
 	@echo "------------------ docs  ---------------------------"
-	nvim --headless --noplugin -u scripts/minidoc.lua
+	pandoc --metadata=title="sllm.nvim" --columns=78 -t vimdoc \
+		--lua-filter scripts/vimdoc_filter.lua \
+		-o doc/sllm.txt \
+		doc/README.md \
+		doc/configure.md \
+		doc/slash_commands.md \
+		doc/modes.md \
+		doc/hooks.md \
+		doc/backend_llm.md
+	printf '\n vim:tw=78:ts=2:sw=2:et:ft=help:norl:\n' >> doc/sllm.txt

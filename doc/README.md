@@ -9,7 +9,7 @@ and complete code without leaving your editor.
 - **Streaming chat** with markdown rendering and syntax highlighting
 - **Context management** for files, selections, URLs, diagnostics, and command
   output
-- **Agentic mode** with Python function tools (read, write, edit, grep, bash)
+- **Agentic mode** with Python function tools (bash, read, write, edit, grep)
 - **Template/mode system** for different workflows (chat, review, agent,
   complete)
 - **History browsing** to continue past conversations
@@ -57,42 +57,15 @@ llm keys set openrouter   # or: export OPENROUTER_KEY=...
 
 That's it. Press `<leader>ss` to start chatting.
 
-## Default keymaps
+## Keymaps
 
-All keymaps work in both normal and visual mode:
+Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See
+`doc/configure.md` for the full list and how to override.
 
-- `<leader>ss` - Ask the LLM (opens prompt)
-- `<leader>sm` - Select model
-- `<leader>sM` - Select mode/template
-- `<leader>sa` - Add file (normal) or selection (visual) to context
-- `<leader>sx` - Open command picker (slash commands)
-- `<leader>sn` - Start new chat
-- `<leader>sc` - Cancel current request
-- `<leader>st` - Toggle LLM buffer
-- `<leader>sh` - Browse chat history
-- `<leader>sy` - Copy last code block
-- `<leader><Tab>` - Complete code at cursor
+## Templates (modes)
 
-## Winbar status
-
-The LLM buffer displays a winbar showing:
-
-- Loading spinner during requests
-- Current model name (e.g., `claude-3-5-sonnet`)
-- Active mode/template in brackets (e.g., `[sllm_chat]`)
-- Online indicator when web mode is enabled
-- Token usage: input tokens, output tokens, and cost
-
-## Shipped templates (modes)
-
-Templates configure the LLM's behavior. Four defaults are installed:
-
-- **sllm_chat** - General chat with markdown responses
-- **sllm_read** - Code review with read-only file access
-- **sllm_agent** - Agentic mode with bash, read, write, edit, grep tools
-- **sllm_complete** - Inline completion (used by `<leader><Tab>`)
-
-Switch modes with `<leader>sM` or `/template`.
+Templates configure system prompts and tools. The defaults are documented in
+`doc/modes.md`; switch with `<leader>sM` or `/template`.
 
 ## Documentation index
 

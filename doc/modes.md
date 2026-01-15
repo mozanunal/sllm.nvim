@@ -83,6 +83,8 @@ Use cases:
 
 **Warning**: Agent mode can modify files. Review changes before committing.
 
+**Note**: Default mode is `sllm_chat`; switch with `<leader>sM` or `/template`.
+
 ### sllm_complete
 
 Inline completion mode. Used internally by `<leader><Tab>` for code completion

@@ -55,51 +55,17 @@ llm install llm-openrouter && llm keys set openrouter
 
 Press `<leader>ss` to start chatting.
 
-## Default keymaps
+## Keymaps
 
-All keymaps work in both normal and visual mode:
-
-- `<leader>ss` — Ask the LLM (opens prompt)
-- `<leader>sm` — Select model
-- `<leader>sM` — Select mode/template
-- `<leader>sa` — Add file (normal) or selection (visual) to context
-- `<leader>sx` — Open command picker
-- `<leader>sn` — Start new chat
-- `<leader>sc` — Cancel current request
-- `<leader>st` — Toggle LLM buffer
-- `<leader>sh` — Browse chat history
-- `<leader>sy` — Copy last code block
-- `<leader><Tab>` — Complete code at cursor
+Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See `doc/configure.md` for the full list and how to override.
 
 ## Modes (templates)
 
-Templates configure the LLM's behavior. Four defaults are included:
-
-- **sllm_chat** — General chat with markdown responses
-- **sllm_read** — Code review with read-only file access (list, read, grep,
-  glob)
-- **sllm_agent** — Agentic mode with full tool access (bash, read, write, edit,
-  grep, glob, patch, webfetch)
-- **sllm_complete** — Inline completion (used by `<leader><Tab>`)
-
-Switch modes with `<leader>sM` or `/template`.
+Templates configure the LLM's behavior. Defaults are described in `doc/modes.md`; switch with `<leader>sM` or `/template`.
 
 ## Slash commands
 
-Type `/` at the prompt to open the command picker, or use commands directly:
-
-- `/new` — Start new chat
-- `/history` — Browse past conversations
-- `/add-file` — Add current file to context
-- `/add-selection` — Add visual selection
-- `/add-diagnostics` — Add LSP diagnostics
-- `/model` — Switch model
-- `/template` — Switch template
-- `/online` — Toggle web search mode
-- `/copy-code` — Copy last code block
-- `/clear-context` — Reset all context
-
-See [doc/slash_commands.md](./doc/slash_commands.md) for the full list.
+Type `/` at the prompt to open the command picker, or see `doc/slash_commands.md` for the full list (e.g., `/new`, `/model`, `/add-file`).
 
 ## Why sllm.nvim
 
@@ -114,7 +80,7 @@ See [doc/slash_commands.md](./doc/slash_commands.md) for the full list.
 ```lua
 require('sllm').setup({
   default_model = 'claude-3-5-sonnet',  -- or 'default' for llm's default
-  default_mode = 'sllm_agent',          -- template to use on startup
+  default_mode = 'sllm_chat',           -- template to use on startup
   window_type = 'float',                -- 'vertical', 'horizontal', or 'float'
   reset_ctx_each_prompt = false,        -- keep context across turns
   keymaps = {

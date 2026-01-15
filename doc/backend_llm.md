@@ -107,7 +107,7 @@ require('sllm').setup({
 ## Tool extensions
 
 For agent mode (`sllm_agent`), the built-in Python functions handle most tasks.
-You can also install llm tool extensions:
+You can also install llm tool extensions if you prefer external ones:
 
 **Shell execution:**
 

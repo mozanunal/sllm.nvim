@@ -138,8 +138,8 @@ Now ask "Why are these tests failing?" and the LLM sees recent test output.
 
 ## Example: LSP diagnostics (alternative)
 
-While `/diagnostics` adds buffer diagnostics, you can use hooks for project-wide
-issues:
+While `/add-diagnostics` adds buffer diagnostics, you can use hooks for
+project-wide issues:
 
 ```lua
 require('sllm').setup({
@@ -188,4 +188,4 @@ This only adds package.json if it exists.
 - Use `head` or `tail` to limit output size
 - Pre-hooks block the prompt, so avoid slow commands
 - Post-hooks block showing "response complete", keep them quick
-- For expensive operations, consider using `/command` manually instead
+- For expensive operations, consider using `/add-output` manually instead

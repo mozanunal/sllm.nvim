@@ -7,7 +7,8 @@ tools.
 ## How templates work
 
 Templates are YAML files stored in llm's templates directory. When you select a
-template with `/mode` or `<leader>sM`, it's passed to llm with the `-t` flag.
+template with `/template` or `<leader>sM`, it's passed to llm with the `-t`
+flag.
 
 The plugin ships with four default templates that are symlinked to your llm
 templates directory on first setup.
@@ -102,7 +103,7 @@ insertion into your buffer.
 
 **During a session:**
 
-- Press `<leader>sM` or type `/mode` at the prompt
+- Press `<leader>sM` or type `/template` at the prompt
 - Select from the picker
 
 **At startup:**
@@ -271,7 +272,7 @@ llm templates show sllm_agent
 llm templates edit sllm_agent
 ```
 
-Or use `/edit` in sllm.nvim when the template is active.
+Or use `/template-edit` in sllm.nvim when the template is active.
 
 ## Tips
 

@@ -164,7 +164,7 @@ pick_func = vim.ui.select
 
 ## Model options
 
-Set model-specific options at runtime with `/option` or programmatically:
+Set model-specific options at runtime with `/set-option` or programmatically:
 
 ```lua
 -- In your config, set default options
@@ -174,7 +174,7 @@ Set model-specific options at runtime with `/option` or programmatically:
 At runtime:
 
 - `/options` shows available options for the current model
-- `/option` sets a key/value pair
+- `/set-option` sets a key/value pair
 - `/reset-options` clears all options
 
 ## Chain limit for agent mode

@@ -92,7 +92,7 @@ Templates configure the LLM's behavior. Four defaults are installed:
 - **sllm_agent** - Agentic mode with bash, read, write, edit, grep tools
 - **sllm_complete** - Inline completion (used by `<leader><Tab>`)
 
-Switch modes with `<leader>sM` or `/mode`.
+Switch modes with `<leader>sM` or `/template`.
 
 ## Documentation index
 

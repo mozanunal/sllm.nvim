@@ -18,7 +18,7 @@ workflows, and complete code without leaving your editor.
 - **Template/mode system** for different workflows (chat, review, agent,
   complete)
 - **History browsing** to continue past conversations
-- **Slash commands** for quick actions (`/new`, `/model`, `/file`, etc.)
+- **Slash commands** for quick actions (`/new`, `/model`, `/add-file`, etc.)
 - **Inline completion** at cursor position
 - **Token usage stats** and cost tracking in the winbar
 
@@ -82,7 +82,7 @@ Templates configure the LLM's behavior. Four defaults are included:
   grep, glob, patch, webfetch)
 - **sllm_complete** — Inline completion (used by `<leader><Tab>`)
 
-Switch modes with `<leader>sM` or `/mode`.
+Switch modes with `<leader>sM` or `/template`.
 
 ## Slash commands
 
@@ -90,14 +90,14 @@ Type `/` at the prompt to open the command picker, or use commands directly:
 
 - `/new` — Start new chat
 - `/history` — Browse past conversations
-- `/file` — Add current file to context
-- `/selection` — Add visual selection
-- `/diagnostics` — Add LSP diagnostics
+- `/add-file` — Add current file to context
+- `/add-selection` — Add visual selection
+- `/add-diagnostics` — Add LSP diagnostics
 - `/model` — Switch model
-- `/mode` — Switch template
+- `/template` — Switch template
 - `/online` — Toggle web search mode
-- `/code` — Copy last code block
-- `/clear` — Reset all context
+- `/copy-code` — Copy last code block
+- `/clear-context` — Reset all context
 
 See [doc/slash_commands.md](./doc/slash_commands.md) for the full list.
 

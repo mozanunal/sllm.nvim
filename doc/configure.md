@@ -15,10 +15,7 @@ Or customize any option:
 ```lua
 require('sllm').setup({
   -- Backend settings
-  backend = 'llm',                    -- backend name (currently only 'llm')
-  backend_config = {
-    cmd = 'llm',                      -- path to llm binary
-  },
+  llm_cmd = 'llm',                    -- path to llm binary
 
   -- Model settings
   default_model = 'default',          -- model name or 'default' for llm's default

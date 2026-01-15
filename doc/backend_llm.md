@@ -100,7 +100,7 @@ Or configure in sllm.nvim:
 
 ```lua
 require('sllm').setup({
-  default_model = 'claude-3-5-sonnet',
+  llm_cmd = '/path/to/venv/bin/llm',
 })
 ```
 
@@ -143,9 +143,7 @@ If llm isn't in your PATH, specify the full path:
 
 ```lua
 require('sllm').setup({
-  backend_config = {
-    cmd = '/opt/homebrew/bin/llm',
-  },
+  llm_cmd = '/opt/homebrew/bin/llm',
 })
 ```
 
@@ -155,9 +153,7 @@ If llm is in a virtual environment:
 
 ```lua
 require('sllm').setup({
-  backend_config = {
-    cmd = '/path/to/venv/bin/llm',
-  },
+  llm_cmd = '/opt/homebrew/bin/llm',
 })
 ```
 
@@ -185,7 +181,7 @@ The llm binary isn't in Neovim's PATH. Solutions:
 
 1. Use full path in config:
    ```lua
-   backend_config = { cmd = '/full/path/to/llm' }
+   llm_cmd = '/full/path/to/llm'
    ```
 
 2. Add to shell profile (`~/.zshrc` or `~/.bashrc`):

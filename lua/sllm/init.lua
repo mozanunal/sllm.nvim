@@ -21,11 +21,9 @@
 ---@class PostHook
 ---@field command string                     Shell command to execute.
 
----@class SllmBackendConfig
----@field cmd string?                        Command or path to the LLM CLI (default: "llm").
-
 ---@class SllmConfig
----@field backend_config SllmBackendConfig?  Backend-specific configuration.
+---@field llm_cmd string?                    Command or path to the LLM CLI (default: "llm").
+--- Legacy: previously `backend_config.cmd` (deprecated)
 ---@field default_model string               Default model name or `"default"`.
 ---@field default_mode string?               Default mode/template to use on startup.
 ---@field on_start_new_chat boolean          Whether to reset conversation on start.
@@ -121,10 +119,7 @@ ${files}
 ]]
 
 H.DEFAULT_CONFIG = vim.deepcopy({
-  backend = 'llm',
-  backend_config = {
-    cmd = 'llm',
-  },
+  llm_cmd = 'llm',
   default_model = 'default',
   default_mode = 'sllm_chat', -- Default mode/template to use on startup
   on_start_new_chat = true,
@@ -163,8 +158,7 @@ H.DEFAULT_CONFIG = vim.deepcopy({
 })
 
 -- Internal modules
-H.backend_registry = require('sllm.backend')
-H.backend = nil -- Set during apply_config based on backend selection
+H.backend = require('sllm.backend.llm')
 
 -- Internal state
 H.state = {
@@ -950,21 +944,8 @@ H.apply_config = function(config)
     end
   end
 
-  -- Set up backend
-  local backend_name = Sllm.config.backend or 'llm'
-  H.backend = H.backend_registry.get(backend_name)
-  if not H.backend then
-    error(
-      string.format(
-        '[sllm] Backend "%s" not found. Available: %s',
-        backend_name,
-        table.concat(H.backend_registry.list(), ', ')
-      )
-    )
-  end
-
   -- Set up backend config
-  H.state.backend_config = Sllm.config.backend_config or {}
+  H.state.backend_config = { cmd = Sllm.config.llm_cmd }
 
   H.state.continue = not Sllm.config.on_start_new_chat
   H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model

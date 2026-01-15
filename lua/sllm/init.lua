@@ -244,7 +244,7 @@ H.utils_get_relpath = function(abspath)
   if abspath == nil then return abspath end
   local cwd = vim.uv.cwd()
   if cwd == nil then return abspath end
-  local rel = vim.fs.relpath(abspath, cwd)
+  local rel = vim.fs.relpath(cwd, abspath)
   if rel then
     return rel
   else

@@ -46,5 +46,6 @@ docs:
 		doc/slash_commands.md \
 		doc/modes.md \
 		doc/hooks.md \
-		doc/backend_llm.md
+		doc/backend_llm.md \
+		doc/api.md
 	printf '\n vim:tw=78:ts=2:sw=2:et:ft=help:norl:\n' >> doc/sllm.txt

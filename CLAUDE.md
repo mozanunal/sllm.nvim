@@ -3,7 +3,7 @@
 ## Overview
 
 **sllm.nvim** is a Neovim plugin wrapping Simon Willison's
-[`llm`](https://llm.datasette.io/) CLI. It's a lightweight (~2800 LOC) co-pilot
+[`llm`](https://llm.datasette.io/) CLI. It's a lightweight co-pilot
 for LLM interaction within the editor.
 
 **Key traits**: Explicit context control, template-based modes, on-the-fly
@@ -56,7 +56,7 @@ make ci       # Run all checks (format, lint, test)
 make format   # stylua + deno fmt
 make lint     # luacheck
 make test     # mini.test
-make docs     # Generate doc/sllm.txt
+make docs     # Generate doc/sllm.txt from doc/*.md (pandoc)
 ```
 
 **Code style**: 2-space indent, single quotes, 120 char max, snake_case
@@ -83,31 +83,10 @@ functions, PascalCase modules.
 
 ## Documentation Conventions
 
-Following mini.nvim patterns, documentation is auto-generated from source code.
-
-**Public API (`Sllm.*`)** - Use full doc annotations:
-
-```lua
---- Brief description of the function.
----
---- Extended description if needed.
----
----@param name type Description.
----@return type Description.
-Sllm.function_name = function(name) ... end
-```
-
-**Internal helpers (`H.*`)** - Use regular comments only:
-
-```lua
--- Brief description (no --- prefix)
-H.helper_name = function() ... end
-```
-
-**Key rules**:
-
-- Only `---` comments are picked up by mini.doc
-- `H.*` functions must NOT have `---` annotations (keeps them out of public
-  docs)
-- `@tag`, `@class`, `@param`, `@return` for structured documentation
-- Run `make docs` to regenerate `doc/sllm.txt`
+- Docs are authored in `doc/*.md` and built to `doc/sllm.txt` via `pandoc` (vimdoc target) using a Lua filter.
+- Try to do not use md tables they can not rendered very well in the vimdoc help generated from them
+- Only top-level headings (H1) produce tags; subheadings render as bold text without tags to avoid tag bloat.
+- After edits, run `make docs` (requires `pandoc`) and `:helptags doc`.
+- Optional modeline is appended automatically: `vim:tw=78:ts=2:sw=2:et:ft=help:norl:`.
+- Keep Lua annotations (`---@param`, `---@return`, etc.) for type clarity, but vimdoc generation now comes from Markdown, not mini.doc.
+- Use regular comments (`--`) for `H.*` helpers; reserve `---` for public API docs when needed.

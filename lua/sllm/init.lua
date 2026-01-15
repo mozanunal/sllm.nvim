@@ -61,7 +61,6 @@ H.WINBAR_DEBOUNCE_MS = 50
 
 -- Keymap definitions (name -> {modes, func_name, desc})
 -- func_name is resolved to Sllm[func_name] during apply_config
--- 11 core keymaps
 H.KEYMAP_DEFS = {
   ask = { modes = { 'n', 'v' }, func_name = 'ask_llm', desc = 'Ask LLM' },
   select_model = { modes = { 'n', 'v' }, func_name = 'select_model', desc = 'Select model' },
@@ -249,7 +248,7 @@ H.utils_get_relpath = function(abspath)
   if abspath == nil then return abspath end
   local cwd = vim.uv.cwd()
   if cwd == nil then return abspath end
-  local rel = vim.fs.relpath(cwd, abspath)
+  local rel = vim.fs.relpath(abspath, cwd)
   if rel then
     return rel
   else
@@ -769,7 +768,7 @@ end
 --- Clear the LLM buffer and stop any active loading animation.
 ---@return nil
 H.ui_clean_llm_buffer = function()
-  if H.state.ui.is_loading_active then H.ui_stop_loading_indicator() end
+  if H.state.loading.active then H.ui_stop_loading_indicator() end
   if H.state.ui.llm_buf and H.utils_buf_is_valid(H.state.ui.llm_buf) then
     vim.api.nvim_buf_set_lines(H.state.ui.llm_buf, 0, -1, false, {})
   end
@@ -1223,12 +1222,13 @@ end
 ---@return nil
 function Sllm.add_url_to_ctx()
   H.input({ prompt = Sllm.config.ui.add_url_prompt }, function(user_input)
-    if user_input == '' then
+    local url = user_input and vim.trim(user_input) or nil
+    if not url or url == '' then
       H.notify('[sllm] no URL provided.', vim.log.levels.INFO)
       return
     end
-    H.context_add_fragment(user_input)
-    H.notify('[sllm] URL added to context: ' .. user_input, vim.log.levels.INFO)
+    H.context_add_fragment(url)
+    H.notify('[sllm] URL added to context: ' .. url, vim.log.levels.INFO)
   end)
 end
 
@@ -1294,9 +1294,14 @@ end
 ---@return nil
 function Sllm.add_cmd_out_to_ctx()
   H.input({ prompt = Sllm.config.ui.add_cmd_prompt }, function(cmd_raw)
-    H.notify('[sllm] running command: ' .. cmd_raw, vim.log.levels.INFO)
-    local res_out = H.job_exec_cmd_capture_output(cmd_raw)
-    H.context_add_snip(res_out, 'Command-> ' .. cmd_raw, 'text')
+    local cmd = cmd_raw and vim.trim(cmd_raw) or nil
+    if not cmd or cmd == '' then
+      H.notify('[sllm] command canceled.', vim.log.levels.INFO)
+      return
+    end
+    H.notify('[sllm] running command: ' .. cmd, vim.log.levels.INFO)
+    local res_out = H.job_exec_cmd_capture_output(cmd)
+    H.context_add_snip(res_out, 'Command-> ' .. cmd, 'text')
     H.notify('[sllm] added command output to context.', vim.log.levels.INFO)
   end)
 end

@@ -17,7 +17,7 @@ beneficial it would be to manage and enrich this context seamlessly within
 Neovim.
 
 `sllm.nvim` was born out of the desire to streamline this process. It is a
-lightweight plugin (~2800 lines of Lua) that delegates the heavy lifting of LLM
+lightweight plugin that delegates the heavy lifting of LLM
 interaction to the robust `llm` CLI. For its user interface, it leverages the
 excellent utilities from `mini.nvim`. The core focus of `sllm.nvim` is to make
 context gathering and LLM interaction a native part of the Neovim experience,

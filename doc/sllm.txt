@@ -1,288 +1,1512 @@
 ==============================================================================
 sllm.nvim docs                                                       *sllm-docs*
 
-This folder contains the Markdown sources for the plugin documentation.
+A lightweight Neovim wrapper for Simon Willison's `llm`
+https://llm.datasette.io/ CLI. Chat with LLMs, run agentic workflows, and
+complete code without leaving your editor.
 
-Getting started (defaults)
+Features
 
-1. Install the `llm` CLI (e.g., `brew install llm` or `pip install llm`).
-2. Install an extension, for example `llm install llm-openrouter` or
-   `llm install llm-anthropic`.
-3. Set your API key with `llm keys set <provider>` (or an environment
-   variable).
-4. Install the plugin with your manager (lazy.nvim example):
+- Streaming chat with markdown rendering and syntax highlighting
+- Context management for files, selections, URLs, diagnostics, and command
+  output
+- Agentic mode with Python function tools (read, write, edit, grep, bash)
+- Template/mode system for different workflows (chat, review, agent, complete)
+- History browsing to continue past conversations
+- Slash commands for quick actions
+- Inline completion at cursor position
+- Token usage stats and cost tracking in the winbar
+
+Quick start
+
+1. Install the llm CLI:
+
+>bash
+    brew install llm        # macOS
+    pipx install llm        # or pip install llm
+<
+2. Install a provider extension:
+
+>bash
+    llm install llm-openrouter   # many models via OpenRouter
+    llm install llm-anthropic    # Claude models
+    llm install llm-openai       # OpenAI models
+<
+3. Set your API key:
+
+>bash
+    llm keys set openrouter   # or: export OPENROUTER_KEY=...
+<
+4. Install the plugin (lazy.nvim):
 
 >lua
     {
       'mozanunal/sllm.nvim',
       dependencies = {
-        'echasnovski/mini.notify',
-        'echasnovski/mini.pick',
+        'echasnovski/mini.notify',  -- optional, nicer notifications
+        'echasnovski/mini.pick',    -- optional, better picker UI
       },
       config = function()
         require('sllm').setup()
       end,
     }
 <
-The defaults ship with streaming chat, inline completion, history browsing,
-context capture, and slash commands. Keymaps start with `<leader>s…` (ask,
-model, mode, context, commands, history, toggle, cancel, complete).
+That's it. Press `<leader>ss` to start chatting.
 
-More guides
+Default keymaps
 
-- Configuration and defaults: `doc/configure.md`
-- Slash commands reference: `doc/slash_commands.md`
-- Modes and templates: `doc/modes.md`
-- Hooks (pre/post): `doc/hooks.md`
-- LLM backend setup: `doc/backend_llm.md`
+All keymaps work in both normal and visual mode:
+
+- `<leader>ss` - Ask the LLM (opens prompt)
+- `<leader>sm` - Select model
+- `<leader>sM` - Select mode/template
+- `<leader>sa` - Add file (normal) or selection (visual) to context
+- `<leader>sx` - Open command picker (slash commands)
+- `<leader>sn` - Start new chat
+- `<leader>sc` - Cancel current request
+- `<leader>st` - Toggle LLM buffer
+- `<leader>sh` - Browse chat history
+- `<leader>sy` - Copy last code block
+- `<leader><Tab>` - Complete code at cursor
+
+Winbar status
+
+The LLM buffer displays a winbar showing:
+
+- Loading spinner during requests
+- Current model name (e.g., `claude-3-5-sonnet`)
+- Active mode/template in brackets (e.g., `[sllm_chat]`)
+- Online indicator when web mode is enabled
+- Token usage: input tokens, output tokens, and cost
+
+Shipped templates (modes)
+
+Templates configure the LLM's behavior. Four defaults are installed:
+
+- sllm_chat - General chat with markdown responses
+- sllm_read - Code review with read-only file access
+- sllm_agent - Agentic mode with bash, read, write, edit, grep tools
+- sllm_complete - Inline completion (used by `<leader><Tab>`)
+
+Switch modes with `<leader>sM` or `/mode`.
+
+Documentation index
+
+- configure.md - Full configuration reference and examples
+- slash_commands.md - All slash commands with usage
+- modes.md - Templates and custom mode creation
+- hooks.md - Pre/post hooks for automation
+- backend_llm.md - LLM CLI setup and extensions
+- api.md - Public Lua API reference
+- development_guide.md - Contributing and architecture
 
 ==============================================================================
 Configure sllm.nvim                                             *sllm-configure*
 
-This guide shows the default configuration and how to change keymaps or add
-slash commands.
+This guide covers all configuration options with examples.
 
 Default configuration
 
-Call `setup()` with no arguments to use the defaults:
+Call `setup()` with no arguments to use sensible defaults:
+
+>lua
+    require('sllm').setup()
+<
+Or customize any option:
 
 >lua
     require('sllm').setup({
-      backend_config = { cmd = 'llm' },
-      default_model = 'default',
-      default_mode = 'sllm_chat',
-      on_start_new_chat = true,
-      reset_ctx_each_prompt = true,
-      window_type = 'vertical',
-      scroll_to_bottom = true,
-      pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
-      notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
-      input_func = vim.ui.input,
+      -- Backend settings
+      backend = 'llm',                    -- backend name (currently only 'llm')
+      backend_config = {
+        cmd = 'llm',                      -- path to llm binary
+      },
+
+      -- Model settings
+      default_model = 'default',          -- model name or 'default' for llm's default
+      default_mode = 'sllm_chat',         -- template to use on startup
+
+      -- Behavior
+      on_start_new_chat = true,           -- start fresh on plugin load
+      reset_ctx_each_prompt = true,       -- clear context after each prompt
+      online_enabled = false,             -- enable web search mode
+
+      -- Limits
+      history_max_entries = 1000,         -- max conversations in history picker
+      chain_limit = 100,                  -- max tool calls per interaction
+
+      -- Window
+      window_type = 'vertical',           -- 'vertical', 'horizontal', or 'float'
+      scroll_to_bottom = true,            -- auto-scroll to new content
+
+      -- UI functions (integrate with your preferred plugins)
+      pick_func = vim.ui.select,          -- picker function
+      notify_func = vim.notify,           -- notification function
+      input_func = vim.ui.input,          -- input prompt function
+
+      -- Hooks (see hooks.md)
       pre_hooks = nil,
       post_hooks = nil,
-      history_max_entries = 1000,
-      chain_limit = 100,
-      keymaps = {
-        ask = '<leader>ss',
-        select_model = '<leader>sm',
-        select_mode = '<leader>sM',
-        add_context = '<leader>sa',
-        commands = '<leader>sx',
-        new_chat = '<leader>sn',
-        cancel = '<leader>sc',
-        toggle_buffer = '<leader>st',
-        history = '<leader>sh',
-        copy_code = '<leader>sy',
-        complete = '<leader><Tab>',
-      },
+
+      -- Keymaps (see below)
+      keymaps = { ... },
+
+      -- UI text customization
       ui = {
         show_usage = true,
         ask_llm_prompt = 'Prompt: ',
         add_url_prompt = 'URL: ',
         add_cmd_prompt = 'Command: ',
-        markdown_prompt_header = '> 💬 Prompt:',
-        markdown_response_header = '> 🤖 Response',
+        markdown_prompt_header = '> Prompt:',
+        markdown_response_header = '> Response',
         set_system_prompt = 'System Prompt: ',
       },
     })
 <
-Customizing keymaps
+Keymaps
 
-- Omit `keymaps` to keep the defaults.
-- Set a specific key to a new mapping: `ask = '<leader>a'`.
-- Disable one by setting it to `false` or `nil`.
-- Disable all defaults by setting `keymaps = false`, then define your own
-  mappings that call functions like `require('sllm').ask_llm()` or
-  `require('sllm').commands`.
+Default keymaps all start with `<leader>s`:
 
-Adjusting UI and behavior
+>lua
+    keymaps = {
+      ask = '<leader>ss',           -- open prompt and ask LLM
+      select_model = '<leader>sm',  -- pick a model
+      select_mode = '<leader>sM',   -- pick a template/mode
+      add_context = '<leader>sa',   -- add file or selection to context
+      commands = '<leader>sx',      -- open slash command picker
+      new_chat = '<leader>sn',      -- start new chat
+      cancel = '<leader>sc',        -- cancel running request
+      toggle_buffer = '<leader>st', -- toggle LLM window
+      history = '<leader>sh',       -- browse chat history
+      copy_code = '<leader>sy',     -- copy last code block
+      complete = '<leader><Tab>',   -- inline completion at cursor
+    }
+<
+Customizing keymaps:
 
-- Switch window type with `window_type = 'horizontal'` or `'float'`.
-- Keep context across prompts by setting `reset_ctx_each_prompt = false`.
-- Start with online mode enabled via `online_enabled = true`.
-- Change prompts and headers in the `ui` table (see defaults above).
+>lua
+    -- Change specific keys
+    keymaps = {
+      ask = '<leader>a',
+      cancel = '<C-c>',
+    }
 
-Adding slash commands to your config
+    -- Disable a specific keymap
+    keymaps = {
+      complete = false,  -- or nil
+    }
 
-Slash commands are handled by `Sllm.run_command` and map to the internal
-command registry. Today the registry is fixed inside the plugin. If you need
-custom slash commands, the supported approach is to add your own keymaps that
-call your functions directly (for example,
-`vim.keymap.set({ 'n', 'v' }, '<leader>sx', my_fn)`) or open a PR to expose a
-public extension point.
+    -- Disable all default keymaps
+    keymaps = false
+<
+When disabling defaults, set up your own mappings:
 
-Key hints
+>lua
+    vim.keymap.set({ 'n', 'v' }, '<leader>a', require('sllm').ask_llm)
+    vim.keymap.set('n', '<leader>m', require('sllm').select_model)
+<
+Window types
 
-- `default_model = 'default'` respects the model configured in the `llm` CLI.
-- `history_max_entries` controls how many conversations are fetched in the
-  history picker.
-- `chain_limit` caps how many tool calls the agent can make in a single
-  interaction.
+Control how the LLM buffer appears:
+
+>lua
+    -- Split to the right (default)
+    window_type = 'vertical'
+
+    -- Split below
+    window_type = 'horizontal'
+
+    -- Floating window (centered, 70% of screen)
+    window_type = 'float'
+<
+Context behavior
+
+By default, context (files, snippets, tools) is cleared after each prompt. To
+keep context across turns:
+
+>lua
+    reset_ctx_each_prompt = false
+<
+This is useful when you want to keep discussing the same files without
+re-adding them.
+
+Continuing conversations
+
+By default, each Neovim session starts a new conversation. To continue the
+last conversation from your llm history:
+
+>lua
+    on_start_new_chat = false
+<
+Integration with mini.nvim
+
+If you have mini.pick and mini.notify installed, they're used automatically:
+
+>lua
+    -- Explicit configuration (these are auto-detected)
+    pick_func = require('mini.pick').ui_select,
+    notify_func = require('mini.notify').make_notify(),
+<
+Integration with other pickers
+
+Use telescope, fzf-lua, or any picker that implements `vim.ui.select`:
+
+>lua
+    -- Example with dressing.nvim (wraps vim.ui.select)
+    pick_func = vim.ui.select
+<
+Model options
+
+Set model-specific options at runtime with `/option` or programmatically:
+
+>lua
+    -- In your config, set default options
+    -- (Note: these are passed to llm with -o flag)
+<
+At runtime:
+
+- `/options` shows available options for the current model
+- `/option` sets a key/value pair
+- `/reset-options` clears all options
+
+Chain limit for agent mode
+
+When using `sllm_agent` mode, the LLM can make multiple tool calls. Limit this
+to prevent runaway sessions:
+
+>lua
+    chain_limit = 100   -- max tool calls per interaction (default)
+    chain_limit = 10    -- more conservative
+    chain_limit = 500   -- for complex agentic tasks
+<
+Example configurations
+
+Minimal (all defaults):
+
+>lua
+    require('sllm').setup()
+<
+With custom model and window:
+
+>lua
+    require('sllm').setup({
+      default_model = 'claude-3-5-sonnet',
+      default_mode = 'sllm_agent',
+      window_type = 'float',
+    })
+<
+Power user with persistent context:
+
+>lua
+    require('sllm').setup({
+      default_model = 'claude-3-5-sonnet',
+      reset_ctx_each_prompt = false,
+      on_start_new_chat = false,
+      chain_limit = 200,
+      keymaps = {
+        ask = '<leader>a',
+        commands = '<leader>/',
+      },
+      pre_hooks = {
+        { command = 'git diff --cached', add_to_context = true },
+      },
+    })
+<
+Minimal keymaps (define your own):
+
+>lua
+    require('sllm').setup({
+      keymaps = false,
+    })
+
+    local sllm = require('sllm')
+    vim.keymap.set({ 'n', 'v' }, '<leader>l', sllm.ask_llm)
+    vim.keymap.set('n', '<leader>L', sllm.toggle_llm_buffer)
+<
 
 ==============================================================================
 Slash commands                                                      *sllm-slash*
 
-Type `/` at the prompt to open the command picker, or type `/command` directly
-to run one. Commands are grouped by purpose.
+Slash commands provide quick access to plugin features. Type `/` at the prompt
+to open the command picker, or type `/command` directly to run one.
 
-Chat
+Using slash commands
 
-- `/new` starts a new chat and clears the buffer.
-- `/history` opens the conversation picker (uses `history_max_entries`).
-- `/cancel` stops the current request.
+There are three ways to use slash commands:
 
-Context
+1. Picker: Type `/` alone at the prompt to open the command picker
+2. Direct: Type `/new` or `/model` to run a command immediately
+3. Keymap: Press `<leader>sx` to open the picker from anywhere
 
-- `/file` adds the current buffer path to context.
-- `/url` prompts for a URL and adds its content.
-- `/selection` adds the current visual selection.
-- `/diagnostics` adds the current buffer diagnostics.
-- `/command` runs a shell command and adds its output.
-- `/tool` adds an installed llm tool.
-- `/function` adds a Python function as a tool.
-- `/clear` clears all context (files, snippets, tools, functions).
+Chat commands
 
-Model and modes
+`/new` - Start a new chat session. Clears the buffer and resets the
+conversation. Use this when you want to start fresh.
 
-- `/model` picks a model.
-- `/mode` picks a template/mode.
-- `/online` toggles online/web mode.
-- `/options` shows `llm models --options` for the active model.
-- `/system` sets the system prompt.
-- `/option` sets a model option key/value.
-- `/reset-options` clears all model options.
+`/history` - Browse past conversations. Opens a picker showing your
+conversation history (limited by `history_max_entries`). Select one to load it
+into the buffer and continue from where you left off.
 
-Templates
+`/cancel` - Stop the current request. Use when a response is taking too long
+or you want to interrupt the LLM.
 
-- `/template` shows the active template contents in a buffer.
-- `/edit` opens the active template for editing.
+Context commands
 
-Copy and UI
+Context commands let you add information for the LLM to reference.
 
-- `/code` copies the last code block from the response buffer.
-- `/code-first` copies the first code block.
-- `/response` copies the last response.
-- `/focus` focuses the LLM window.
-- `/toggle` toggles the LLM window.
+`/file` - Add the current buffer's file path to context. The LLM will be able
+to read the file contents. Works with local files and URLs.
+
+`/url` - Prompt for a URL and add it to context. Useful for referencing
+documentation, issues, or web pages.
+
+`/selection` - Add the current visual selection as a code snippet. The snippet
+includes the file path and language for proper formatting.
+
+`/diagnostics` - Add LSP diagnostics from the current buffer. Useful when
+asking the LLM to help fix errors or warnings.
+
+`/command` - Run a shell command and add its output to context. For example,
+add `git diff` output or test results.
+
+`/tool` - Add an installed llm tool to the session. Tools are provided by llm
+extensions (like `llm-shell` or `llm-quickjs`).
+
+`/function` - Add a Python function as a tool. In visual mode, adds the
+selected code. In normal mode, adds the entire buffer. The function becomes
+available for the LLM to call.
+
+`/clear` - Reset all context. Clears files, snippets, tools, and functions.
+Use this to start with a clean slate.
+
+Model commands
+
+`/model` - Open the model picker. Shows all models available through your llm
+installation.
+
+`/mode` - Pick a template/mode. Templates configure the LLM's system prompt
+and available tools.
+
+`/online` - Toggle online/web search mode. When enabled, the LLM can search
+the web for current information.
+
+`/options` - Show available options for the current model. Runs
+`llm models --options` and displays the output.
+
+`/system` - Set or update the system prompt. Enter a custom system prompt that
+overrides the template's default.
+
+`/option` - Set a model option. Prompts for a key and value, which are passed
+to the model with `-o key value`.
+
+`/reset-options` - Clear all model options set during the session.
+
+Template commands
+
+`/template` - Show the active template's contents. Displays the YAML
+configuration in the LLM buffer.
+
+`/edit` - Open the active template file for editing. Opens the YAML file in a
+new buffer so you can customize it.
+
+Copy commands
+
+`/code` - Copy the last code block from the response. Extracts the most recent
+fenced code block and copies to clipboard.
+
+`/code-first` - Copy the first code block from the response. Useful when the
+first block is the one you need.
+
+`/response` - Copy the entire last response. Everything from the response
+header to the end.
+
+UI commands
+
+`/focus` - Focus the LLM window. Moves cursor to the chat buffer, creating the
+window if needed.
+
+`/toggle` - Toggle the LLM window. Opens it if closed, closes if open.
+
+Examples
+
+Quick workflow - ask about code:
+
+1. Select some code in visual mode
+2. Press `<leader>ss` to open prompt
+3. Type: "What does this do?"
+4. The selection is automatically added to context
+
+Add multiple files then ask:
+
+1. Open first file, type `/file` (adds to context)
+2. Open second file, type `/file` (adds to context)
+3. Type your question about both files
+
+Debug with diagnostics:
+
+1. Open a file with errors
+2. `/diagnostics` to add them to context
+3. Ask: "How do I fix these errors?"
+
+Use git context:
+
+1. `/command` then enter `git diff`
+2. Ask: "Write a commit message for these changes"
+
+Agent mode task:
+
+1. `/mode` and select `sllm_agent`
+2. Ask: "Find all TODO comments and list them"
+3. The agent will use grep to search your codebase
+
+Notes
+
+- Context is cleared after each prompt by default (see
+  `reset_ctx_each_prompt`)
+- The `/online` toggle is shown in the winbar when enabled
+- Tools added with `/tool` require the corresponding llm extension installed
+- Functions added with `/function` are Python code executed by llm
 
 ==============================================================================
 Modes and templates                                                 *sllm-modes*
 
-sllm.nvim treats `llm` templates as modes. The plugin ships with four defaults
-that are symlinked into your `llm` template directory on setup:
+sllm.nvim uses llm templates as "modes" that configure the LLM's behavior.
+Templates define system prompts and optionally provide Python functions as
+tools.
 
-- `sllm_chat` for general chat without tools.
-- `sllm_read` for review/read-only operations.
-- `sllm_agent` for tool-assisted, agentic workflows (bash/edit/write).
-- `sllm_complete` for inline completion (`<leader><Tab>`).
+How templates work
+
+Templates are YAML files stored in llm's templates directory. When you select
+a template with `/mode` or `<leader>sM`, it's passed to llm with the `-t`
+flag.
+
+The plugin ships with four default templates that are symlinked to your llm
+templates directory on first setup.
+
+Shipped templates
+
+sllm_chat
+
+General-purpose chat mode. Best for conversations, questions, and getting help
+with code.
+
+System prompt:
+
+>
+    You are a sllm plugin living within neovim.
+    Always answer with markdown.
+    If the offered change is small, return only the changed part or function,
+    not the entire file.
+<
+Use cases:
+
+- Ask questions about code
+- Get explanations
+- Discuss architecture
+- General conversation
+
+sllm_read
+
+Code review mode with read-only file access. The LLM can explore your codebase
+but cannot make changes.
+
+Available tools:
+
+- `list(path)` - List directory contents
+- `read(path, start_line, end_line)` - Read file contents
+- `head(path, lines)` - Quick preview of file's first N lines
+- `grep(pattern, path, file_pattern)` - Search with regex
+- `glob(pattern)` - Find files by pattern
+
+Use cases:
+
+- Code review
+- Understanding unfamiliar code
+- Finding patterns in the codebase
+- Security analysis
+
+sllm_agent
+
+Full agentic mode with read and write access. The LLM can execute commands,
+read files, and make changes.
+
+Available tools:
+
+- `bash(command)` - Execute shell commands
+- `read(path, start_line, end_line)` - Read file contents
+- `head(path, lines)` - Quick preview of file's first N lines
+- `write(path, content)` - Create or overwrite files
+- `edit(path, old_str, new_str)` - Replace exact strings in files
+- `grep(pattern, path, file_pattern)` - Search with regex
+- `glob(pattern)` - Find files by pattern
+- `list(path)` - List directory contents
+- `patch(content)` - Apply unified diff patches
+- `webfetch(url)` - Fetch content from URLs
+
+Use cases:
+
+- Implement features end-to-end
+- Refactor code across files
+- Run tests and fix failures
+- Automate repetitive tasks
+
+Warning: Agent mode can modify files. Review changes before committing.
+
+sllm_complete
+
+Inline completion mode. Used internally by `<leader><Tab>` for code completion
+at the cursor.
+
+System prompt:
+
+>
+    Complete the code at the cursor position.
+    Output ONLY the completion code, no explanations or markdown.
+    Match the existing code style and indentation.
+<
+This mode outputs raw code without markdown formatting, suitable for direct
+insertion into your buffer.
 
 Switching modes
 
-- Use the mode picker: `<leader>sM` or `/mode`.
-- The current mode is shown in the winbar alongside the model.
+During a session:
 
-Customizing templates
+- Press `<leader>sM` or type `/mode` at the prompt
+- Select from the picker
 
-Templates are standard `llm` YAML files. Common tasks:
+At startup:
 
-- Edit an existing template: `llm templates edit sllm_agent`.
-- Duplicate and modify: copy a shipped template to a new name under
-  `~/.config/io.datasette.llm/templates/` and edit it.
-- View contents: `llm templates show sllm_agent`.
+>lua
+    require('sllm').setup({
+      default_mode = 'sllm_agent',  -- or any template name
+    })
+<
+Temporarily clear mode:
 
-Custom templates appear in the picker automatically and can be set as
-`default_mode` in your config.
+>lua
+    require('sllm').setup({
+      default_mode = nil,  -- no template, uses model's default behavior
+    })
+<
+Creating custom templates
+
+Step 1: Create the template file
+
+Templates live in llm's templates directory. Find it with:
+
+>bash
+    llm templates path
+<
+Typically: `~/.config/io.datasette.llm/templates/`
+
+Create a new YAML file:
+
+>yaml
+    # ~/.config/io.datasette.llm/templates/my_template.yaml
+    system: |
+      You are a helpful coding assistant.
+      Always explain your reasoning.
+      Use the project's existing code style.
+<
+Step 2: Add tools (optional)
+
+Add Python functions that the LLM can call:
+
+>yaml
+    system: |
+      You are a code reviewer. Use your tools to analyze code.
+    functions: |
+      import subprocess
+      from pathlib import Path
+
+      def run_tests(test_path: str = ".") -> str:
+        """Run tests and return results.
+
+        Args:
+            test_path: Path to test file or directory
+        """
+        result = subprocess.run(
+          ["pytest", test_path, "-v"],
+          capture_output=True,
+          text=True,
+          cwd=Path.cwd()
+        )
+        return result.stdout + result.stderr
+<
+Step 3: Use your template
+
+Your template appears in the mode picker immediately:
+
+>
+    <leader>sM -> select "my_template"
+<
+Or set as default:
+
+>lua
+    require('sllm').setup({
+      default_mode = 'my_template',
+    })
+<
+Template examples
+
+Commit message writer
+
+>yaml
+    # commit_writer.yaml
+    system: |
+      You are a git commit message writer.
+      Given a diff, write a conventional commit message.
+      Format: type(scope): description
+
+      Types: feat, fix, docs, style, refactor, test, chore
+      Keep the first line under 72 characters.
+      Add a body if the change is complex.
+<
+Documentation generator
+
+>yaml
+    # doc_generator.yaml
+    system: |
+      You are a documentation writer.
+      Generate clear, concise documentation.
+      Use the project's existing documentation style.
+      Include examples where helpful.
+    functions: |
+      from pathlib import Path
+
+      def read_file(path: str) -> str:
+        """Read a file's contents."""
+        return Path(path).read_text()
+
+      def list_files(pattern: str = "**/*.lua") -> str:
+        """List files matching a pattern."""
+        files = Path.cwd().glob(pattern)
+        return "\n".join(str(f) for f in files)
+<
+Test writer
+
+>yaml
+    # test_writer.yaml
+    system: |
+      You are a test writer.
+      Write comprehensive tests for the given code.
+      Follow the project's existing test patterns.
+      Include edge cases and error conditions.
+    functions: |
+      import subprocess
+      from pathlib import Path
+
+      def read_file(path: str) -> str:
+        """Read a file to understand what to test."""
+        return Path(path).read_text()
+
+      def run_tests() -> str:
+        """Run existing tests to see patterns."""
+        result = subprocess.run(
+          ["make", "test"],
+          capture_output=True,
+          text=True,
+          cwd=Path.cwd()
+        )
+        return result.stdout + result.stderr
+<
+Managing templates
+
+List templates:
+
+>bash
+    llm templates list
+<
+Show template content:
+
+>bash
+    llm templates show sllm_agent
+<
+Edit template:
+
+>bash
+    llm templates edit sllm_agent
+<
+Or use `/edit` in sllm.nvim when the template is active.
+
+Tips
+
+- Start with `sllm_chat` for simple questions
+- Use `sllm_read` when you want the LLM to explore without changing anything
+- Use `sllm_agent` for tasks that require file changes
+- Keep custom templates focused on specific tasks
+- Test functions locally before adding them to templates
+- Use docstrings in functions - the LLM reads them to understand the tool
 
 ==============================================================================
 Hooks                                                               *sllm-hooks*
 
-Hooks let you run shell commands before or after an LLM request.
+Hooks let you run shell commands before or after LLM requests. Use them to add
+context automatically, log interactions, or trigger notifications.
 
 Pre-hooks
 
-- Run before the LLM starts.
-- Optional `add_to_context` flag captures stdout/stderr into the context.
-
-Example:
+Pre-hooks run before the LLM request starts. They can optionally capture their
+output and add it to the context.
 
 >lua
     require('sllm').setup({
       pre_hooks = {
         { command = 'git diff --cached', add_to_context = true },
-        { command = 'echo Starting request', add_to_context = false },
       },
     })
 <
-Notes:
+Options:
 
-- Output is stored as a snippet with the command name.
-- Snippets are cleared after each prompt if `reset_ctx_each_prompt = true`.
-- Hooks run synchronously in order.
+- `command` (string, required) - Shell command to execute
+- `add_to_context` (boolean, optional) - If true, captures stdout and adds it
+  as a snippet. Default: false
 
 Post-hooks
 
-- Run after the response finishes (success or failure).
-- Output is not captured; use for logging or notifications.
-
-Example:
+Post-hooks run after the LLM response finishes (success or failure). Output is
+not captured - use them for side effects.
 
 >lua
     require('sllm').setup({
       post_hooks = {
-        { command = 'date >> ~/.sllm_history.log' },
-        { command = "osascript -e 'display notification \"LLM request completed\" with title \"SLLM\"'" },
+        { command = 'date >> ~/.sllm_log' },
       },
     })
 <
-Tips:
+Options:
 
-- Use `%` in commands to expand to the current file path.
-- Keep commands fast to avoid blocking the response finish.
+- `command` (string, required) - Shell command to execute
+
+Command expansion
+
+Commands support vim's `%` expansion for the current file path:
+
+>lua
+    pre_hooks = {
+      { command = 'head -50 %', add_to_context = true },
+    }
+<
+This adds the first 50 lines of the current file to context.
+
+Execution details
+
+- Hooks run through `bash -c`
+- Pre-hooks run synchronously in order before the LLM request
+- Post-hooks run synchronously in order after the response
+- Non-zero exit codes don't abort the request
+- Keep commands fast to avoid blocking
+
+Example: Git context
+
+Add staged changes to every prompt:
+
+>lua
+    require('sllm').setup({
+      pre_hooks = {
+        { command = 'git diff --cached', add_to_context = true },
+      },
+    })
+<
+Now when you ask "Write a commit message", the LLM sees your staged diff.
+
+Example: Project context
+
+Add project structure on each prompt:
+
+>lua
+    require('sllm').setup({
+      pre_hooks = {
+        { command = 'tree -L 2 --noreport', add_to_context = true },
+      },
+    })
+<
+Example: Logging
+
+Log all prompts to a file:
+
+>lua
+    require('sllm').setup({
+      pre_hooks = {
+        { command = 'echo "--- $(date) ---" >> ~/.sllm_prompts.log' },
+      },
+      post_hooks = {
+        { command = 'echo "Response received" >> ~/.sllm_prompts.log' },
+      },
+    })
+<
+Example: Notifications
+
+Show a desktop notification when the response completes:
+
+>lua
+    -- macOS
+    require('sllm').setup({
+      post_hooks = {
+        {
+          command = [[osascript -e 'display notification "LLM response ready" with title "sllm.nvim"']],
+        },
+      },
+    })
+
+    -- Linux (notify-send)
+    require('sllm').setup({
+      post_hooks = {
+        { command = 'notify-send "sllm.nvim" "LLM response ready"' },
+      },
+    })
+<
+Example: Test results
+
+Add test output to help debug failures:
+
+>lua
+    require('sllm').setup({
+      pre_hooks = {
+        { command = 'make test 2>&1 | tail -50', add_to_context = true },
+      },
+    })
+<
+Now ask "Why are these tests failing?" and the LLM sees recent test output.
+
+Example: LSP diagnostics (alternative)
+
+While `/diagnostics` adds buffer diagnostics, you can use hooks for
+project-wide issues:
+
+>lua
+    require('sllm').setup({
+      pre_hooks = {
+        { command = 'npx tsc --noEmit 2>&1 | head -30', add_to_context = true },
+      },
+    })
+<
+Combining with context reset
+
+By default, context is cleared after each prompt. Snippets added by pre-hooks
+are also cleared.
+
+To keep hook output across turns:
+
+>lua
+    require('sllm').setup({
+      reset_ctx_each_prompt = false,
+      pre_hooks = {
+        { command = 'git status --short', add_to_context = true },
+      },
+    })
+<
+Now the git status stays in context for follow-up questions.
+
+Conditional hooks
+
+For conditional logic, use shell conditionals in the command:
+
+>lua
+    pre_hooks = {
+      {
+        command = '[ -f package.json ] && cat package.json | head -20',
+        add_to_context = true,
+      },
+    }
+<
+This only adds package.json if it exists.
+
+Performance tips
+
+- Keep hooks fast (under 1 second ideally)
+- Use `head` or `tail` to limit output size
+- Pre-hooks block the prompt, so avoid slow commands
+- Post-hooks block showing "response complete", keep them quick
+- For expensive operations, consider using `/command` manually instead
 
 ==============================================================================
 LLM backend setup                                                 *sllm-backend*
 
-sllm.nvim wraps the `llm` CLI. Set up the backend first, then use the plugin.
+sllm.nvim wraps Simon Willison's `llm` CLI. This guide covers installation,
+provider setup, and troubleshooting.
 
-Install llm
+Installing llm
 
-- Homebrew: `brew install llm`
-- pipx: `pipx install llm`
-- pip: `pip install llm`
+macOS (Homebrew):
 
-Verify with `llm --help`.
+>bash
+    brew install llm
+<
+pipx (recommended for Python):
 
-Install extensions
+>bash
+    pipx install llm
+<
+pip:
 
-Install at least one provider plugin:
+>bash
+    pip install llm
+<
+Verify the installation:
 
-- `llm install llm-openrouter` for many models via OpenRouter.
-- `llm install llm-anthropic` for Claude models.
-- `llm install llm-openai` for OpenAI models.
-- `llm install llm-gpt4all` for local models.
+>bash
+    llm --version
+    llm --help
+<
+Installing provider extensions
 
-Browse more at https://llm.datasette.io/en/stable/plugins/directory.html.
+The llm CLI needs at least one provider extension. Install based on which
+models you want to use:
 
-Set API keys
+OpenRouter (many models, one API key):
 
-Use `llm keys set <provider>` (e.g., `llm keys set openrouter`) or environment
-variables like `OPENAI_API_KEY`.
+>bash
+    llm install llm-openrouter
+    llm keys set openrouter
+    # Paste your OpenRouter API key
+<
+Anthropic (Claude models):
 
-Useful tool extensions
+>bash
+    llm install llm-anthropic
+    llm keys set anthropic
+    # Paste your Anthropic API key
+<
+OpenAI:
 
-- `llm install llm-quickjs` for JavaScript tools.
-- `llm install llm-shell` for shell execution (paired with agent mode).
-- `llm install llm-curl` for HTTP fetch helpers.
+>bash
+    llm install llm-openai
+    llm keys set openai
+    # Paste your OpenAI API key
+<
+Google (Gemini):
 
-Check each plugin's README for permissions and configuration.
+>bash
+    llm install llm-gemini
+    llm keys set gemini
+    # Paste your Google AI API key
+<
+Local models (Ollama):
 
-Configure sllm.nvim
+>bash
+    llm install llm-ollama
+    # No API key needed, just have Ollama running
+<
+Local models (GPT4All):
 
-In `setup()`, point to your llm binary if needed:
-`backend_config = { cmd = '/full/path/to/llm' }`. The default uses `llm` from
-`PATH`.
+>bash
+    llm install llm-gpt4all
+    # No API key needed
+<
+Browse more extensions:
+https://llm.datasette.io/en/stable/plugins/directory.html
 
-If the llm templates directory is non-standard, ensure your `llm` install is
-reachable so the plugin can symlink its templates on setup.
+Setting the default model
+
+After installing extensions, set your preferred default:
+
+>bash
+    # List available models
+    llm models
+
+    # Set default
+    llm models default claude-3-5-sonnet
+<
+Or configure in sllm.nvim:
+
+>lua
+    require('sllm').setup({
+      default_model = 'claude-3-5-sonnet',
+    })
+<
+Tool extensions
+
+For agent mode (`sllm_agent`), the built-in Python functions handle most
+tasks. You can also install llm tool extensions:
+
+Shell execution:
+
+>bash
+    llm install llm-shell
+<
+JavaScript/QuickJS:
+
+>bash
+    llm install llm-quickjs
+<
+HTTP requests:
+
+>bash
+    llm install llm-curl
+<
+Web search:
+
+>bash
+    llm install llm-duckduckgo
+<
+Add tools to your session with `/tool` or the `tools` context.
+
+Configuring sllm.nvim
+
+Custom llm path:
+
+If llm isn't in your PATH, specify the full path:
+
+>lua
+    require('sllm').setup({
+      backend_config = {
+        cmd = '/opt/homebrew/bin/llm',
+      },
+    })
+<
+Virtual environment:
+
+If llm is in a virtual environment:
+
+>lua
+    require('sllm').setup({
+      backend_config = {
+        cmd = '/path/to/venv/bin/llm',
+      },
+    })
+<
+Verifying setup
+
+Before using sllm.nvim, verify llm works:
+
+>bash
+    # Check models are available
+    llm models
+
+    # Test a simple prompt
+    llm "Hello, world"
+
+    # Check templates directory
+    llm templates path
+    llm templates list
+<
+Troubleshooting
+
+"llm: command not found"
+
+The llm binary isn't in Neovim's PATH. Solutions:
+
+1. Use full path in config:
+
+   >lua
+       backend_config = { cmd = '/full/path/to/llm' }
+<
+
+2. Add to shell profile (`~/.zshrc` or `~/.bashrc`):
+
+   >bash
+       export PATH="$PATH:/path/to/llm/bin"
+<
+
+3. For pipx installations:
+
+   >bash
+       pipx ensurepath
+<
+
+"No models found"
+
+No provider extensions installed:
+
+>bash
+    llm models  # Should show available models
+
+    # If empty, install an extension:
+    llm install llm-openrouter
+    llm keys set openrouter
+<
+"API key not set"
+
+The provider needs an API key:
+
+>bash
+    # Check which key is needed
+    llm keys
+
+    # Set the key
+    llm keys set <provider>
+<
+Or use environment variables:
+
+>bash
+    export OPENAI_API_KEY="sk-..."
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    export OPENROUTER_KEY="sk-or-..."
+<
+Templates not appearing
+
+The plugin symlinks templates on setup. Check:
+
+>bash
+    # Verify templates directory exists and is writable
+    llm templates path
+    ls -la "$(llm templates path)"
+
+    # Should see sllm_* templates
+    llm templates list | grep sllm
+<
+If templates are missing, they'll be created on next `setup()` call.
+
+Slow responses
+
+1. Check your internet connection
+2. Try a different model (some are faster than others)
+3. For local models, ensure sufficient RAM/GPU
+
+"Error: Model not found"
+
+The specified model isn't available:
+
+>bash
+    # List available models
+    llm models
+
+    # Check model name spelling
+    llm "test" -m exact-model-name
+<
+Agent tools not working
+
+For `sllm_agent` mode:
+
+1. Check Python is available: `python3 --version`
+2. Check required tools: `rg --version` (for grep fallback)
+3. Check file permissions in your project
+
+History not loading
+
+>bash
+    # Check logs database exists
+    llm logs path
+
+    # Verify logs are being stored
+    llm logs list -n 5
+<
+Environment variables
+
+Useful environment variables for llm:
+
+>bash
+    # API keys
+    export OPENAI_API_KEY="..."
+    export ANTHROPIC_API_KEY="..."
+    export OPENROUTER_KEY="..."
+
+    # Disable telemetry (if using OpenAI)
+    export OPENAI_LOG=debug
+
+    # Custom config directory
+    export LLM_USER_PATH="~/.config/llm"
+<
+Health check
+
+Run Neovim's health check:
+
+>vim
+    :checkhealth sllm
+<
+This verifies:
+
+- llm binary is found
+- At least one model is available
+- Templates directory is accessible
+
+==============================================================================
+API reference                                                         *sllm-api*
+
+This reference documents the public Lua API for sllm.nvim.
+
+Setup
+
+Sllm.setup(config)
+
+Initialize the plugin with optional configuration.
+
+>lua
+    require('sllm').setup()        -- use defaults
+    require('sllm').setup({...})   -- with custom config
+<
+See `configure.md` for all options.
+
+Chat functions
+
+Sllm.ask_llm()
+
+Open the prompt and send a query to the LLM. In visual mode, the selection is
+automatically added to context.
+
+>lua
+    require('sllm').ask_llm()
+<
+Sllm.new_chat()
+
+Start a new chat session. Clears the buffer, resets conversation state, and
+resets token usage stats.
+
+>lua
+    require('sllm').new_chat()
+<
+Sllm.cancel()
+
+Cancel the currently running LLM request.
+
+>lua
+    require('sllm').cancel()
+<
+Sllm.browse_history()
+
+Open the history picker to browse and continue past conversations.
+
+>lua
+    require('sllm').browse_history()
+<
+Context functions
+
+Sllm.add_context()
+
+Smart context add: adds file in normal mode, selection in visual mode.
+
+>lua
+    require('sllm').add_context()
+<
+Sllm.add_file_to_ctx()
+
+Add the current buffer's file path to context.
+
+>lua
+    require('sllm').add_file_to_ctx()
+<
+Sllm.add_sel_to_ctx()
+
+Add the current visual selection as a code snippet.
+
+>lua
+    require('sllm').add_sel_to_ctx()
+<
+Sllm.add_url_to_ctx()
+
+Prompt for a URL and add it to context.
+
+>lua
+    require('sllm').add_url_to_ctx()
+<
+Sllm.add_diag_to_ctx()
+
+Add LSP diagnostics from the current buffer to context.
+
+>lua
+    require('sllm').add_diag_to_ctx()
+<
+Sllm.add_cmd_out_to_ctx()
+
+Prompt for a shell command, run it, and add the output to context.
+
+>lua
+    require('sllm').add_cmd_out_to_ctx()
+<
+Sllm.add_tool_to_ctx()
+
+Open picker to select an llm tool and add it to the session.
+
+>lua
+    require('sllm').add_tool_to_ctx()
+<
+Sllm.add_func_to_ctx()
+
+Add a Python function to context. Uses visual selection if available,
+otherwise uses the entire buffer.
+
+>lua
+    require('sllm').add_func_to_ctx()
+<
+Sllm.reset_context()
+
+Clear all context (files, snippets, tools, functions).
+
+>lua
+    require('sllm').reset_context()
+<
+Model and mode functions
+
+Sllm.select_model()
+
+Open picker to select an LLM model.
+
+>lua
+    require('sllm').select_model()
+<
+Sllm.select_mode()
+
+Open picker to select a template/mode. Alias for `select_template()`.
+
+>lua
+    require('sllm').select_mode()
+<
+Sllm.select_template()
+
+Open picker to select a template.
+
+>lua
+    require('sllm').select_template()
+<
+Sllm.show_template()
+
+Display the active template's contents in the LLM buffer.
+
+>lua
+    require('sllm').show_template()
+<
+Sllm.edit_template()
+
+Open the active template file for editing in Neovim.
+
+>lua
+    require('sllm').edit_template()
+<
+Sllm.show_model_options()
+
+Show available options for the current model (runs `llm models --options`).
+
+>lua
+    require('sllm').show_model_options()
+<
+Sllm.set_system_prompt()
+
+Prompt to set or update the system prompt.
+
+>lua
+    require('sllm').set_system_prompt()
+<
+Sllm.set_model_option()
+
+Prompt to set a model option (key/value pair).
+
+>lua
+    require('sllm').set_model_option()
+<
+Sllm.reset_model_options()
+
+Clear all model options set during the session.
+
+>lua
+    require('sllm').reset_model_options()
+<
+Sllm.toggle_online()
+
+Toggle online/web search mode.
+
+>lua
+    require('sllm').toggle_online()
+<
+Sllm.is_online_enabled()
+
+Return whether online mode is currently enabled.
+
+>lua
+    local enabled = require('sllm').is_online_enabled()
+<
+UI functions
+
+Sllm.toggle_llm_buffer()
+
+Toggle visibility of the LLM window.
+
+>lua
+    require('sllm').toggle_llm_buffer()
+<
+Sllm.focus_llm_buffer()
+
+Focus the LLM window, creating it if needed.
+
+>lua
+    require('sllm').focus_llm_buffer()
+<
+Copy functions
+
+Sllm.copy_last_code_block()
+
+Copy the last code block from the response to clipboard.
+
+>lua
+    require('sllm').copy_last_code_block()
+<
+Sllm.copy_first_code_block()
+
+Copy the first code block from the response to clipboard.
+
+>lua
+    require('sllm').copy_first_code_block()
+<
+Sllm.copy_last_response()
+
+Copy the entire last response to clipboard.
+
+>lua
+    require('sllm').copy_last_response()
+<
+Completion
+
+Sllm.complete_code()
+
+Trigger inline code completion at the cursor position.
+
+>lua
+    require('sllm').complete_code()
+<
+Command runner
+
+Sllm.run_command(cmd)
+
+Execute a slash command by name, or open the picker if no command given.
+
+>lua
+    require('sllm').run_command()       -- open picker
+    require('sllm').run_command('new')  -- execute /new
+    require('sllm').run_command('model')-- execute /model
+<
+Configuration access
+
+Sllm.config
+
+The current configuration table, after merging with defaults.
+
+>lua
+    local config = require('sllm').config
+    print(config.default_model)
+<
+Example: Custom keymaps
+
+>lua
+    local sllm = require('sllm')
+
+    -- Disable default keymaps
+    sllm.setup({ keymaps = false })
+
+    -- Set up custom keymaps
+    vim.keymap.set({ 'n', 'v' }, '<leader>a', sllm.ask_llm, { desc = 'Ask LLM' })
+    vim.keymap.set('n', '<leader>A', sllm.new_chat, { desc = 'New chat' })
+    vim.keymap.set('n', '<leader>m', sllm.select_model, { desc = 'Pick model' })
+    vim.keymap.set({ 'n', 'v' }, '<leader>c', sllm.add_context, { desc = 'Add context' })
+    vim.keymap.set('n', '<leader>/', sllm.run_command, { desc = 'Commands' })
+    vim.keymap.set('n', '<leader>t', sllm.toggle_llm_buffer, { desc = 'Toggle LLM' })
+    vim.keymap.set('n', '<leader>h', sllm.browse_history, { desc = 'History' })
+    vim.keymap.set('n', '<leader>y', sllm.copy_last_code_block, { desc = 'Copy code' })
+    vim.keymap.set('i', '<C-Space>', sllm.complete_code, { desc = 'Complete' })
+<
+Example: Programmatic usage
+
+>lua
+    local sllm = require('sllm')
+
+    -- Add files programmatically before asking
+    sllm.add_file_to_ctx()  -- adds current buffer
+
+    -- Switch to agent mode
+    -- (This requires the mode picker, so call select_mode() or set default_mode)
+
+    -- Check if a request is running
+    -- (Internal state, not directly exposed, but cancel() is safe to call)
+    sllm.cancel()  -- no-op if nothing running
+<
 
  vim:tw=78:ts=2:sw=2:et:ft=help:norl:

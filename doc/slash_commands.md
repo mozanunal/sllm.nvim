@@ -1,15 +1,17 @@
 # Slash commands {#sllm-slash}
 
-Slash commands provide quick access to plugin features. Type `/` at the prompt
-to open the command picker, or type `/command` directly to run one.
+Slash commands provide quick access to plugin features. Press `<leader>sx` to
+open the command picker (fuzzy action picker), or type `/command` directly to
+run one.
 
 ## Using slash commands
 
-There are three ways to use slash commands:
+There are two ways to use slash commands:
 
-1. **Picker**: Type `/` alone at the prompt to open the command picker
+1. **Picker**: Press `<leader>sx` to open the command picker (fuzzy action
+   picker)
 2. **Direct**: Type `/new` or `/model` to run a command immediately
-3. **Keymap**: Press `<leader>sx` to open the picker from anywhere
+
 
 ## Chat commands
 

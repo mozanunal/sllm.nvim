@@ -65,7 +65,7 @@ Templates configure the LLM's behavior. Defaults are described in `doc/modes.md`
 
 ## Slash commands
 
-Type `/` at the prompt to open the command picker, or see `doc/slash_commands.md` for the full list (e.g., `/new`, `/model`, `/add-file`).
+Press `<leader>sx` to open the slash command picker, or see `doc/slash_commands.md` for the full list (e.g., `/new`, `/model`, `/add-file`).
 
 ## Why sllm.nvim
 

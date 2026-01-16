@@ -67,6 +67,12 @@ Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See
 Templates configure system prompts and tools. The defaults are documented in
 `doc/modes.md`; switch with `<leader>sM` or `/template`.
 
+## Slash commands
+
+Open the command picker with `<leader>sx` (fuzzy action picker), or type
+`/command` directly (e.g., `/new`, `/model`, `/add-file`). See
+`doc/slash_commands.md` for the full list.
+
 ## Documentation index
 
 - **configure.md** - Full configuration reference and examples

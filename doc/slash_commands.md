@@ -12,7 +12,6 @@ There are two ways to use slash commands:
    picker)
 2. **Direct**: Type `/new` or `/model` to run a command immediately
 
-
 ## Chat commands
 
 **`/new`** - Start a new chat session. Clears the buffer and resets the

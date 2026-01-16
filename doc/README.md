@@ -60,25 +60,25 @@ That's it. Press `<leader>ss` to start chatting.
 ## Keymaps
 
 Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See
-`doc/configure.md` for the full list and how to override.
+[doc/configure.md](./configure.md) for the full list and how to override.
 
 ## Templates (modes)
 
 Templates configure system prompts and tools. The defaults are documented in
-`doc/modes.md`; switch with `<leader>sM` or `/template`.
+[doc/modes.md](./modes.md); switch with `<leader>sM` or `/template`.
 
 ## Slash commands
 
 Open the command picker with `<leader>sx` (fuzzy action picker), or type
 `/command` directly (e.g., `/new`, `/model`, `/add-file`). See
-`doc/slash_commands.md` for the full list.
+[doc/slash_commands.md](./slash_commands.md) for the full list.
 
 ## Documentation index
 
-- **configure.md** - Full configuration reference and examples
-- **slash_commands.md** - All slash commands with usage
-- **modes.md** - Templates and custom mode creation
-- **hooks.md** - Pre/post hooks for automation
-- **backend_llm.md** - LLM CLI setup and extensions
-- **api.md** - Public Lua API reference
-- **development_guide.md** - Contributing and architecture
+- [configure.md](./configure.md) - Full configuration reference and examples
+- [slash_commands.md](./slash_commands.md) - All slash commands with usage
+- [modes.md](./modes.md) - Templates and custom mode creation
+- [hooks.md](./hooks.md) - Pre/post hooks for automation
+- [backend_llm.md](./backend_llm.md) - LLM CLI setup and extensions
+- [api.md](./api.md) - Public Lua API reference
+- [development_guide.md](./development_guide.md) - Contributing and architecture

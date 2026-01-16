@@ -57,15 +57,15 @@ Press `<leader>ss` to start chatting.
 
 ## Keymaps
 
-Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See `doc/configure.md` for the full list and how to override.
+Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See [doc/configure.md](./doc/configure.md) for the full list and how to override.
 
 ## Modes (templates)
 
-Templates configure the LLM's behavior. Defaults are described in `doc/modes.md`; switch with `<leader>sM` or `/template`.
+Templates configure the LLM's behavior. Defaults are described in [doc/modes.md](./doc/modes.md); switch with `<leader>sM` or `/template`.
 
 ## Slash commands
 
-Press `<leader>sx` to open the slash command picker, or see `doc/slash_commands.md` for the full list (e.g., `/new`, `/model`, `/add-file`).
+Press `<leader>sx` to open the slash command picker, or see [doc/slash_commands.md](./doc/slash_commands.md) for the full list (e.g., `/new`, `/model`, `/add-file`).
 
 ## Why sllm.nvim
 

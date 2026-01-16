@@ -26,9 +26,8 @@ Use this guide when working on sllm.nvim itself.
 
 ## Documentation flow
 
-- Author docs in `doc/*.md`; do not edit `doc/sllm.txt` directly.
-- Run `make docs` (requires `pandoc`) to rebuild vimdoc.
-- Cross-link guides from `doc/README.md` and keep headings concise.
+- Author docs in doc/*.md; do not edit `doc/sllm.txt` directly.
+- Cross-link guides from [doc/README.md](./README.md) and keep headings concise.
 
 ## Review checklist
 

@@ -10,7 +10,7 @@ Features
 - Streaming chat with markdown rendering and syntax highlighting
 - Context management for files, selections, URLs, diagnostics, and command
   output
-- Agentic mode with Python function tools (read, write, edit, grep, bash)
+- Agentic mode with Python function tools (bash, read, write, edit, grep)
 - Template/mode system for different workflows (chat, review, agent, complete)
 - History browsing to continue past conversations
 - Slash commands for quick actions
@@ -53,52 +53,31 @@ Quick start
 <
 That's it. Press `<leader>ss` to start chatting.
 
-Default keymaps
+Keymaps
 
-All keymaps work in both normal and visual mode:
+Defaults use the `<leader>s` prefix (`<leader>ss` to ask). See
+doc/configure.md ./configure.md for the full list and how to override.
 
-- `<leader>ss` - Ask the LLM (opens prompt)
-- `<leader>sm` - Select model
-- `<leader>sM` - Select mode/template
-- `<leader>sa` - Add file (normal) or selection (visual) to context
-- `<leader>sx` - Open command picker (slash commands)
-- `<leader>sn` - Start new chat
-- `<leader>sc` - Cancel current request
-- `<leader>st` - Toggle LLM buffer
-- `<leader>sh` - Browse chat history
-- `<leader>sy` - Copy last code block
-- `<leader><Tab>` - Complete code at cursor
+Templates (modes)
 
-Winbar status
+Templates configure system prompts and tools. The defaults are documented in
+doc/modes.md ./modes.md; switch with `<leader>sM` or `/template`.
 
-The LLM buffer displays a winbar showing:
+Slash commands
 
-- Loading spinner during requests
-- Current model name (e.g., `claude-3-5-sonnet`)
-- Active mode/template in brackets (e.g., `[sllm_chat]`)
-- Online indicator when web mode is enabled
-- Token usage: input tokens, output tokens, and cost
-
-Shipped templates (modes)
-
-Templates configure the LLM's behavior. Four defaults are installed:
-
-- sllm_chat - General chat with markdown responses
-- sllm_read - Code review with read-only file access
-- sllm_agent - Agentic mode with bash, read, write, edit, grep tools
-- sllm_complete - Inline completion (used by `<leader><Tab>`)
-
-Switch modes with `<leader>sM` or `/template`.
+Open the command picker with `<leader>sx` (fuzzy action picker), or type
+`/command` directly (e.g., `/new`, `/model`, `/add-file`). See
+doc/slash_commands.md ./slash_commands.md for the full list.
 
 Documentation index
 
-- configure.md - Full configuration reference and examples
-- slash_commands.md - All slash commands with usage
-- modes.md - Templates and custom mode creation
-- hooks.md - Pre/post hooks for automation
-- backend_llm.md - LLM CLI setup and extensions
-- api.md - Public Lua API reference
-- development_guide.md - Contributing and architecture
+- configure.md ./configure.md - Full configuration reference and examples
+- slash_commands.md ./slash_commands.md - All slash commands with usage
+- modes.md ./modes.md - Templates and custom mode creation
+- hooks.md ./hooks.md - Pre/post hooks for automation
+- backend_llm.md ./backend_llm.md - LLM CLI setup and extensions
+- api.md ./api.md - Public Lua API reference
+- development_guide.md ./development_guide.md - Contributing and architecture
 
 ==============================================================================
 Configure sllm.nvim                                             *sllm-configure*
@@ -324,16 +303,16 @@ Minimal keymaps (define your own):
 ==============================================================================
 Slash commands                                                      *sllm-slash*
 
-Slash commands provide quick access to plugin features. Type `/` at the prompt
-to open the command picker, or type `/command` directly to run one.
+Slash commands provide quick access to plugin features. Press `<leader>sx` to
+open the command picker (fuzzy action picker), or type `/command` directly to
+run one.
 
 Using slash commands
 
-There are three ways to use slash commands:
+There are two ways to use slash commands:
 
-1. Picker: Type `/` alone at the prompt to open the command picker
+1. Picker: Press `<leader>sx` to open the command picker (fuzzy action picker)
 2. Direct: Type `/new` or `/model` to run a command immediately
-3. Keymap: Press `<leader>sx` to open the picker from anywhere
 
 Chat commands
 
@@ -554,6 +533,8 @@ Use cases:
 - Automate repetitive tasks
 
 Warning: Agent mode can modify files. Review changes before committing.
+
+Note: Default mode is `sllm_chat`; switch with `<leader>sM` or `/template`.
 
 sllm_complete
 
@@ -1021,7 +1002,7 @@ Or configure in sllm.nvim:
 Tool extensions
 
 For agent mode (`sllm_agent`), the built-in Python functions handle most
-tasks. You can also install llm tool extensions:
+tasks. You can also install llm tool extensions if you prefer external ones:
 
 Shell execution:
 

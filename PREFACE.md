@@ -17,7 +17,7 @@ beneficial it would be to manage and enrich this context seamlessly within
 Neovim.
 
 `sllm.nvim` was born out of the desire to streamline this process. It is a
-simple plugin (~500 lines of Lua) that delegates the heavy lifting of LLM
+lightweight plugin that delegates the heavy lifting of LLM
 interaction to the robust `llm` CLI. For its user interface, it leverages the
 excellent utilities from `mini.nvim`. The core focus of `sllm.nvim` is to make
 context gathering and LLM interaction a native part of the Neovim experience,
@@ -61,11 +61,18 @@ Here are the key differentiators:
      allowing `sllm.nvim` to remain simple while giving you access to powerful
      workflows that other plugins would need to implement from scratch.
 
-4. **Explicit Control: You Are the Co-pilot, Not the Passenger** Some tools aim
+4. **Template-First Mode System** Modes in `sllm.nvim` are native `llm`
+   templates. The plugin ships with default templates (`sllm_chat`, `sllm_read`,
+   `sllm_agent`, `sllm_complete`) that are symlinked to your llm templates
+   directory. You can edit them with `llm templates edit sllm_agent` or create
+   your own. This means your customizations are portable and work seamlessly
+   with the `llm` CLI outside of Neovim.
+
+5. **Explicit Control: You Are the Co-pilot, Not the Passenger** Some tools aim
    to create an autonomous "agent" that tries to figure things out for you.
    `sllm.nvim` firmly believes in a **"co-pilot" model where you are always in
    control.** You explicitly provide context. You decide what the LLM sees: the
-   current file (`<leader>sa`), diagnostics (`<leader>sd`), the output of a
-   `git diff` (`<leader>sx`), or a new function tool (`<leader>sF`). The plugin
-   won't guess your intentions, ensuring a predictable, reliable, and secure
-   interaction every time.
+   current file or selection (`<leader>sa`), or open a picker for URLs,
+   diagnostics, shell commands, or tools (`<leader>sA`). The plugin won't guess
+   your intentions, ensuring a predictable, reliable, and secure interaction
+   every time.

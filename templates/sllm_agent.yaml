@@ -1,0 +1,315 @@
+system: |
+  You are an AI agent with full tool access in Neovim.
+  Use your tools to accomplish tasks step by step.
+  Think carefully before each action and explain your reasoning.
+  When you encounter errors, analyze them and try alternative approaches.
+
+  **Token efficiency tips:**
+  - Use grep() to find relevant lines before reading files
+  - Use read() with start_line/end_line for targeted reads
+  - Avoid reading entire large files - read in chunks of ~100-200 lines
+functions: |
+  import os
+  import subprocess
+  import urllib.request
+  from pathlib import Path
+  from typing import Optional
+
+  def bash(command: str, max_output: int = 5000) -> str:
+    """Execute shell commands in the working directory.
+
+    Args:
+        command: Shell command to execute
+        max_output: Maximum characters to return (default: 5000)
+    """
+    try:
+      result = subprocess.run(
+        command,
+        shell=True,
+        cwd=Path.cwd(),
+        capture_output=True,
+        text=True,
+        timeout=30,
+      )
+      output_parts = []
+      if result.stdout:
+        stdout = result.stdout.rstrip()
+        if len(stdout) > max_output:
+          stdout = stdout[:max_output] + f"\n\n... (truncated, {len(result.stdout) - max_output} more chars)"
+        output_parts.append(stdout)
+      if result.stderr:
+        stderr = result.stderr.rstrip()
+        if len(stderr) > max_output:
+          stderr = stderr[:max_output] + f"\n\n... (truncated)"
+        output_parts.append(f"STDERR:\n{stderr}")
+      if output_parts:
+        return "\n".join(output_parts)
+      return f"Command completed with exit code {result.returncode}"
+    except subprocess.TimeoutExpired:
+      return "Error: Command timed out after 30 seconds"
+    except Exception as e:
+      return f"Error executing command: {str(e)}"
+
+  def read(
+    path: str, start_line: Optional[int] = None, end_line: Optional[int] = None,
+    max_lines: int = 200
+  ) -> str:
+    """Read file contents. Supports reading specific line ranges.
+
+    Args:
+        path: Path to the file to read
+        start_line: Optional starting line number (1-indexed)
+        end_line: Optional ending line number (1-indexed)
+        max_lines: Maximum lines to return when no range specified (default: 200)
+    """
+    try:
+      with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+      total_lines = len(lines)
+
+      if start_line is not None and end_line is not None:
+        selected = lines[start_line - 1 : end_line]
+        remaining = total_lines - end_line
+      elif start_line is not None:
+        selected = lines[start_line - 1 : start_line - 1 + max_lines]
+        remaining = total_lines - (start_line - 1) - len(selected)
+      elif end_line is not None:
+        selected = lines[:end_line]
+        remaining = total_lines - end_line
+      else:
+        selected = lines[:max_lines]
+        remaining = total_lines - len(selected)
+
+      result = "".join(selected)
+      if remaining > 0:
+        result += f"\n\n... ({remaining} more lines, total: {total_lines}. Use start_line/end_line to read more)"
+      return result
+    except FileNotFoundError:
+      return f"Error: File not found: {path}"
+    except UnicodeDecodeError:
+      return f"Error: Cannot read file {path} (not a text file)"
+    except Exception as e:
+      return f"Error reading file: {str(e)}"
+
+  def head(path: str, lines: int = 50) -> str:
+    """Quick preview of file's first N lines.
+
+    Args:
+        path: Path to the file to read
+        lines: Number of lines to return (default: 50)
+    """
+    return read(path, start_line=1, end_line=lines)
+
+  def write(path: str, content: str) -> str:
+    """Create new files or overwrite existing ones.
+
+    Args:
+        path: Path to the file to create/write
+        content: Content to write to the file
+    """
+    file_path = Path.cwd() / path
+    try:
+      file_path.parent.mkdir(parents=True, exist_ok=True)
+      with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+      return f"Successfully wrote to {path}"
+    except Exception as e:
+      return f"Error writing file: {str(e)}"
+
+  def edit(path: str, old_str: str, new_str: str) -> str:
+    """Modify existing files using exact string replacements.
+
+    The string to replace must appear exactly once in the file.
+
+    Args:
+        path: Path to the file to edit
+        old_str: Exact string to find and replace (must be unique)
+        new_str: New string to replace with
+    """
+    file_path = Path.cwd() / path
+    try:
+      with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+      count = content.count(old_str)
+      if count == 0:
+        return f"Error: String not found in {path}"
+      elif count > 1:
+        return f"Error: String appears {count} times in {path}. Must be unique for safe replacement."
+      new_content = content.replace(old_str, new_str)
+      with open(file_path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+      return f"Successfully edited {path}"
+    except FileNotFoundError:
+      return f"Error: File not found: {path}"
+    except Exception as e:
+      return f"Error editing file: {str(e)}"
+
+  def grep(pattern: str, path: Optional[str] = None, file_pattern: str = "*", max_matches: int = 50) -> str:
+    """Search file contents using regular expressions with ripgrep (rg).
+
+    Args:
+        pattern: Regex pattern to search for
+        path: Optional specific file path to search in
+        file_pattern: File pattern to match (e.g., '*.py')
+        max_matches: Maximum number of matches to return (default: 50)
+    """
+    try:
+      cmd = ["rg", "--line-number", "--no-heading", "--color", "never"]
+      if path:
+        cmd.extend([pattern, path])
+      else:
+        if file_pattern != "*":
+          cmd.extend(["--glob", file_pattern])
+        cmd.append(pattern)
+      result = subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, text=True)
+      if result.returncode == 0:
+        lines = result.stdout.rstrip().split('\n')
+        if len(lines) > max_matches:
+          return '\n'.join(lines[:max_matches]) + f"\n\n... ({len(lines) - max_matches} more matches)"
+        return '\n'.join(lines)
+      elif result.returncode == 1:
+        return "No matches found"
+      return f"Error: {result.stderr.rstrip()}"
+    except FileNotFoundError:
+      if path:
+        cmd = ["grep", "-n", "-E", pattern, path]
+      else:
+        cmd = ["grep", "-r", "-n", "-E", pattern, "."]
+        if file_pattern != "*":
+          cmd.extend(["--include", file_pattern])
+      result = subprocess.run(cmd, cwd=Path.cwd(), capture_output=True, text=True)
+      if result.returncode == 0:
+        lines = result.stdout.rstrip().split('\n')
+        if len(lines) > max_matches:
+          return '\n'.join(lines[:max_matches]) + f"\n\n... ({len(lines) - max_matches} more matches)"
+        return '\n'.join(lines)
+      return "No matches found"
+    except Exception as e:
+      return f"Error during search: {str(e)}"
+
+  def glob(pattern: str, max_files: int = 100) -> str:
+    """Find files by pattern matching.
+
+    Args:
+        pattern: Glob pattern to match files (e.g., '*.py', '**/*.js')
+        max_files: Maximum number of files to return (default: 100)
+    """
+    try:
+      matches = Path.cwd().glob(pattern)
+      files = [str(p.relative_to(Path.cwd())) for p in matches if p.is_file()]
+      files = sorted(files)
+      if len(files) > max_files:
+        return "\n".join(files[:max_files]) + f"\n\n... ({len(files) - max_files} more files)"
+      if files:
+        return "\n".join(files)
+      return "No files found"
+    except Exception as e:
+      return f"Error finding files: {str(e)}"
+
+  def list(path: str = ".", max_items: int = 50) -> str:
+    """List directory contents.
+
+    Args:
+        path: Directory path to list (default: current directory)
+        max_items: Maximum number of items to show (default: 50)
+    """
+    dir_path = Path.cwd() / path
+    try:
+      if not dir_path.exists():
+        return f"Error: Directory not found: {path}"
+      if not dir_path.is_dir():
+        return f"Error: Not a directory: {path}"
+      items = sorted(dir_path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
+      items = [i for i in items if not i.name.startswith(".") and i.name != "node_modules"]
+      total_items = len(items)
+      if not items:
+        return "Empty directory"
+      items = items[:max_items]
+      lines = []
+      for item in items:
+        if item.is_dir():
+          lines.append(f"📁 {item.name}/")
+        else:
+          size = item.stat().st_size
+          if size < 1024:
+            size_str = f"{size}B"
+          elif size < 1024 * 1024:
+            size_str = f"{size / 1024:.1f}KB"
+          else:
+            size_str = f"{size / (1024 * 1024):.1f}MB"
+          lines.append(f"📄 {item.name} ({size_str})")
+      if total_items > max_items:
+        lines.append(f"\n... ({total_items - max_items} more items)")
+      return "\n".join(lines)
+    except PermissionError:
+      return f"Error: Permission denied: {path}"
+    except Exception as e:
+      return f"Error listing directory: {str(e)}"
+
+  def patch(content: str, strip: int = 1) -> str:
+    """Apply patches to files.
+
+    Args:
+        content: Patch content in unified diff format
+        strip: Number of leading path components to strip
+    """
+    import tempfile
+    try:
+      with tempfile.NamedTemporaryFile(mode="w", suffix=".patch", delete=False) as f:
+        f.write(content)
+        patch_file = f.name
+      try:
+        result = subprocess.run(
+          ["patch", f"-p{strip}", "-i", patch_file],
+          cwd=Path.cwd(),
+          capture_output=True,
+          text=True,
+        )
+        output_parts = []
+        if result.stdout:
+          output_parts.append(result.stdout.rstrip())
+        if result.stderr:
+          output_parts.append(f"STDERR:\n{result.stderr.rstrip()}")
+        if result.returncode == 0:
+          return "Patch applied successfully" + ("\n" + "\n".join(output_parts) if output_parts else "")
+        return f"Patch failed with exit code {result.returncode}\n" + "\n".join(output_parts)
+      finally:
+        os.unlink(patch_file)
+    except FileNotFoundError:
+      return "Error: 'patch' command not found"
+    except Exception as e:
+      return f"Error applying patch: {str(e)}"
+
+  def webfetch(url: str, max_chars: int = 10000) -> str:
+    """Fetch web content from URLs.
+
+    Args:
+        url: URL to fetch content from
+        max_chars: Maximum characters to return (default: 10000)
+    """
+    try:
+      req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (sllm agent)"})
+      with urllib.request.urlopen(req, timeout=10) as response:
+        content = response.read()
+        try:
+          text_content = content.decode("utf-8")
+        except UnicodeDecodeError:
+          for encoding in ["latin-1", "iso-8859-1", "cp1252"]:
+            try:
+              text_content = content.decode(encoding)
+              break
+            except UnicodeDecodeError:
+              continue
+          else:
+            return "Error: Could not decode response as text"
+        if len(text_content) > max_chars:
+          text_content = text_content[:max_chars] + f"\n\n... (truncated, {len(text_content) - max_chars} more characters)"
+        return text_content
+    except urllib.error.HTTPError as e:
+      return f"HTTP Error {e.code}: {e.reason}"
+    except urllib.error.URLError as e:
+      return f"URL Error: {e.reason}"
+    except TimeoutError:
+      return "Error: Request timed out"
+    except Exception as e:
+      return f"Error fetching URL: {str(e)}"

@@ -133,6 +133,7 @@ H.DEFAULT_CONFIG = vim.deepcopy({
   post_hooks = nil,
   history_max_entries = 1000,
   chain_limit = 100,
+  debug = false, -- Show LLM commands in buffer for debugging
   keymaps = {
     ask = '<leader>ss',
     select_model = '<leader>sm',
@@ -354,6 +355,17 @@ H.job_exec_cmd_capture_output = function(cmd_raw)
   if res_stdout ~= '' then output = output .. '\nstdout:\n' .. res_stdout end
   if res_stderr ~= '' then output = output .. '\nstderr:\n' .. res_stderr end
   return output
+end
+
+---Fetch the conversation ID of the most recent llm log entry.
+---@return string|nil conversation_id or nil if not found
+H.job_fetch_last_conversation_id = function()
+  local llm_cmd = H.state.backend_config.cmd or 'llm'
+  local result = vim.system({ 'bash', '-c', llm_cmd .. ' logs list --json -n 1' }, { text = true }):wait()
+  if result.code ~= 0 then return nil end
+  local ok, parsed = pcall(vim.fn.json_decode, result.stdout or '')
+  if not ok or not parsed or #parsed == 0 then return nil end
+  return parsed[1].conversation_id
 end
 
 --- Start a new job and stream its output line by line.
@@ -835,13 +847,37 @@ H.ui_append_to_llm_buffer = function(lines)
   end
 end
 
---- Copy a code block from the LLM buffer to the clipboard.
----@param position "first"|"last"  Which code block to copy.
+--- Copy a code block from the last response in the LLM buffer to the clipboard.
+---@param position "first"|"last"  Which code block to copy from the last response.
 ---@return boolean  `true` if a code block was found and copied; `false` otherwise.
 H.ui_copy_code_block = function(position)
+  local response_header = Sllm.config.ui.markdown_response_header or '> 🤖 Response'
   local buf = H.ui_ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local code_blocks = H.utils_extract_code_blocks(lines)
+
+  if #lines == 0 then return false end
+
+  -- Find the last occurrence of the response marker
+  local last_response_idx = nil
+  for i = #lines, 1, -1 do
+    if lines[i]:match('^' .. vim.pesc(response_header)) then
+      last_response_idx = i
+      break
+    end
+  end
+
+  -- Extract lines from last response only
+  local response_lines = {}
+  if last_response_idx then
+    for i = last_response_idx + 1, #lines do
+      table.insert(response_lines, lines[i])
+    end
+  else
+    -- No response header found, use entire buffer as fallback
+    response_lines = lines
+  end
+
+  local code_blocks = H.utils_extract_code_blocks(response_lines)
 
   if #code_blocks == 0 then return false end
 
@@ -1081,7 +1117,13 @@ function Sllm.ask_llm()
       system_prompt = H.state.system_prompt,
       model_options = H.state.model_options,
     })
-    H.state.continue = true
+
+    -- Debug: show command in LLM buffer
+    if Sllm.config.debug then
+      H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+      H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+      H.ui_append_to_llm_buffer({ '```', '' })
+    end
 
     local first_line = false
     H.job_start(
@@ -1131,6 +1173,13 @@ function Sllm.ask_llm()
           H.ui_append_to_llm_buffer({ msg })
         end
         H.ui_append_to_llm_buffer({ '' })
+
+        -- Capture conversation ID for continuation (so completions don't interfere)
+        if exit_code == 0 then
+          local cid = H.job_fetch_last_conversation_id()
+          if cid then H.state.continue = cid end
+        end
+
         if Sllm.config.reset_ctx_each_prompt then H.context_reset() end
         if Sllm.config.post_hooks then
           for _, hook in ipairs(Sllm.config.post_hooks) do
@@ -1494,7 +1543,8 @@ function Sllm.copy_last_response()
   end
 end
 
---- Complete code at cursor position.
+--- Complete code at cursor position (normal mode) or edit selection (visual mode).
+--- In visual mode, prompts for an instruction and replaces the selection.
 ---@return nil
 function Sllm.complete_code()
   if H.job_is_busy() then
@@ -1502,6 +1552,20 @@ function Sllm.complete_code()
     return
   end
 
+  local is_visual = H.utils_is_mode_visual()
+
+  if is_visual then
+    -- Visual mode: edit selection based on user instruction
+    H.complete_code_visual()
+  else
+    -- Normal mode: complete at cursor
+    H.complete_code_normal()
+  end
+end
+
+--- Internal: Complete code at cursor position (normal mode).
+---@return nil
+H.complete_code_normal = function()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor_pos = vim.api.nvim_win_get_cursor(0)
   local row = cursor_pos[1]
@@ -1530,19 +1594,26 @@ function Sllm.complete_code()
   local before_text = table.concat(before_lines, '\n')
   local after_text = table.concat(after_lines, '\n')
 
-  -- Build the completion prompt with cursor marker
-  local prompt = [[
-    Complete the code at the cursor position marked with <CURSOR>.
-    Output ONLY the completion code, no explanations, no markdown formatting.'
-  ]]
-  prompt = prompt .. before_text .. '<CURSOR>'
+  -- Build the completion prompt with cursor marker (template provides instructions)
+  local prompt = before_text .. '<CURSOR>'
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 
-  -- Build LLM command - no continuation, no usage stats for cleaner output
-  local llm_cmd = H.state.backend_config.cmd or 'llm'
-  local cmd = llm_cmd .. ' --no-stream'
-  if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
-  cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+  -- Build LLM command using sllm_inline_complete template
+  local cmd = H.backend.build_command(H.state.backend_config, {
+    prompt = prompt,
+    model = H.state.selected_model,
+    template = 'sllm_inline_complete',
+    no_stream = true,
+    raw = true, -- Skip tool flags for inline completion
+  })
+
+  -- Debug: show command in LLM buffer
+  if Sllm.config.debug then
+    H.ui_show_llm_buffer()
+    H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+    H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+    H.ui_append_to_llm_buffer({ '```', '' })
+  end
 
   -- Start loading indicator (shows in winbar if LLM buffer is visible)
   H.ui_start_loading_indicator()
@@ -1608,6 +1679,104 @@ function Sllm.complete_code()
       end
     end
   )
+end
+
+--- Internal: Edit selected code based on user instruction (visual mode).
+---@return nil
+H.complete_code_visual = function()
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  -- Get selection range and text
+  local start_pos = vim.fn.getpos('v')
+  local end_pos = vim.fn.getpos('.')
+  local start_row = start_pos[2]
+  local end_row = end_pos[2]
+
+  -- Ensure start is before end
+  if start_row > end_row then
+    start_row, end_row = end_row, start_row
+  end
+
+  local selection = H.utils_get_visual_selection()
+  if selection:match('^%s*$') then
+    H.notify('[sllm] empty selection.', vim.log.levels.WARN)
+    return
+  end
+
+  -- Exit visual mode
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'nx', false)
+
+  -- Ask for instruction
+  H.input({ prompt = 'Edit instruction: ' }, function(instruction)
+    if not instruction or instruction == '' then
+      H.notify('[sllm] no instruction provided.', vim.log.levels.INFO)
+      return
+    end
+
+    -- Build prompt with selection and instruction
+    local prompt = 'Instruction: ' .. instruction .. '\n\nCode to edit:\n' .. selection
+
+    -- Build LLM command using sllm_inline_edit template
+    local cmd = H.backend.build_command(H.state.backend_config, {
+      prompt = prompt,
+      model = H.state.selected_model,
+      template = 'sllm_inline_edit',
+      no_stream = true,
+      raw = true, -- Skip tool flags for inline edit
+    })
+
+    -- Debug: show command in LLM buffer
+    if Sllm.config.debug then
+      H.ui_show_llm_buffer()
+      H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+      H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+      H.ui_append_to_llm_buffer({ '```', '' })
+    end
+
+    -- Start loading indicator
+    H.ui_start_loading_indicator()
+    H.notify('[sllm] editing...', vim.log.levels.INFO)
+
+    -- Collect the output
+    local edit_output = {}
+
+    H.job_start(
+      cmd,
+      function(line) -- stdout handler
+        if line ~= '' then table.insert(edit_output, line) end
+      end,
+      function() end, -- stderr handler (ignored)
+      function(exit_code) -- exit handler
+        H.ui_stop_loading_indicator()
+        if exit_code == 0 and #edit_output > 0 then
+          -- Join all output lines
+          local result = table.concat(edit_output, '\n')
+
+          -- Clean up common LLM formatting
+          result = result:gsub('^```[%w]*\n', '') -- Remove opening code fence
+          result = result:gsub('\n```$', '') -- Remove closing code fence
+          result = vim.trim(result)
+
+          if result ~= '' then
+            local result_lines = vim.split(result, '\n', { plain = true })
+
+            -- Replace the selection with the result
+            -- For line-wise replacement (simplest approach)
+            vim.api.nvim_buf_set_lines(bufnr, start_row - 1, end_row, false, result_lines)
+
+            -- Move cursor to start of replacement
+            vim.api.nvim_win_set_cursor(0, { start_row, 0 })
+
+            H.notify('[sllm] edit applied', vim.log.levels.INFO)
+          else
+            H.notify('[sllm] received empty result', vim.log.levels.WARN)
+          end
+        else
+          H.notify('[sllm] edit failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+        end
+      end
+    )
+  end)
 end
 
 --- Browse chat history, load a conversation, and continue from it.

@@ -1,0 +1,4 @@
+system: |
+  Edit the provided code according to the user's instruction.
+  Output ONLY the modified code, no explanations or markdown.
+  Match the existing code style and indentation.

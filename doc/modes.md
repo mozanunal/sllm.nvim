@@ -87,8 +87,10 @@ Use cases:
 
 ### sllm_complete
 
-Inline completion mode. Used internally by `<leader><Tab>` for code completion
-at the cursor.
+Inline completion mode. Used internally by `<leader><Tab>` / `complete_code()`
+for code completion at the cursor. Uses the `sllm_complete` template to send the
+buffer-around-cursor context (no markdown; raw code out) and runs synchronously
+for clean insertion.
 
 System prompt:
 

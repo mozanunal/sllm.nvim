@@ -37,10 +37,10 @@ T['llm']['build_command includes template flag'] = function()
     prompt = 'test',
     template = 'my-template',
   })
-  MiniTest.expect.no_error(function()
-    assert(cmd:find('-t') ~= nil)
-    assert(cmd:find('my%-template') ~= nil)
-  end)
+  -- cmd is now a table of arguments
+  MiniTest.expect.equality(type(cmd), 'table')
+  MiniTest.expect.equality(vim.tbl_contains(cmd, '-t'), true)
+  MiniTest.expect.equality(vim.tbl_contains(cmd, 'my-template'), true)
 end
 
 return T

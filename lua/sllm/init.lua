@@ -48,7 +48,21 @@
 ---@field add_cmd_prompt string              Prompt displayed by the add_cmd_out_to_ctx function
 ---@field markdown_prompt_header string      Text displayed above the user prompt
 ---@field markdown_response_header string    Text displayed above the LLM response
----
+
+---@class BackendUsage
+---@field prompt_tokens integer?             Input tokens used.
+---@field completion_tokens integer?         Output tokens generated.
+
+---@class BackendHistoryEntry
+---@field id string                          Entry ID.
+---@field conversation_id string             Conversation ID for grouping.
+---@field model string                       Model name used.
+---@field prompt string                      User prompt.
+---@field response string                    LLM response.
+---@field system string?                     System prompt if any.
+---@field timestamp string                   ISO timestamp.
+---@field usage BackendUsage?                Token usage statistics.
+
 -- Module definition ==========================================================
 local Sllm = {}
 local H = {}
@@ -359,14 +373,7 @@ end
 
 ---Fetch the conversation ID of the most recent llm log entry.
 ---@return string|nil conversation_id or nil if not found
-H.job_fetch_last_conversation_id = function()
-  local llm_cmd = H.state.backend_config.cmd or 'llm'
-  local result = vim.system({ 'bash', '-c', llm_cmd .. ' logs list --json -n 1' }, { text = true }):wait()
-  if result.code ~= 0 then return nil end
-  local ok, parsed = pcall(vim.fn.json_decode, result.stdout or '')
-  if not ok or not parsed or #parsed == 0 then return nil end
-  return parsed[1].conversation_id
-end
+H.job_fetch_last_conversation_id = function() return H.backend.get_last_conversation_id(H.state.backend_config) end
 
 --- Start a new job and stream its output line by line.
 ---
@@ -1121,7 +1128,7 @@ function Sllm.ask_llm()
     -- Debug: show command in LLM buffer
     if Sllm.config.debug then
       H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
-      H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+      H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
       H.ui_append_to_llm_buffer({ '```', '' })
     end
 
@@ -1433,9 +1440,7 @@ function Sllm.show_model_options()
   end
 
   -- Run `llm models --options -m <model>` to show available options
-  local llm_cmd = H.state.backend_config.cmd or 'llm'
-  local cmd = llm_cmd .. ' models --options -m ' .. vim.fn.shellescape(H.state.selected_model)
-  local output = vim.fn.systemlist(cmd)
+  local output = H.backend.get_model_options(H.state.backend_config, H.state.selected_model)
 
   -- Display in a floating window or show in the LLM buffer
   H.ui_show_llm_buffer()
@@ -1611,7 +1616,7 @@ H.complete_code_normal = function()
   if Sllm.config.debug then
     H.ui_show_llm_buffer()
     H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
-    H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+    H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
     H.ui_append_to_llm_buffer({ '```', '' })
   end
 
@@ -1729,7 +1734,7 @@ H.complete_code_visual = function()
     if Sllm.config.debug then
       H.ui_show_llm_buffer()
       H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
-      H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+      H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
       H.ui_append_to_llm_buffer({ '```', '' })
     end
 

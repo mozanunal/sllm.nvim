@@ -20,7 +20,7 @@ end
 
 -- Get the templates directory path.
 H.get_templates_path = function(llm_cmd)
-  local output = vim.fn.system(llm_cmd .. ' templates path')
+  local output = vim.fn.system({ llm_cmd, 'templates', 'path' })
   local path = vim.trim(output)
   if path ~= '' and path:sub(1, 5) ~= 'Error' then return path end
   return nil
@@ -78,7 +78,7 @@ end
 ---@return string[] List of model names.
 Llm.get_models = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local models = vim.fn.systemlist(llm_cmd .. ' models')
+  local models = vim.fn.systemlist({ llm_cmd, 'models' })
   local only_models = {}
   for _, line in ipairs(models) do
     local model = line:match('^.-:%s*([^(%s]+)')
@@ -92,8 +92,17 @@ end
 ---@return string Default model name.
 Llm.get_default_model = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local output = vim.fn.system(llm_cmd .. ' models default')
+  local output = vim.fn.system({ llm_cmd, 'models', 'default' })
   return output:match('(.-)%s*$')
+end
+
+---Get model-specific options.
+---@param config table Backend configuration with cmd field.
+---@param model string Model name.
+---@return string[] List of options description lines.
+Llm.get_model_options = function(config, model)
+  local llm_cmd = config.cmd or 'llm'
+  return vim.fn.systemlist({ llm_cmd, 'models', '--options', '-m', model })
 end
 
 ---Get list of available tools from llm CLI.
@@ -101,7 +110,7 @@ end
 ---@return string[] List of tool names.
 Llm.get_tools = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local json_string = vim.fn.system(llm_cmd .. ' tools list --json')
+  local json_string = vim.fn.system({ llm_cmd, 'tools', 'list', '--json' })
   local spec = H.parse_json(json_string)
   local names = {}
   if spec and spec.tools then
@@ -112,76 +121,103 @@ Llm.get_tools = function(config)
   return names
 end
 
----Build the llm CLI command string.
+---@class LlmBuildCommandOptions
+---@field prompt string Required prompt text.
+---@field model string? Model name.
+---@field template string? Template name.
+---@field continue boolean|string? Continue conversation (true for -c, string for --cid).
+---@field show_usage boolean? Show token usage.
+---@field no_stream boolean? Disable streaming output.
+---@field raw boolean? Skip tool flags (--td --cl) for simple prompts.
+---@field ctx_files string[]? Context files to include.
+---@field tools string[]? Tool names to use.
+---@field functions string[]? Python functions to use.
+---@field online boolean? Enable online mode.
+---@field system_prompt string? System prompt.
+---@field model_options table? Model-specific options.
+---@field chain_limit integer? Chain limit for tools (default: 100).
+
+---Build the llm CLI command string or table.
 ---@param config table Backend configuration with cmd field.
----@param options table Command options.
----@field options.prompt string Required prompt text.
----@field options.model string? Model name.
----@field options.template string? Template name.
----@field options.continue boolean|string? Continue conversation (true for -c, string for --cid).
----@field options.show_usage boolean? Show token usage.
----@field options.no_stream boolean? Disable streaming output.
----@field options.raw boolean? Skip tool flags (--td --cl) for simple prompts.
----@field options.ctx_files string[]? Context files to include.
----@field options.tools string[]? Tool names to use.
----@field options.functions string[]? Python functions to use.
----@field options.online boolean? Enable online mode.
----@field options.system_prompt string? System prompt.
----@field options.model_options table? Model-specific options.
----@field options.chain_limit integer? Chain limit for tools (default: 100).
----@return string The assembled shell command.
+---@param options LlmBuildCommandOptions Command options.
+---@return string[] The assembled shell command.
 Llm.build_command = function(config, options)
   local llm_cmd = config.cmd or 'llm'
-  local cmd = llm_cmd
+  local cmd = { llm_cmd }
 
   if not options.prompt then error('prompt is required') end
 
   -- Add tool flags unless raw mode is requested
-  if not options.raw then cmd = cmd .. ' --td --cl ' .. (options.chain_limit or 100) end
-
-  if options.no_stream then cmd = cmd .. ' --no-stream' end
-
-  if type(options.continue) == 'string' then
-    cmd = cmd .. ' --cid ' .. vim.fn.shellescape(options.continue)
-  elseif options.continue then
-    cmd = cmd .. ' -c'
+  if not options.raw then
+    table.insert(cmd, '--td')
+    table.insert(cmd, '--cl')
+    table.insert(cmd, tostring(options.chain_limit or 100))
   end
 
-  if options.show_usage then cmd = cmd .. ' -u' end
-  if options.model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(options.model) end
+  if options.no_stream then table.insert(cmd, '--no-stream') end
+
+  if type(options.continue) == 'string' then
+    table.insert(cmd, '--cid')
+    table.insert(cmd, options.continue)
+  elseif options.continue then
+    table.insert(cmd, '-c')
+  end
+
+  if options.show_usage then table.insert(cmd, '-u') end
+  if options.model then
+    table.insert(cmd, '-m')
+    table.insert(cmd, options.model)
+  end
 
   if options.ctx_files then
     for _, filename in ipairs(options.ctx_files) do
       local flag = H.is_attachment(filename) and '-a' or '-f'
-      cmd = cmd .. ' ' .. flag .. ' ' .. vim.fn.shellescape(filename) .. ' '
+      table.insert(cmd, flag)
+      table.insert(cmd, filename)
     end
   end
 
   if options.tools then
     for _, tool_name in ipairs(options.tools) do
-      cmd = cmd .. ' -T ' .. vim.fn.shellescape(tool_name) .. ' '
+      table.insert(cmd, '-T')
+      table.insert(cmd, tool_name)
     end
   end
 
   if options.functions then
     for _, func_str in ipairs(options.functions) do
-      cmd = cmd .. ' --functions ' .. vim.fn.shellescape(func_str) .. ' '
+      table.insert(cmd, '--functions')
+      table.insert(cmd, func_str)
     end
   end
 
-  if options.online then cmd = cmd .. ' -o online 1' end
-  if options.system_prompt then cmd = cmd .. ' -s ' .. vim.fn.shellescape(options.system_prompt) end
+  if options.online then
+    table.insert(cmd, '-o')
+    table.insert(cmd, 'online')
+    table.insert(cmd, '1')
+  end
+  if options.system_prompt then
+    table.insert(cmd, '-s')
+    table.insert(cmd, options.system_prompt)
+  end
 
   if options.model_options then
     for key, value in pairs(options.model_options) do
-      cmd = cmd .. ' -o ' .. vim.fn.shellescape(key) .. ' ' .. vim.fn.shellescape(tostring(value))
+      table.insert(cmd, '-o')
+      table.insert(cmd, key)
+      table.insert(cmd, tostring(value))
     end
   end
 
-  if options.template then cmd = cmd .. ' -t ' .. vim.fn.shellescape(options.template) end
+  if options.template then
+    table.insert(cmd, '-t')
+    table.insert(cmd, options.template)
+  end
 
   -- Use -- to end options parsing (prompt may start with dashes)
-  cmd = cmd .. ' -- ' .. vim.fn.shellescape(options.prompt)
+  table.insert(cmd, '--')
+  table.insert(cmd, options.prompt)
+
   return cmd
 end
 
@@ -205,10 +241,16 @@ Llm.get_history = function(config, options)
   options = options or {}
   local llm_cmd = config.cmd or 'llm'
   local count = options.count or 20
-  local cmd = llm_cmd .. ' logs list --json -n ' .. count
+  local cmd = { llm_cmd, 'logs', 'list', '--json', '-n', tostring(count) }
 
-  if options.query then cmd = cmd .. ' -q ' .. vim.fn.shellescape(options.query) end
-  if options.model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(options.model) end
+  if options.query then
+    table.insert(cmd, '-q')
+    table.insert(cmd, options.query)
+  end
+  if options.model then
+    table.insert(cmd, '-m')
+    table.insert(cmd, options.model)
+  end
 
   local output = vim.fn.system(cmd)
   local parsed = H.parse_json(output)
@@ -241,7 +283,7 @@ end
 ---@return table[]? List of conversation entries or nil.
 Llm.get_session = function(config, conversation_id)
   local llm_cmd = config.cmd or 'llm'
-  local cmd = llm_cmd .. ' logs list --json --cid ' .. vim.fn.shellescape(conversation_id)
+  local cmd = { llm_cmd, 'logs', 'list', '--json', '--cid', conversation_id }
   local output = vim.fn.system(cmd)
   local parsed = H.parse_json(output)
 
@@ -267,12 +309,24 @@ Llm.get_session = function(config, conversation_id)
   return entries
 end
 
+---Fetch the last conversation ID.
+---@param config table Backend configuration with cmd field.
+---@return string? conversation_id or nil.
+Llm.get_last_conversation_id = function(config)
+  local llm_cmd = config.cmd or 'llm'
+  local cmd = { llm_cmd, 'logs', 'list', '--json', '-n', '1' }
+  local output = vim.fn.system(cmd)
+  local parsed = H.parse_json(output)
+  if not parsed or #parsed == 0 then return nil end
+  return parsed[1].conversation_id
+end
+
 ---Get list of available templates from llm CLI.
 ---@param config table Backend configuration with cmd field.
 ---@return string[] List of template names.
 Llm.get_templates = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local output = vim.fn.systemlist(llm_cmd .. ' templates list')
+  local output = vim.fn.systemlist({ llm_cmd, 'templates', 'list' })
 
   local templates = {}
   for _, line in ipairs(output) do
@@ -291,7 +345,7 @@ end
 ---@return table? Template data (yaml content) or nil.
 Llm.get_template = function(config, template_name)
   local llm_cmd = config.cmd or 'llm'
-  local output = vim.fn.system(llm_cmd .. ' templates show ' .. vim.fn.shellescape(template_name))
+  local output = vim.fn.system({ llm_cmd, 'templates', 'show', template_name })
 
   if output == '' then return nil end
 

@@ -115,12 +115,33 @@ end
 ---Build the llm CLI command string.
 ---@param config table Backend configuration with cmd field.
 ---@param options table Command options.
+---@field options.prompt string Required prompt text.
+---@field options.model string? Model name.
+---@field options.template string? Template name.
+---@field options.continue boolean|string? Continue conversation (true for -c, string for --cid).
+---@field options.show_usage boolean? Show token usage.
+---@field options.no_stream boolean? Disable streaming output.
+---@field options.raw boolean? Skip tool flags (--td --cl) for simple prompts.
+---@field options.ctx_files string[]? Context files to include.
+---@field options.tools string[]? Tool names to use.
+---@field options.functions string[]? Python functions to use.
+---@field options.online boolean? Enable online mode.
+---@field options.system_prompt string? System prompt.
+---@field options.model_options table? Model-specific options.
+---@field options.chain_limit integer? Chain limit for tools (default: 100).
 ---@return string The assembled shell command.
 Llm.build_command = function(config, options)
   local llm_cmd = config.cmd or 'llm'
-  local cmd = llm_cmd .. ' --td --cl ' .. (options.chain_limit or 100)
+  local cmd = llm_cmd
 
   if not options.prompt then error('prompt is required') end
+
+  -- Add tool flags unless raw mode is requested
+  if not options.raw then
+    cmd = cmd .. ' --td --cl ' .. (options.chain_limit or 100)
+  end
+
+  if options.no_stream then cmd = cmd .. ' --no-stream' end
 
   if type(options.continue) == 'string' then
     cmd = cmd .. ' --cid ' .. vim.fn.shellescape(options.continue)
@@ -161,7 +182,8 @@ Llm.build_command = function(config, options)
 
   if options.template then cmd = cmd .. ' -t ' .. vim.fn.shellescape(options.template) end
 
-  cmd = cmd .. ' ' .. vim.fn.shellescape(options.prompt)
+  -- Use -- to end options parsing (prompt may start with dashes)
+  cmd = cmd .. ' -- ' .. vim.fn.shellescape(options.prompt)
   return cmd
 end
 

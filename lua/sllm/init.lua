@@ -847,13 +847,37 @@ H.ui_append_to_llm_buffer = function(lines)
   end
 end
 
---- Copy a code block from the LLM buffer to the clipboard.
----@param position "first"|"last"  Which code block to copy.
+--- Copy a code block from the last response in the LLM buffer to the clipboard.
+---@param position "first"|"last"  Which code block to copy from the last response.
 ---@return boolean  `true` if a code block was found and copied; `false` otherwise.
 H.ui_copy_code_block = function(position)
+  local response_header = Sllm.config.ui.markdown_response_header or '> 🤖 Response'
   local buf = H.ui_ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local code_blocks = H.utils_extract_code_blocks(lines)
+
+  if #lines == 0 then return false end
+
+  -- Find the last occurrence of the response marker
+  local last_response_idx = nil
+  for i = #lines, 1, -1 do
+    if lines[i]:match('^' .. vim.pesc(response_header)) then
+      last_response_idx = i
+      break
+    end
+  end
+
+  -- Extract lines from last response only
+  local response_lines = {}
+  if last_response_idx then
+    for i = last_response_idx + 1, #lines do
+      table.insert(response_lines, lines[i])
+    end
+  else
+    -- No response header found, use entire buffer as fallback
+    response_lines = lines
+  end
+
+  local code_blocks = H.utils_extract_code_blocks(response_lines)
 
   if #code_blocks == 0 then return false end
 
@@ -1575,10 +1599,13 @@ H.complete_code_normal = function()
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 
   -- Build LLM command using sllm_inline_complete template
-  local llm_cmd = H.state.backend_config.cmd or 'llm'
-  local cmd = llm_cmd .. ' --no-stream -t sllm_inline_complete'
-  if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
-  cmd = cmd .. ' -- ' .. vim.fn.shellescape(prompt) -- Use -- to end options parsing
+  local cmd = H.backend.build_command(H.state.backend_config, {
+    prompt = prompt,
+    model = H.state.selected_model,
+    template = 'sllm_inline_complete',
+    no_stream = true,
+    raw = true, -- Skip tool flags for inline completion
+  })
 
   -- Debug: show command in LLM buffer
   if Sllm.config.debug then
@@ -1690,10 +1717,13 @@ H.complete_code_visual = function()
     local prompt = 'Instruction: ' .. instruction .. '\n\nCode to edit:\n' .. selection
 
     -- Build LLM command using sllm_inline_edit template
-    local llm_cmd = H.state.backend_config.cmd or 'llm'
-    local cmd = llm_cmd .. ' --no-stream -t sllm_inline_edit'
-    if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
-    cmd = cmd .. ' -- ' .. vim.fn.shellescape(prompt) -- Use -- to end options parsing
+    local cmd = H.backend.build_command(H.state.backend_config, {
+      prompt = prompt,
+      model = H.state.selected_model,
+      template = 'sllm_inline_edit',
+      no_stream = true,
+      raw = true, -- Skip tool flags for inline edit
+    })
 
     -- Debug: show command in LLM buffer
     if Sllm.config.debug then

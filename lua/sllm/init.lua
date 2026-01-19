@@ -133,6 +133,7 @@ H.DEFAULT_CONFIG = vim.deepcopy({
   post_hooks = nil,
   history_max_entries = 1000,
   chain_limit = 100,
+  debug = false, -- Show LLM commands in buffer for debugging
   keymaps = {
     ask = '<leader>ss',
     select_model = '<leader>sm',
@@ -1081,6 +1082,14 @@ function Sllm.ask_llm()
       system_prompt = H.state.system_prompt,
       model_options = H.state.model_options,
     })
+
+    -- Debug: show command in LLM buffer
+    if Sllm.config.debug then
+      H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+      H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+      H.ui_append_to_llm_buffer({ '```', '' })
+    end
+
     H.state.continue = true
 
     local first_line = false
@@ -1530,19 +1539,23 @@ function Sllm.complete_code()
   local before_text = table.concat(before_lines, '\n')
   local after_text = table.concat(after_lines, '\n')
 
-  -- Build the completion prompt with cursor marker
-  local prompt = [[
-    Complete the code at the cursor position marked with <CURSOR>.
-    Output ONLY the completion code, no explanations, no markdown formatting.'
-  ]]
-  prompt = prompt .. before_text .. '<CURSOR>'
+  -- Build the completion prompt with cursor marker (template provides instructions)
+  local prompt = before_text .. '<CURSOR>'
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 
-  -- Build LLM command - no continuation, no usage stats for cleaner output
+  -- Build LLM command using sllm_complete template
   local llm_cmd = H.state.backend_config.cmd or 'llm'
-  local cmd = llm_cmd .. ' --no-stream'
+  local cmd = llm_cmd .. ' --no-stream -t sllm_complete'
   if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
   cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+
+  -- Debug: show command in LLM buffer
+  if Sllm.config.debug then
+    H.ui_show_llm_buffer()
+    H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+    H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+    H.ui_append_to_llm_buffer({ '```', '' })
+  end
 
   -- Start loading indicator (shows in winbar if LLM buffer is visible)
   H.ui_start_loading_indicator()

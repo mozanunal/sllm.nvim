@@ -1,9 +1,19 @@
+local function clean_sllm()
+ for k, _ in pairs(package.loaded) do
+    if k:match("^sllm") then
+      package.loaded[k] = nil
+    end
+  end
+end
+
+
 local function refresh_sllm()
   local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h")
   vim.opt.rtp:prepend(root)
   local m = dofile("lua/sllm/init.lua")
   m.setup({
     window_type   = "vertical",
+    debug         = true,
     pre_hooks = {
       -- {command='ls', add_to_context=true},
       -- {command='pwd', add_to_context=true},

@@ -137,9 +137,7 @@ Llm.build_command = function(config, options)
   if not options.prompt then error('prompt is required') end
 
   -- Add tool flags unless raw mode is requested
-  if not options.raw then
-    cmd = cmd .. ' --td --cl ' .. (options.chain_limit or 100)
-  end
+  if not options.raw then cmd = cmd .. ' --td --cl ' .. (options.chain_limit or 100) end
 
   if options.no_stream then cmd = cmd .. ' --no-stream' end
 

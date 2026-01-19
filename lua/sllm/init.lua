@@ -1578,7 +1578,7 @@ H.complete_code_normal = function()
   local llm_cmd = H.state.backend_config.cmd or 'llm'
   local cmd = llm_cmd .. ' --no-stream -t sllm_inline_complete'
   if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
-  cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+  cmd = cmd .. ' -- ' .. vim.fn.shellescape(prompt) -- Use -- to end options parsing
 
   -- Debug: show command in LLM buffer
   if Sllm.config.debug then
@@ -1693,7 +1693,7 @@ H.complete_code_visual = function()
     local llm_cmd = H.state.backend_config.cmd or 'llm'
     local cmd = llm_cmd .. ' --no-stream -t sllm_inline_edit'
     if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
-    cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+    cmd = cmd .. ' -- ' .. vim.fn.shellescape(prompt) -- Use -- to end options parsing
 
     -- Debug: show command in LLM buffer
     if Sllm.config.debug then

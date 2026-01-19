@@ -357,6 +357,17 @@ H.job_exec_cmd_capture_output = function(cmd_raw)
   return output
 end
 
+---Fetch the conversation ID of the most recent llm log entry.
+---@return string|nil conversation_id or nil if not found
+H.job_fetch_last_conversation_id = function()
+  local llm_cmd = H.state.backend_config.cmd or 'llm'
+  local result = vim.system({ 'bash', '-c', llm_cmd .. ' logs list --json -n 1' }, { text = true }):wait()
+  if result.code ~= 0 then return nil end
+  local ok, parsed = pcall(vim.fn.json_decode, result.stdout or '')
+  if not ok or not parsed or #parsed == 0 then return nil end
+  return parsed[1].conversation_id
+end
+
 --- Start a new job and stream its output line by line.
 ---
 --- Splits on `'\n'` in the stdout buffer, strips ANSI codes, and calls
@@ -1090,8 +1101,6 @@ function Sllm.ask_llm()
       H.ui_append_to_llm_buffer({ '```', '' })
     end
 
-    H.state.continue = true
-
     local first_line = false
     H.job_start(
       cmd,
@@ -1140,6 +1149,13 @@ function Sllm.ask_llm()
           H.ui_append_to_llm_buffer({ msg })
         end
         H.ui_append_to_llm_buffer({ '' })
+
+        -- Capture conversation ID for continuation (so completions don't interfere)
+        if exit_code == 0 then
+          local cid = H.job_fetch_last_conversation_id()
+          if cid then H.state.continue = cid end
+        end
+
         if Sllm.config.reset_ctx_each_prompt then H.context_reset() end
         if Sllm.config.post_hooks then
           for _, hook in ipairs(Sllm.config.post_hooks) do

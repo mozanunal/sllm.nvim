@@ -1519,7 +1519,8 @@ function Sllm.copy_last_response()
   end
 end
 
---- Complete code at cursor position.
+--- Complete code at cursor position (normal mode) or edit selection (visual mode).
+--- In visual mode, prompts for an instruction and replaces the selection.
 ---@return nil
 function Sllm.complete_code()
   if H.job_is_busy() then
@@ -1527,6 +1528,20 @@ function Sllm.complete_code()
     return
   end
 
+  local is_visual = H.utils_is_mode_visual()
+
+  if is_visual then
+    -- Visual mode: edit selection based on user instruction
+    H.complete_code_visual()
+  else
+    -- Normal mode: complete at cursor
+    H.complete_code_normal()
+  end
+end
+
+--- Internal: Complete code at cursor position (normal mode).
+---@return nil
+H.complete_code_normal = function()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor_pos = vim.api.nvim_win_get_cursor(0)
   local row = cursor_pos[1]
@@ -1559,9 +1574,9 @@ function Sllm.complete_code()
   local prompt = before_text .. '<CURSOR>'
   if #after_text > 0 then prompt = prompt .. '\n' .. after_text end
 
-  -- Build LLM command using sllm_complete template
+  -- Build LLM command using sllm_inline_complete template
   local llm_cmd = H.state.backend_config.cmd or 'llm'
-  local cmd = llm_cmd .. ' --no-stream -t sllm_complete'
+  local cmd = llm_cmd .. ' --no-stream -t sllm_inline_complete'
   if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
   cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
 
@@ -1637,6 +1652,101 @@ function Sllm.complete_code()
       end
     end
   )
+end
+
+--- Internal: Edit selected code based on user instruction (visual mode).
+---@return nil
+H.complete_code_visual = function()
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  -- Get selection range and text
+  local start_pos = vim.fn.getpos('v')
+  local end_pos = vim.fn.getpos('.')
+  local start_row = start_pos[2]
+  local end_row = end_pos[2]
+
+  -- Ensure start is before end
+  if start_row > end_row then
+    start_row, end_row = end_row, start_row
+  end
+
+  local selection = H.utils_get_visual_selection()
+  if selection:match('^%s*$') then
+    H.notify('[sllm] empty selection.', vim.log.levels.WARN)
+    return
+  end
+
+  -- Exit visual mode
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'nx', false)
+
+  -- Ask for instruction
+  H.input({ prompt = 'Edit instruction: ' }, function(instruction)
+    if not instruction or instruction == '' then
+      H.notify('[sllm] no instruction provided.', vim.log.levels.INFO)
+      return
+    end
+
+    -- Build prompt with selection and instruction
+    local prompt = 'Instruction: ' .. instruction .. '\n\nCode to edit:\n' .. selection
+
+    -- Build LLM command using sllm_inline_edit template
+    local llm_cmd = H.state.backend_config.cmd or 'llm'
+    local cmd = llm_cmd .. ' --no-stream -t sllm_inline_edit'
+    if H.state.selected_model then cmd = cmd .. ' -m ' .. vim.fn.shellescape(H.state.selected_model) end
+    cmd = cmd .. ' ' .. vim.fn.shellescape(prompt)
+
+    -- Debug: show command in LLM buffer
+    if Sllm.config.debug then
+      H.ui_show_llm_buffer()
+      H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+      H.ui_append_to_llm_buffer(vim.split(cmd, '\n', { plain = true }))
+      H.ui_append_to_llm_buffer({ '```', '' })
+    end
+
+    -- Start loading indicator
+    H.ui_start_loading_indicator()
+    H.notify('[sllm] editing...', vim.log.levels.INFO)
+
+    -- Collect the output
+    local edit_output = {}
+
+    H.job_start(
+      cmd,
+      function(line) -- stdout handler
+        if line ~= '' then table.insert(edit_output, line) end
+      end,
+      function() end, -- stderr handler (ignored)
+      function(exit_code) -- exit handler
+        H.ui_stop_loading_indicator()
+        if exit_code == 0 and #edit_output > 0 then
+          -- Join all output lines
+          local result = table.concat(edit_output, '\n')
+
+          -- Clean up common LLM formatting
+          result = result:gsub('^```[%w]*\n', '') -- Remove opening code fence
+          result = result:gsub('\n```$', '') -- Remove closing code fence
+          result = vim.trim(result)
+
+          if result ~= '' then
+            local result_lines = vim.split(result, '\n', { plain = true })
+
+            -- Replace the selection with the result
+            -- For line-wise replacement (simplest approach)
+            vim.api.nvim_buf_set_lines(bufnr, start_row - 1, end_row, false, result_lines)
+
+            -- Move cursor to start of replacement
+            vim.api.nvim_win_set_cursor(0, { start_row, 0 })
+
+            H.notify('[sllm] edit applied', vim.log.levels.INFO)
+          else
+            H.notify('[sllm] received empty result', vim.log.levels.WARN)
+          end
+        else
+          H.notify('[sllm] edit failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+        end
+      end
+    )
+  end)
 end
 
 --- Browse chat history, load a conversation, and continue from it.

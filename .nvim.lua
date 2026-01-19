@@ -22,7 +22,7 @@ local function refresh_sllm()
 
   mod.setup({
     window_type = "vertical",
-    debug = false,
+    debug =true,
     pre_hooks = {
       -- { command = "ls", add_to_context = true },
       -- { command = "pwd", add_to_context = true },

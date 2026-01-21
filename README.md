@@ -7,7 +7,7 @@ A lightweight Neovim wrapper for Simon Willison's
 [`llm`](https://github.com/simonw/llm) CLI. Chat with LLMs, run agentic
 workflows, and complete code without leaving your editor.
 
-![sllm.nvim Workflow](./assets/workflow.gif)
+![workflow](https://github.com/user-attachments/assets/6df27581-520e-4027-a072-d65c49e5b598)
 
 ## Features
 

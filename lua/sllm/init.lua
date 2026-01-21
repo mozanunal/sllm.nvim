@@ -95,26 +95,91 @@ H.COMMANDS = {
   { cmd = 'history', desc = 'Browse chat history', action = 'browse_history', category = 'Chat' },
   { cmd = 'cancel', desc = 'Cancel current request', action = 'cancel', category = 'Chat' },
   -- Context
-  { cmd = 'add-file', desc = 'Add current file', action = 'add_file_to_ctx', category = 'Context' },
-  { cmd = 'add-url', desc = 'Add URL content', action = 'add_url_to_ctx', category = 'Context' },
-  { cmd = 'add-selection', desc = 'Add visual selection', action = 'add_sel_to_ctx', category = 'Context' },
-  { cmd = 'add-diagnostics', desc = 'Add buffer diagnostics', action = 'add_diag_to_ctx', category = 'Context' },
-  { cmd = 'add-output', desc = 'Add shell command output', action = 'add_cmd_out_to_ctx', category = 'Context' },
-  { cmd = 'add-tool', desc = 'Add llm tool', action = 'add_tool_to_ctx', category = 'Context' },
-  { cmd = 'add-function', desc = 'Add Python function', action = 'add_func_to_ctx', category = 'Context' },
-  { cmd = 'clear-context', desc = 'Reset all context', action = 'reset_context', category = 'Context' },
+  {
+    cmd = 'add-file',
+    desc = 'Add current file',
+    action = 'add_file_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'add-url',
+    desc = 'Add URL content',
+    action = 'add_url_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'add-selection',
+    desc = 'Add visual selection',
+    action = 'add_sel_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'add-diagnostics',
+    desc = 'Add buffer diagnostics',
+    action = 'add_diag_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'add-output',
+    desc = 'Add shell command output',
+    action = 'add_cmd_out_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'add-tool',
+    desc = 'Add llm tool',
+    action = 'add_tool_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'add-function',
+    desc = 'Add Python function',
+    action = 'add_func_to_ctx',
+    category = 'Context',
+  },
+  {
+    cmd = 'clear-context',
+    desc = 'Reset all context',
+    action = 'reset_context',
+    category = 'Context',
+  },
   -- Model
   { cmd = 'model', desc = 'Switch model', action = 'select_model', category = 'Model' },
   { cmd = 'template', desc = 'Switch template', action = 'select_mode', category = 'Model' },
   { cmd = 'online', desc = 'Toggle online mode', action = 'toggle_online', category = 'Model' },
   { cmd = 'system', desc = 'Set system prompt', action = 'set_system_prompt', category = 'Model' },
   -- Options
-  { cmd = 'options', desc = 'Show model options', action = 'show_model_options', category = 'Options' },
-  { cmd = 'set-option', desc = 'Set model option', action = 'set_model_option', category = 'Options' },
-  { cmd = 'reset-options', desc = 'Reset model options', action = 'reset_model_options', category = 'Options' },
+  {
+    cmd = 'options',
+    desc = 'Show model options',
+    action = 'show_model_options',
+    category = 'Options',
+  },
+  {
+    cmd = 'set-option',
+    desc = 'Set model option',
+    action = 'set_model_option',
+    category = 'Options',
+  },
+  {
+    cmd = 'reset-options',
+    desc = 'Reset model options',
+    action = 'reset_model_options',
+    category = 'Options',
+  },
   -- Template
-  { cmd = 'template-show', desc = 'Show template content', action = 'show_template', category = 'Template' },
-  { cmd = 'template-edit', desc = 'Edit template file', action = 'edit_template', category = 'Template' },
+  {
+    cmd = 'template-show',
+    desc = 'Show template content',
+    action = 'show_template',
+    category = 'Template',
+  },
+  {
+    cmd = 'template-edit',
+    desc = 'Edit template file',
+    action = 'edit_template',
+    category = 'Template',
+  },
   -- Copy
   { cmd = 'copy-code', desc = 'Copy last code block', action = 'copy_last_code_block', category = 'Copy' },
   { cmd = 'copy-code-first', desc = 'Copy first code block', action = 'copy_first_code_block', category = 'Copy' },
@@ -210,8 +275,6 @@ H.state = {
   -- Job state
   job = {
     llm_job_id = nil,
-    stdout_acc = '',
-    in_tool_output = false, -- Track if we're inside tool output block
   },
 }
 
@@ -377,10 +440,9 @@ H.job_fetch_last_conversation_id = function() return H.backend.get_last_conversa
 
 --- Start a new job and stream its output line by line.
 ---
---- Splits on `'\n'` in the stdout buffer, strips ANSI codes, and calls
---- `hook_on_stdout_line` for each line. Handles stderr separately via
---- `hook_on_stderr_line`. Once the job exits, it flushes any leftover,
---- clears state, and calls `hook_on_exit`.
+--- Wraps the command in bash to prefix stdout lines with `--stdout ` and
+--- stderr lines with `--stderr `, then routes them to the appropriate handlers.
+--- Strips ANSI codes before processing.
 ---
 ---@param cmd string|string[]                      Command or command-plus-args for `vim.fn.jobstart`.
 ---@param hook_on_stdout_line fun(line: string)    Callback invoked on each decoded stdout line.
@@ -388,96 +450,55 @@ H.job_fetch_last_conversation_id = function() return H.backend.get_last_conversa
 ---@param hook_on_exit fun(exit_code: integer)     Callback invoked when the job exits.
 ---@return nil
 H.job_start = function(cmd, hook_on_stdout_line, hook_on_stderr_line, hook_on_exit)
-  H.state.job.stdout_acc = ''
-  H.state.job.in_tool_output = false
+  -- Helper to route a line to the appropriate handler based on --stdout/--stderr prefix
+  local function route_line(line)
+    local stripped = H.utils_strip_ansi_codes(line):gsub('\r', '')
+    local stdout_content = stripped:match('^%-%-stdout (.*)$')
+    local stderr_content = stripped:match('^%-%-stderr (.*)$')
 
-  -- Helper to route a line to the appropriate handler with tool output state tracking
-  local function route_line(stripped)
-    -- Token usage always goes to stderr
-    if stripped:match('Token usage:') then
-      H.state.job.in_tool_output = false
-      hook_on_stderr_line(stripped)
-      return
+    if stdout_content then
+      hook_on_stdout_line(stdout_content)
+    elseif stderr_content then
+      hook_on_stderr_line(stderr_content)
+    elseif stripped == '--stdout' then
+      hook_on_stdout_line('')
+    elseif stripped == '--stderr' then
+      hook_on_stderr_line('')
+    else
+      hook_on_stdout_line(stripped)
     end
-
-    -- Tool call header: show it and enter tool output mode
-    if stripped:match('^Tool call:') then
-      H.state.job.in_tool_output = true
-      hook_on_stderr_line(stripped)
-      return
-    end
-
-    -- If we're in tool output mode, check if this line is tool output
-    if H.state.job.in_tool_output then
-      -- Indented lines are tool output - send to stderr (will be filtered)
-      if stripped:match('^%s+') or stripped == '' then
-        hook_on_stderr_line(stripped)
-        return
-      end
-      -- Non-indented, non-empty line: exit tool output mode
-      H.state.job.in_tool_output = false
-    end
-
-    -- Regular output goes to stdout
-    hook_on_stdout_line(stripped)
   end
 
-  -- Merge current environment with unbuffered settings
-  local job_env = vim.fn.environ()
-  job_env.PYTHONUNBUFFERED = '1'
-  job_env.PYTHONDONTWRITEBYTECODE = '1'
+  -- Build shell command that prefixes stdout with --stdout and stderr with --stderr
+  local base_cmd
+  if type(cmd) == 'table' then
+    local escaped_parts = {}
+    for _, part in ipairs(cmd) do
+      table.insert(escaped_parts, vim.fn.shellescape(part))
+    end
+    base_cmd = table.concat(escaped_parts, ' ')
+  else
+    base_cmd = cmd
+  end
+  local shell_cmd = string.format("{ { %s | sed 's/^/--stdout /'; } 2>&1 1>&3 | sed 's/^/--stderr /'; } 3>&1", base_cmd)
 
-  H.state.job.llm_job_id = vim.fn.jobstart(cmd, {
+  H.state.job.llm_job_id = vim.fn.jobstart({ 'bash', '-c', shell_cmd }, {
     stdout_buffered = false,
-    pty = true, -- Use pty=true for proper streaming (stderr merges into stdout)
+    pty = true,
     on_stdout = function(_, data, _)
       if not data then return end
-      for _, chunk in ipairs(data) do
-        if chunk ~= '' then
-          -- 1) Accumulate chunks (normalize carriage returns)
-          local normalized = chunk:gsub('\r', '\n')
-          H.state.job.stdout_acc = H.state.job.stdout_acc .. normalized
-
-          -- 2) Split on '\n' and flush each line
-          local nl_pos = H.state.job.stdout_acc:find('\n', 1, true)
-          while nl_pos do
-            local line = H.state.job.stdout_acc:sub(1, nl_pos - 1)
-            local stripped = H.utils_strip_ansi_codes(line)
-            route_line(stripped)
-            H.state.job.stdout_acc = H.state.job.stdout_acc:sub(nl_pos + 1)
-            nl_pos = H.state.job.stdout_acc:find('\n', 1, true)
-          end
-        end
+      for _, line in ipairs(data) do
+        if line ~= '' then route_line(line) end
       end
     end,
     on_stderr = function(_, data, _)
-      -- With pty=true, stderr is redirected to stdout, so this won't be called much
-      -- But keep it for safety
       if not data then return end
       for _, line in ipairs(data) do
         if line ~= '' then hook_on_stderr_line(H.utils_strip_ansi_codes(line)) end
       end
     end,
     on_exit = function(_, exit_code, _)
-      -- Flush leftover stdout without a trailing '\n'
-      if H.state.job.stdout_acc ~= '' then
-        local stdout_acc = H.state.job.stdout_acc:gsub('\r', '\n')
-        local nl_pos = stdout_acc:find('\n', 1, true)
-        while nl_pos do
-          local line = stdout_acc:sub(1, nl_pos - 1)
-          local stripped = H.utils_strip_ansi_codes(line)
-          route_line(stripped)
-          stdout_acc = stdout_acc:sub(nl_pos + 1)
-          nl_pos = stdout_acc:find('\n', 1, true)
-        end
-        if stdout_acc ~= '' then
-          local stripped = H.utils_strip_ansi_codes(stdout_acc)
-          route_line(stripped)
-        end
-        H.state.job.stdout_acc = ''
-      end
       H.state.job.llm_job_id = nil
-      H.state.job.in_tool_output = false
       hook_on_exit(exit_code)
     end,
   })
@@ -489,7 +510,6 @@ H.job_stop = function()
   if H.state.job.llm_job_id then
     vim.fn.jobstop(H.state.job.llm_job_id)
     H.state.job.llm_job_id = nil
-    H.state.job.stdout_acc = ''
   end
 end
 
@@ -721,7 +741,7 @@ H.ui_render_winbar = function()
   end
 
   -- Debounce non-animation updates
-  H.state.ui.winbar_debounce_timer = vim.loop.new_timer()
+  H.state.ui.winbar_debounce_timer = vim.uv.new_timer()
   H.state.ui.winbar_debounce_timer:start(
     H.WINBAR_DEBOUNCE_MS,
     0,
@@ -767,7 +787,7 @@ H.ui_start_loading_indicator = function()
   H.state.loading.frame_idx = 1
 
   if H.state.loading.timer then H.state.loading.timer:close() end
-  H.state.loading.timer = vim.loop.new_timer()
+  H.state.loading.timer = vim.uv.new_timer()
   H.state.loading.timer:start(
     0,
     150,
@@ -991,8 +1011,6 @@ H.apply_config = function(config)
   H.state.backend_config = { cmd = Sllm.config.llm_cmd }
 
   H.state.continue = not Sllm.config.on_start_new_chat
-  H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model
-    or H.backend.get_default_model(H.state.backend_config)
   H.state.online_enabled = Sllm.config.online_enabled or false
 
   H.notify = Sllm.config.notify_func
@@ -1000,8 +1018,12 @@ H.apply_config = function(config)
   H.input = Sllm.config.input_func
 
   -- Install default templates and set default mode
-  H.install_default_templates()
-  H.state.selected_template = Sllm.config.default_mode or nil
+  vim.schedule(function()
+    H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model
+      or H.backend.get_default_model(H.state.backend_config)
+    H.state.selected_template = Sllm.config.default_mode or nil
+    H.install_default_templates()
+  end)
 end
 
 --- Install default templates by symlinking from plugin directory to llm templates dir.
@@ -1038,15 +1060,15 @@ H.install_default_templates = function()
     -- Only create symlink if destination doesn't exist or is already a symlink to our file
     if vim.fn.filereadable(dst_file) == 0 then
       -- Create symlink with absolute path
-      vim.fn.system({ 'ln', '-s', src_file, dst_file })
-      if vim.v.shell_error == 0 then H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO) end
+      local result = vim.system({ 'ln', '-s', src_file, dst_file }, { text = true }):wait()
+      if result.code == 0 then H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO) end
     elseif vim.fn.getftype(dst_file) == 'link' then
       -- It's a symlink, check if it points to our file
       local target = vim.fn.resolve(dst_file)
       if target ~= src_file then
         -- Different target, remove and recreate
         vim.fn.delete(dst_file)
-        vim.fn.system({ 'ln', '-s', src_file, dst_file })
+        vim.system({ 'ln', '-s', src_file, dst_file }, { text = true }):wait()
       end
     end
     -- If it's a regular file, leave it alone (user customized it)
@@ -1158,9 +1180,15 @@ function Sllm.ask_llm()
           return
         end
 
-        -- Show Tool call headers
+        -- Show Tool call headers formatted as markdown (truncated to 60 chars)
         if H.backend.is_tool_call_header(line) then
-          H.ui_append_to_llm_buffer({ line })
+          local tool_call = line:match('^Tool call:%s*(.+)$')
+          if tool_call then
+            if #tool_call > 60 then tool_call = tool_call:sub(1, 57) .. '...' end
+            H.ui_append_to_llm_buffer({ '🔧 Tool: `' .. tool_call .. '`' })
+          else
+            H.ui_append_to_llm_buffer({ line })
+          end
           return
         end
 
@@ -1787,11 +1815,6 @@ end
 --- Browse chat history, load a conversation, and continue from it.
 ---@return nil
 function Sllm.browse_history()
-  if not H.backend.supports_history() then
-    H.notify('[sllm] current backend does not support history.', vim.log.levels.WARN)
-    return
-  end
-
   local max_entries = Sllm.config.history_max_entries or 1000
   local entries = H.backend.get_history(H.state.backend_config, { count = max_entries })
 

@@ -3,10 +3,45 @@
 --- Wraps Simon Willison's llm CLI tool.
 
 -- Module definition ==========================================================
-local Llm = { name = 'llm' }
+local Backend = { name = 'llm' }
 local H = {}
 
 -- Helper data ================================================================
+
+-- Treat these extensions as attachments (images, documents, archives, media, etc.).
+-- Using a set avoids re-allocating a list and doing linear scans on every call.
+H.ATTACHMENT_EXTENSIONS = {
+  png = true,
+  jpg = true,
+  jpeg = true,
+  gif = true,
+  bmp = true,
+  webp = true,
+  svg = true,
+  ico = true,
+  tiff = true,
+  tif = true,
+  pdf = true,
+  doc = true,
+  docx = true,
+  xls = true,
+  xlsx = true,
+  ppt = true,
+  pptx = true,
+  mp3 = true,
+  mp4 = true,
+  wav = true,
+  avi = true,
+  mov = true,
+  mkv = true,
+  flac = true,
+  ogg = true,
+  zip = true,
+  tar = true,
+  gz = true,
+  rar = true,
+  ['7z'] = true,
+}
 
 -- Parse JSON string safely with error handling.
 H.parse_json = function(json_str)
@@ -20,55 +55,19 @@ end
 
 -- Get the templates directory path.
 H.get_templates_path = function(llm_cmd)
-  local output = vim.fn.system({ llm_cmd, 'templates', 'path' })
-  local path = vim.trim(output)
+  local result = vim.system({ llm_cmd, 'templates', 'path' }, { text = true }):wait()
+  local path = vim.trim(result.stdout or '')
   if path ~= '' and path:sub(1, 5) ~= 'Error' then return path end
   return nil
 end
 
 -- Check if a file should be treated as an attachment (image, PDF, etc.)
 H.is_attachment = function(filename)
-  local attachment_extensions = {
-    'png',
-    'jpg',
-    'jpeg',
-    'gif',
-    'bmp',
-    'webp',
-    'svg',
-    'ico',
-    'tiff',
-    'tif',
-    'pdf',
-    'doc',
-    'docx',
-    'xls',
-    'xlsx',
-    'ppt',
-    'pptx',
-    'mp3',
-    'mp4',
-    'wav',
-    'avi',
-    'mov',
-    'mkv',
-    'flac',
-    'ogg',
-    'zip',
-    'tar',
-    'gz',
-    'rar',
-    '7z',
-  }
-
   local ext = filename:match('%.([^%.]+)$')
-  if ext then
-    ext = ext:lower()
-    for _, attach_ext in ipairs(attachment_extensions) do
-      if ext == attach_ext then return true end
-    end
-  end
-  return false
+  if not ext then return false end
+
+  ext = ext:lower()
+  return H.ATTACHMENT_EXTENSIONS[ext] == true
 end
 
 -- Public API =================================================================
@@ -76,9 +75,10 @@ end
 ---Get list of available models from llm CLI.
 ---@param config table Backend configuration with cmd field.
 ---@return string[] List of model names.
-Llm.get_models = function(config)
+Backend.get_models = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local models = vim.fn.systemlist({ llm_cmd, 'models' })
+  local result = vim.system({ llm_cmd, 'models' }, { text = true }):wait()
+  local models = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
   local only_models = {}
   for _, line in ipairs(models) do
     local model = line:match('^.-:%s*([^(%s]+)')
@@ -90,9 +90,10 @@ end
 ---Get the default model name from llm CLI.
 ---@param config table Backend configuration with cmd field.
 ---@return string Default model name.
-Llm.get_default_model = function(config)
+Backend.get_default_model = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local output = vim.fn.system({ llm_cmd, 'models', 'default' })
+  local result = vim.system({ llm_cmd, 'models', 'default' }, { text = true }):wait()
+  local output = result.stdout or ''
   return output:match('(.-)%s*$')
 end
 
@@ -100,17 +101,19 @@ end
 ---@param config table Backend configuration with cmd field.
 ---@param model string Model name.
 ---@return string[] List of options description lines.
-Llm.get_model_options = function(config, model)
+Backend.get_model_options = function(config, model)
   local llm_cmd = config.cmd or 'llm'
-  return vim.fn.systemlist({ llm_cmd, 'models', '--options', '-m', model })
+  local result = vim.system({ llm_cmd, 'models', '--options', '-m', model }, { text = true }):wait()
+  return vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
 end
 
 ---Get list of available tools from llm CLI.
 ---@param config table Backend configuration with cmd field.
 ---@return string[] List of tool names.
-Llm.get_tools = function(config)
+Backend.get_tools = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local json_string = vim.fn.system({ llm_cmd, 'tools', 'list', '--json' })
+  local result = vim.system({ llm_cmd, 'tools', 'list', '--json' }, { text = true }):wait()
+  local json_string = result.stdout or ''
   local spec = H.parse_json(json_string)
   local names = {}
   if spec and spec.tools then
@@ -141,7 +144,7 @@ end
 ---@param config table Backend configuration with cmd field.
 ---@param options LlmBuildCommandOptions Command options.
 ---@return string[] The assembled shell command.
-Llm.build_command = function(config, options)
+Backend.build_command = function(config, options)
   local llm_cmd = config.cmd or 'llm'
   local cmd = { llm_cmd }
 
@@ -221,23 +224,11 @@ Llm.build_command = function(config, options)
   return cmd
 end
 
----LLM CLI backend supports tool calling.
----@return boolean True
-Llm.supports_tools = function() return true end
-
----LLM CLI supports history.
----@return boolean True.
-Llm.supports_history = function() return true end
-
----LLM CLI supports templates.
----@return boolean True.
-Llm.supports_templates = function() return true end
-
 ---Fetch history entries from llm logs.
 ---@param config table Backend configuration with cmd field.
 ---@param options table? History options.
 ---@return table[]? List of history entries or nil.
-Llm.get_history = function(config, options)
+Backend.get_history = function(config, options)
   options = options or {}
   local llm_cmd = config.cmd or 'llm'
   local count = options.count or 20
@@ -252,39 +243,8 @@ Llm.get_history = function(config, options)
     table.insert(cmd, options.model)
   end
 
-  local output = vim.fn.system(cmd)
-  local parsed = H.parse_json(output)
-
-  if not parsed then return nil end
-
-  local entries = {}
-  for _, entry in ipairs(parsed) do
-    local usage = nil
-    if entry.response_json and type(entry.response_json) == 'table' then usage = entry.response_json.usage end
-
-    table.insert(entries, {
-      id = entry.id or '',
-      conversation_id = entry.conversation_id or '',
-      model = entry.model or '',
-      prompt = entry.prompt or '',
-      response = entry.response or '',
-      system = entry.system,
-      timestamp = entry.datetime_utc or '',
-      usage = usage,
-    })
-  end
-
-  return entries
-end
-
----Fetch all logs for a specific conversation ID.
----@param config table Backend configuration with cmd field.
----@param conversation_id string Conversation ID to fetch.
----@return table[]? List of conversation entries or nil.
-Llm.get_session = function(config, conversation_id)
-  local llm_cmd = config.cmd or 'llm'
-  local cmd = { llm_cmd, 'logs', 'list', '--json', '--cid', conversation_id }
-  local output = vim.fn.system(cmd)
+  local result = vim.system(cmd, { text = true }):wait()
+  local output = result.stdout or ''
   local parsed = H.parse_json(output)
 
   if not parsed then return nil end
@@ -312,10 +272,11 @@ end
 ---Fetch the last conversation ID.
 ---@param config table Backend configuration with cmd field.
 ---@return string? conversation_id or nil.
-Llm.get_last_conversation_id = function(config)
+Backend.get_last_conversation_id = function(config)
   local llm_cmd = config.cmd or 'llm'
   local cmd = { llm_cmd, 'logs', 'list', '--json', '-n', '1' }
-  local output = vim.fn.system(cmd)
+  local result = vim.system(cmd, { text = true }):wait()
+  local output = result.stdout or ''
   local parsed = H.parse_json(output)
   if not parsed or #parsed == 0 then return nil end
   return parsed[1].conversation_id
@@ -324,9 +285,10 @@ end
 ---Get list of available templates from llm CLI.
 ---@param config table Backend configuration with cmd field.
 ---@return string[] List of template names.
-Llm.get_templates = function(config)
+Backend.get_templates = function(config)
   local llm_cmd = config.cmd or 'llm'
-  local output = vim.fn.systemlist({ llm_cmd, 'templates', 'list' })
+  local result = vim.system({ llm_cmd, 'templates', 'list' }, { text = true }):wait()
+  local output = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
 
   local templates = {}
   for _, line in ipairs(output) do
@@ -343,9 +305,10 @@ end
 ---@param config table Backend configuration with cmd field.
 ---@param template_name string Name of the template.
 ---@return table? Template data (yaml content) or nil.
-Llm.get_template = function(config, template_name)
+Backend.get_template = function(config, template_name)
   local llm_cmd = config.cmd or 'llm'
-  local output = vim.fn.system({ llm_cmd, 'templates', 'show', template_name })
+  local result = vim.system({ llm_cmd, 'templates', 'show', template_name }, { text = true }):wait()
+  local output = result.stdout or ''
 
   if output == '' then return nil end
 
@@ -358,7 +321,7 @@ end
 ---Get the templates directory path.
 ---@param config table Backend configuration with cmd field.
 ---@return string? Path to templates directory or nil.
-Llm.get_templates_path = function(config)
+Backend.get_templates_path = function(config)
   local llm_cmd = config.cmd or 'llm'
   return H.get_templates_path(llm_cmd)
 end
@@ -367,7 +330,7 @@ end
 ---@param config table Backend configuration with cmd field.
 ---@param template_name string Name of the template to edit.
 ---@return boolean Success status.
-Llm.edit_template = function(config, template_name)
+Backend.edit_template = function(config, template_name)
   local llm_cmd = config.cmd or 'llm'
   local templates_path = H.get_templates_path(llm_cmd)
   if not templates_path then return false end
@@ -384,7 +347,7 @@ end
 ---Parse token usage and cost from a stderr line.
 ---@param line string The stderr line to parse.
 ---@return table|nil A table with input, output, and cost (optional), or nil if not found.
-Llm.parse_token_usage = function(line)
+Backend.parse_token_usage = function(line)
   local input, output = line:match('Token usage:%s*([%d,]+)%s+input,%s*([%d,]+)%s+output')
   if not input or not output then return nil end
 
@@ -402,11 +365,11 @@ end
 ---Detect if a line is a Tool call header.
 ---@param line string The line to check.
 ---@return boolean True if the line is a Tool call header.
-Llm.is_tool_call_header = function(line) return line:match('^Tool call:') ~= nil end
+Backend.is_tool_call_header = function(line) return line:match('^Tool call:') ~= nil end
 
 ---Detect if a line is part of tool call output (indented lines after header).
 ---@param line string The line to check.
 ---@return boolean True if the line appears to be tool output.
-Llm.is_tool_call_output = function(line) return line:match('^%s+') ~= nil end
+Backend.is_tool_call_output = function(line) return line:match('^%s+') ~= nil end
 
-return Llm
+return Backend

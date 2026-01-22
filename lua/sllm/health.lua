@@ -27,22 +27,23 @@ H.check_llm_cli = function(health)
     health.ok('llm CLI is installed')
 
     -- Try to get llm version
-    local version_output = vim.fn.system('llm --version 2>&1')
-    if vim.v.shell_error == 0 then health.info('Version: ' .. vim.trim(version_output)) end
+    local result = vim.system({ 'bash', '-c', 'llm --version 2>&1' }, { text = true }):wait()
+    if result.code == 0 then health.info('Version: ' .. vim.trim(result.stdout or '')) end
     return true
   end
 end
 
 H.check_llm_models = function(health)
   -- Check if any models are installed
-  local models_output = vim.fn.system('llm models 2>&1')
-  if vim.v.shell_error ~= 0 then
+  local result = vim.system({ 'bash', '-c', 'llm models 2>&1' }, { text = true }):wait()
+  if result.code ~= 0 then
     health.warn('Could not list llm models', {
       'Run: llm models',
     })
     return
   end
 
+  local models_output = result.stdout or ''
   local model_lines = vim.split(models_output, '\n', { plain = true, trimempty = true })
   local model_count = 0
   for _, line in ipairs(model_lines) do
@@ -62,8 +63,9 @@ end
 
 H.check_api_keys = function(health)
   -- Try to get default model to verify setup
-  local default_model = vim.fn.system('llm models default 2>&1')
-  if vim.v.shell_error == 0 and default_model ~= '' then
+  local result = vim.system({ 'bash', '-c', 'llm models default 2>&1' }, { text = true }):wait()
+  local default_model = result.stdout or ''
+  if result.code == 0 and default_model ~= '' then
     health.ok('Default model configured: ' .. vim.trim(default_model))
   else
     health.info('No default model set', {

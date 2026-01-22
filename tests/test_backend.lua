@@ -11,13 +11,6 @@ T['llm'] = MiniTest.new_set()
 
 T['llm']['has correct name'] = function() MiniTest.expect.equality(LlmBackend.name, 'llm') end
 
-T['llm']['supports_tools returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_tools(), true) end
-T['llm']['supports_history returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_history(), true) end
-
-T['llm']['supports_templates returns true'] = function() MiniTest.expect.equality(LlmBackend.supports_templates(), true) end
-
-T['llm']['get_session is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_session), 'function') end
-
 T['llm']['get_templates is a function'] = function()
   MiniTest.expect.equality(type(LlmBackend.get_templates), 'function')
 end

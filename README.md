@@ -69,6 +69,7 @@ Press `<leader>sx` to open the slash command picker, or see [doc/slash_commands.
 
 ## Why sllm.nvim
 
+- **Super easy customizable agentic modes** — Modes are just YAML files, tools are just Python functions
 - **Explicit context control** — You decide what the LLM sees
 - **Native llm integration** — Uses llm's templates, tools, and history
 - **Async streaming** — Responses stream in real-time with loading indicator

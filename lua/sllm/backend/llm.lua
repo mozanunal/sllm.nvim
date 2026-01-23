@@ -161,80 +161,63 @@ end
 ---@return string[] The assembled shell command.
 H.build_command = function(options)
   local cmd = { H.config.cmd }
-
   if not options.prompt then error('prompt is required') end
 
-  -- Add tool flags unless raw mode is requested
-  if not options.raw then
-    table.insert(cmd, '--td')
-    table.insert(cmd, '--cl')
-    table.insert(cmd, tostring(options.chain_limit or 100))
+  -- Helper to add flag with optional value(s)
+  local function add(flag, ...)
+    table.insert(cmd, flag)
+    for _, v in ipairs({ ... }) do
+      table.insert(cmd, tostring(v))
+    end
   end
 
-  if options.no_stream then table.insert(cmd, '--no-stream') end
+  -- Tool flags unless raw mode
+  if not options.raw then
+    add('--td')
+    add('--cl', options.chain_limit or 100)
+  end
+
+  if options.no_stream then add('--no-stream') end
 
   if type(options.continue) == 'string' then
-    table.insert(cmd, '--cid')
-    table.insert(cmd, options.continue)
+    add('--cid', options.continue)
   elseif options.continue then
-    table.insert(cmd, '-c')
+    add('-c')
   end
 
-  if options.show_usage then table.insert(cmd, '-u') end
-  if options.model then
-    table.insert(cmd, '-m')
-    table.insert(cmd, options.model)
-  end
+  if options.show_usage then add('-u') end
+  if options.model then add('-m', options.model) end
 
   if options.ctx_files then
     for _, filename in ipairs(options.ctx_files) do
-      local flag = H.is_attachment(filename) and '-a' or '-f'
-      table.insert(cmd, flag)
-      table.insert(cmd, filename)
+      add(H.is_attachment(filename) and '-a' or '-f', filename)
     end
   end
 
   if options.tools then
     for _, tool_name in ipairs(options.tools) do
-      table.insert(cmd, '-T')
-      table.insert(cmd, tool_name)
+      add('-T', tool_name)
     end
   end
 
   if options.functions then
     for _, func_str in ipairs(options.functions) do
-      table.insert(cmd, '--functions')
-      table.insert(cmd, func_str)
+      add('--functions', func_str)
     end
   end
 
-  if options.online then
-    table.insert(cmd, '-o')
-    table.insert(cmd, 'online')
-    table.insert(cmd, '1')
-  end
-  if options.system_prompt then
-    table.insert(cmd, '-s')
-    table.insert(cmd, options.system_prompt)
-  end
+  if options.online then add('-o', 'online', '1') end
+  if options.system_prompt then add('-s', options.system_prompt) end
 
   if options.model_options then
     for key, value in pairs(options.model_options) do
-      table.insert(cmd, '-o')
-      table.insert(cmd, key)
-      table.insert(cmd, tostring(value))
+      add('-o', key, value)
     end
   end
 
-  if options.template then
-    table.insert(cmd, '-t')
-    table.insert(cmd, options.template)
-  end
+  if options.template then add('-t', options.template) end
 
-  -- Use -- to end options parsing (prompt may start with dashes)
-  table.insert(cmd, '--')
-  table.insert(cmd, options.prompt)
-
+  add('--', options.prompt)
   return cmd
 end
 

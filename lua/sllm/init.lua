@@ -195,14 +195,6 @@ for _, cmd_def in ipairs(H.COMMANDS) do
   H.COMMANDS_BY_NAME[cmd_def.cmd] = cmd_def
 end
 
-H.PROMPT_TEMPLATE = [[
-${user_input}
-
-${snippets}
-
-${files}
-]]
-
 -- Lazy-loaded picker function (avoids loading mini.pick at module require time)
 H.lazy_pick_func = function(...)
   local ok, mini_pick = pcall(require, 'mini.pick')
@@ -365,12 +357,13 @@ H.utils_get_llm_win = function()
   return nil
 end
 
---- Simple template renderer: replaces `${key}` with `env[key]`.
----@param tmpl string             Template containing `${var}` placeholders.
----@param env table<string,any>   Lookup table for replacements.
----@return string  Rendered string.
-H.utils_render = function(tmpl, env)
-  return (tmpl:gsub('%${(.-)}', function(key) return tostring(env[key] or '') end))
+--- Strip markdown code fences from LLM output.
+---@param text string  Raw LLM output text.
+---@return string  Cleaned text without code fences.
+H.utils_strip_code_fences = function(text)
+  text = text:gsub('^```[%w]*\n', '') -- Remove opening code fence
+  text = text:gsub('\n```$', '') -- Remove closing code fence
+  return vim.trim(text)
 end
 
 --- Extract all code blocks from buffer lines.
@@ -450,79 +443,54 @@ H.context_reset = function()
   }
 end
 
----Add a file path to the fragments list, if not already present.
----@param filepath string  Path to a fragment file.
----@return nil
-H.context_add_fragment = function(filepath)
-  local is_in_context = vim.tbl_contains(H.state.context.fragments, filepath)
-  if not is_in_context then table.insert(H.state.context.fragments, filepath) end
+-- Add item to list if not already present.
+H.context_add_unique = function(list, item)
+  if not vim.tbl_contains(list, item) then table.insert(list, item) end
 end
 
+---Add a file path to the fragments list, if not already present.
+H.context_add_fragment = function(filepath) H.context_add_unique(H.state.context.fragments, filepath) end
+
 ---Add a snippet entry to the context.
----@param text string       Snippet text (will be trimmed).
----@param filepath string   Source file path for the snippet.
----@param filetype string   Filetype/language of the snippet.
----@return nil
 H.context_add_snip = function(text, filepath, filetype)
-  table.insert(H.state.context.snips, {
-    filepath = filepath,
-    filetype = filetype,
-    text = vim.trim(text),
-  })
+  table.insert(H.state.context.snips, { filepath = filepath, filetype = filetype, text = vim.trim(text) })
 end
 
 ---Add a tool name to the tools list, if not already present.
----@param tool_name string  Name of the tool.
----@return nil
-H.context_add_tool = function(tool_name)
-  local is_in_context = vim.tbl_contains(H.state.context.tools, tool_name)
-  if not is_in_context then table.insert(H.state.context.tools, tool_name) end
-end
+H.context_add_tool = function(tool_name) H.context_add_unique(H.state.context.tools, tool_name) end
 
 ---Add a function representation to the functions list, if not already present.
----@param func_str string   Function source or signature as a string.
----@return nil
-H.context_add_function = function(func_str)
-  local is_in_context = vim.tbl_contains(H.state.context.functions, func_str)
-  if not is_in_context then table.insert(H.state.context.functions, func_str) end
-end
+H.context_add_function = function(func_str) H.context_add_unique(H.state.context.functions, func_str) end
 
 ---Assemble the full prompt UI, including file list and code snippets.
 ---@param user_input string?  Optional user input (empty string if `nil`).
 ---@return string             Trimmed prompt text to send to the LLM.
 H.context_render_prompt_ui = function(user_input)
-  -- Assemble files section
-  local files_list = ''
+  local parts = {}
+
+  -- Files section
   if #H.state.context.fragments > 0 then
-    files_list = '\n### Fragments\n'
+    table.insert(parts, '### Fragments')
     for _, f in ipairs(H.state.context.fragments) do
-      files_list = files_list .. H.utils_render('- ${filepath}', { filepath = H.utils_get_relpath(f) }) .. '\n'
+      table.insert(parts, '- ' .. (H.utils_get_relpath(f) or f))
     end
-    files_list = files_list .. '\n'
+    table.insert(parts, '')
   end
 
-  -- Assemble snippets section
-  local snip_list = ''
+  -- Snippets section
   if #H.state.context.snips > 0 then
-    snip_list = '\n### Snippets\n'
+    table.insert(parts, '### Snippets')
     for _, snip in ipairs(H.state.context.snips) do
-      snip_list = snip_list
-        .. H.utils_render('From ${filepath}:\n```' .. snip.filetype .. '\n${text}\n```', snip)
-        .. '\n\n'
+      table.insert(parts, string.format('From %s:\n```%s\n%s\n```', snip.filepath, snip.filetype, snip.text))
     end
+    table.insert(parts, '')
   end
 
-  -- Trim sections
-  files_list = vim.trim(files_list)
-  snip_list = vim.trim(snip_list)
-
-  -- Render prompt using template
-  local prompt = H.utils_render(H.PROMPT_TEMPLATE, {
-    user_input = user_input or '',
-    snippets = snip_list,
-    files = files_list,
-  })
-  return vim.trim(prompt)
+  -- Combine with user input
+  local context = table.concat(parts, '\n')
+  local input = user_input or ''
+  if context ~= '' then return vim.trim(input .. '\n\n' .. context) end
+  return vim.trim(input)
 end
 
 -- History helpers ---------------------------------------------------------------
@@ -1491,13 +1459,7 @@ H.complete_code_normal = function()
     on_exit = function(exit_code)
       H.ui_stop_loading_indicator()
       if exit_code == 0 and #completion_output > 0 then
-        -- Join all output lines
-        local completion = table.concat(completion_output, '\n')
-
-        -- Clean up common LLM formatting
-        completion = completion:gsub('^```[%w]*\n', '') -- Remove opening code fence
-        completion = completion:gsub('\n```$', '') -- Remove closing code fence
-        completion = vim.trim(completion)
+        local completion = H.utils_strip_code_fences(table.concat(completion_output, '\n'))
 
         if completion ~= '' then
           -- Insert the completion at cursor position
@@ -1600,13 +1562,7 @@ H.complete_code_visual = function()
       on_exit = function(exit_code)
         H.ui_stop_loading_indicator()
         if exit_code == 0 and #edit_output > 0 then
-          -- Join all output lines
-          local result = table.concat(edit_output, '\n')
-
-          -- Clean up common LLM formatting
-          result = result:gsub('^```[%w]*\n', '') -- Remove opening code fence
-          result = result:gsub('\n```$', '') -- Remove closing code fence
-          result = vim.trim(result)
+          local result = H.utils_strip_code_fences(table.concat(edit_output, '\n'))
 
           if result ~= '' then
             local result_lines = vim.split(result, '\n', { plain = true })

@@ -543,6 +543,16 @@ H.history_format_conversation_entry = function(entry)
 end
 
 -- UI helpers --------------------------------------------------------------------
+--- Stop and close a uv timer, returning nil for convenience.
+---@param timer uv_timer_t|nil
+---@return nil
+H.ui_stop_timer = function(timer)
+  if not timer then return nil end
+  timer:stop()
+  timer:close()
+  return nil
+end
+
 --- Ensure the LLM buffer exists (hidden, markdown) and return its handle.
 ---@return integer bufnr  Always‐valid buffer handle.
 H.ui_ensure_llm_buffer = function()
@@ -621,11 +631,7 @@ end
 ---@return nil
 H.ui_render_winbar = function()
   -- Cancel pending debounce timer
-  if H.state.ui.winbar_debounce_timer then
-    H.state.ui.winbar_debounce_timer:stop()
-    H.state.ui.winbar_debounce_timer:close()
-    H.state.ui.winbar_debounce_timer = nil
-  end
+  H.state.ui.winbar_debounce_timer = H.ui_stop_timer(H.state.ui.winbar_debounce_timer)
 
   -- During loading animation, render immediately (already throttled by animation timer)
   if H.state.loading.active then
@@ -679,16 +685,14 @@ H.ui_start_loading_indicator = function()
   H.state.loading.active = true
   H.state.loading.frame_idx = 1
 
-  if H.state.loading.timer then H.state.loading.timer:close() end
+  H.state.loading.timer = H.ui_stop_timer(H.state.loading.timer)
   H.state.loading.timer = vim.uv.new_timer()
   H.state.loading.timer:start(
     0,
     150,
     vim.schedule_wrap(function()
       if not H.state.loading.active then
-        H.state.loading.timer:stop()
-        H.state.loading.timer:close()
-        H.state.loading.timer = nil
+        H.state.loading.timer = H.ui_stop_timer(H.state.loading.timer)
         return
       end
       H.state.loading.frame_idx = (H.state.loading.frame_idx % #H.ANIMATION_FRAMES) + 1
@@ -702,11 +706,7 @@ end
 H.ui_stop_loading_indicator = function()
   if not H.state.loading.active then return end
   H.state.loading.active = false
-  if H.state.loading.timer then
-    H.state.loading.timer:stop()
-    H.state.loading.timer:close()
-    H.state.loading.timer = nil
-  end
+  H.state.loading.timer = H.ui_stop_timer(H.state.loading.timer)
   H.ui_render_winbar()
 end
 
@@ -1458,47 +1458,51 @@ H.complete_code_normal = function()
     end,
     on_exit = function(exit_code)
       H.ui_stop_loading_indicator()
-      if exit_code == 0 and #completion_output > 0 then
-        local completion = H.utils_strip_code_fences(table.concat(completion_output, '\n'))
-
-        if completion ~= '' then
-          -- Insert the completion at cursor position
-          local completion_lines = vim.split(completion, '\n', { plain = true })
-
-          -- Get the current line and rebuild it with the completion
-          local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
-          local line_before = current_line:sub(1, col)
-          local line_after = current_line:sub(col + 1)
-
-          -- Build the new lines to insert
-          local new_lines = {}
-          if #completion_lines == 1 then
-            -- Single line completion
-            table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
-          else
-            -- Multi-line completion
-            table.insert(new_lines, line_before .. completion_lines[1])
-            for i = 2, #completion_lines - 1 do
-              table.insert(new_lines, completion_lines[i])
-            end
-            table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
-          end
-
-          -- Replace the current line with new lines
-          vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
-
-          -- Move cursor to end of completion
-          local new_row = row + #new_lines - 1
-          local new_col = #new_lines[#new_lines] - #line_after
-          vim.api.nvim_win_set_cursor(0, { new_row, new_col })
-
-          H.notify('[sllm] completion inserted', vim.log.levels.INFO)
-        else
-          H.notify('[sllm] received empty completion', vim.log.levels.WARN)
-        end
-      else
+      if exit_code ~= 0 then
         H.notify('[sllm] completion failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+        return
       end
+
+      if #completion_output == 0 then
+        H.notify('[sllm] received empty completion', vim.log.levels.WARN)
+        return
+      end
+
+      local completion = H.utils_strip_code_fences(table.concat(completion_output, '\n'))
+      if completion == '' then
+        H.notify('[sllm] received empty completion', vim.log.levels.WARN)
+        return
+      end
+
+      -- Insert the completion at cursor position
+      local completion_lines = vim.split(completion, '\n', { plain = true })
+
+      -- Get the current line and rebuild it with the completion
+      local current_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+      local line_before = current_line:sub(1, col)
+      local line_after = current_line:sub(col + 1)
+
+      -- Build the new lines to insert
+      local new_lines = {}
+      if #completion_lines == 1 then
+        table.insert(new_lines, line_before .. completion_lines[1] .. line_after)
+      else
+        table.insert(new_lines, line_before .. completion_lines[1])
+        for i = 2, #completion_lines - 1 do
+          table.insert(new_lines, completion_lines[i])
+        end
+        table.insert(new_lines, completion_lines[#completion_lines] .. line_after)
+      end
+
+      -- Replace the current line with new lines
+      vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, new_lines)
+
+      -- Move cursor to end of completion
+      local new_row = row + #new_lines - 1
+      local new_col = #new_lines[#new_lines] - #line_after
+      vim.api.nvim_win_set_cursor(0, { new_row, new_col })
+
+      H.notify('[sllm] completion inserted', vim.log.levels.INFO)
     end,
   })
 end
@@ -1561,26 +1565,31 @@ H.complete_code_visual = function()
       end,
       on_exit = function(exit_code)
         H.ui_stop_loading_indicator()
-        if exit_code == 0 and #edit_output > 0 then
-          local result = H.utils_strip_code_fences(table.concat(edit_output, '\n'))
-
-          if result ~= '' then
-            local result_lines = vim.split(result, '\n', { plain = true })
-
-            -- Replace the selection with the result
-            -- For line-wise replacement (simplest approach)
-            vim.api.nvim_buf_set_lines(bufnr, start_row - 1, end_row, false, result_lines)
-
-            -- Move cursor to start of replacement
-            vim.api.nvim_win_set_cursor(0, { start_row, 0 })
-
-            H.notify('[sllm] edit applied', vim.log.levels.INFO)
-          else
-            H.notify('[sllm] received empty result', vim.log.levels.WARN)
-          end
-        else
+        if exit_code ~= 0 then
           H.notify('[sllm] edit failed (exit code: ' .. exit_code .. ')', vim.log.levels.ERROR)
+          return
         end
+
+        if #edit_output == 0 then
+          H.notify('[sllm] received empty result', vim.log.levels.WARN)
+          return
+        end
+
+        local result = H.utils_strip_code_fences(table.concat(edit_output, '\n'))
+        if result == '' then
+          H.notify('[sllm] received empty result', vim.log.levels.WARN)
+          return
+        end
+
+        local result_lines = vim.split(result, '\n', { plain = true })
+
+        -- Replace the selection with the result
+        vim.api.nvim_buf_set_lines(bufnr, start_row - 1, end_row, false, result_lines)
+
+        -- Move cursor to start of replacement
+        vim.api.nvim_win_set_cursor(0, { start_row, 0 })
+
+        H.notify('[sllm] edit applied', vim.log.levels.INFO)
       end,
     })
   end)

@@ -59,6 +59,15 @@ H.parse_json = function(json_str)
   return ok and result or nil
 end
 
+-- Run a vim.system call and schedule the handler on the main loop.
+---@param cmd string[]
+---@param handler fun(result: vim.SystemCompleted)
+H.system_async = function(cmd, handler)
+  vim.system(cmd, { text = true }, function(result)
+    vim.schedule(function() handler(result) end)
+  end)
+end
+
 -- Validate templates path result.
 H.is_valid_templates_path = function(path) return path ~= '' and path:sub(1, 5) ~= 'Error' end
 
@@ -71,9 +80,9 @@ end
 
 -- Get the templates directory path (async).
 H.get_templates_path_async = function(callback)
-  vim.system({ H.config.cmd, 'templates', 'path' }, { text = true }, function(result)
+  H.system_async({ H.config.cmd, 'templates', 'path' }, function(result)
     local path = vim.trim(result.stdout or '')
-    vim.schedule(function() callback(H.is_valid_templates_path(path) and path or nil) end)
+    callback(H.is_valid_templates_path(path) and path or nil)
   end)
 end
 
@@ -251,13 +260,11 @@ Backend.setup_async = function(options)
   end
 
   -- Fetch default model asynchronously
-  vim.system({ H.config.cmd, 'models', 'default' }, { text = true }, function(result)
+  H.system_async({ H.config.cmd, 'models', 'default' }, function(result)
     local output = result.stdout or ''
     default_model = output:match('(.-)%s*$')
-    vim.schedule(function()
-      model_done = true
-      check_ready()
-    end)
+    model_done = true
+    check_ready()
   end)
 
   -- Install templates if path provided
@@ -413,16 +420,14 @@ Backend.get_command = function(options) return H.build_command(options) end
 ---@param callback fun(models: string[]) Callback with list of model names.
 ---@return nil
 Backend.get_models_async = function(callback)
-  vim.system({ H.config.cmd, 'models' }, { text = true }, function(result)
-    vim.schedule(function()
-      local models = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
-      local only_models = {}
-      for _, line in ipairs(models) do
-        local model = line:match('^.-:%s*([^(%s]+)')
-        if model then table.insert(only_models, model) end
-      end
-      callback(only_models)
-    end)
+  H.system_async({ H.config.cmd, 'models' }, function(result)
+    local models = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
+    local only_models = {}
+    for _, line in ipairs(models) do
+      local model = line:match('^.-:%s*([^(%s]+)')
+      if model then table.insert(only_models, model) end
+    end
+    callback(only_models)
   end)
 end
 
@@ -431,27 +436,26 @@ end
 ---@param callback fun(options: string[]) Callback with list of options description lines.
 ---@return nil
 Backend.get_model_options_async = function(model, callback)
-  vim.system({ H.config.cmd, 'models', '--options', '-m', model }, { text = true }, function(result)
-    vim.schedule(function() callback(vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })) end)
-  end)
+  H.system_async(
+    { H.config.cmd, 'models', '--options', '-m', model },
+    function(result) callback(vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })) end
+  )
 end
 
 ---Get list of available tools from llm CLI (async).
 ---@param callback fun(tools: string[]) Callback with list of tool names.
 ---@return nil
 Backend.get_tools_async = function(callback)
-  vim.system({ H.config.cmd, 'tools', 'list', '--json' }, { text = true }, function(result)
-    vim.schedule(function()
-      local json_string = result.stdout or ''
-      local spec = H.parse_json(json_string)
-      local names = {}
-      if spec and spec.tools then
-        for _, tool in ipairs(spec.tools) do
-          table.insert(names, tool.name)
-        end
+  H.system_async({ H.config.cmd, 'tools', 'list', '--json' }, function(result)
+    local json_string = result.stdout or ''
+    local spec = H.parse_json(json_string)
+    local names = {}
+    if spec and spec.tools then
+      for _, tool in ipairs(spec.tools) do
+        table.insert(names, tool.name)
       end
-      callback(names)
-    end)
+    end
+    callback(names)
   end)
 end
 
@@ -473,53 +477,49 @@ Backend.get_history_async = function(options, callback)
     table.insert(cmd, options.model)
   end
 
-  vim.system(cmd, { text = true }, function(result)
-    vim.schedule(function()
-      local output = result.stdout or ''
-      local parsed = H.parse_json(output)
+  H.system_async(cmd, function(result)
+    local output = result.stdout or ''
+    local parsed = H.parse_json(output)
 
-      if not parsed then
-        callback(nil)
-        return
-      end
+    if not parsed then
+      callback(nil)
+      return
+    end
 
-      local entries = {}
-      for _, entry in ipairs(parsed) do
-        local usage = nil
-        if entry.response_json and type(entry.response_json) == 'table' then usage = entry.response_json.usage end
+    local entries = {}
+    for _, entry in ipairs(parsed) do
+      local usage = nil
+      if entry.response_json and type(entry.response_json) == 'table' then usage = entry.response_json.usage end
 
-        table.insert(entries, {
-          id = entry.id or '',
-          conversation_id = entry.conversation_id or '',
-          model = entry.model or '',
-          prompt = entry.prompt or '',
-          response = entry.response or '',
-          system = entry.system,
-          timestamp = entry.datetime_utc or '',
-          usage = usage,
-        })
-      end
+      table.insert(entries, {
+        id = entry.id or '',
+        conversation_id = entry.conversation_id or '',
+        model = entry.model or '',
+        prompt = entry.prompt or '',
+        response = entry.response or '',
+        system = entry.system,
+        timestamp = entry.datetime_utc or '',
+        usage = usage,
+      })
+    end
 
-      callback(entries)
-    end)
+    callback(entries)
   end)
 end
 
 ---@param callback fun(templates: string[]) Callback with list of template names.
 ---@return nil
 Backend.get_templates_async = function(callback)
-  vim.system({ H.config.cmd, 'templates', 'list' }, { text = true }, function(result)
-    vim.schedule(function()
-      local output = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
-      local templates = {}
-      for _, line in ipairs(output) do
-        if line:match('^%S+%s*:') then
-          local name = line:match('^(%S+)%s*:')
-          if name then table.insert(templates, name) end
-        end
+  H.system_async({ H.config.cmd, 'templates', 'list' }, function(result)
+    local output = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
+    local templates = {}
+    for _, line in ipairs(output) do
+      if line:match('^%S+%s*:') then
+        local name = line:match('^(%S+)%s*:')
+        if name then table.insert(templates, name) end
       end
-      callback(templates)
-    end)
+    end
+    callback(templates)
   end)
 end
 
@@ -528,18 +528,16 @@ end
 ---@param callback fun(template: table?) Callback with template data or nil.
 ---@return nil
 Backend.get_template_async = function(template_name, callback)
-  vim.system({ H.config.cmd, 'templates', 'show', template_name }, { text = true }, function(result)
-    vim.schedule(function()
-      local output = result.stdout or ''
-      if output == '' then
-        callback(nil)
-        return
-      end
-      callback({
-        name = template_name,
-        content = output,
-      })
-    end)
+  H.system_async({ H.config.cmd, 'templates', 'show', template_name }, function(result)
+    local output = result.stdout or ''
+    if output == '' then
+      callback(nil)
+      return
+    end
+    callback({
+      name = template_name,
+      content = output,
+    })
   end)
 end
 

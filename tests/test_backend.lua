@@ -25,8 +25,8 @@ T['llm']['edit_template is a function'] = function()
   MiniTest.expect.equality(type(LlmBackend.edit_template), 'function')
 end
 
-T['llm']['build_command includes template flag'] = function()
-  local cmd = LlmBackend.build_command({ cmd = 'llm' }, {
+T['llm']['get_command includes template flag'] = function()
+  local cmd = LlmBackend.get_command({ cmd = 'llm' }, {
     prompt = 'test',
     template = 'my-template',
   })

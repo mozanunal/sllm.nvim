@@ -28,7 +28,9 @@ T['llm']['edit_template is a function'] = function()
 end
 
 T['llm']['get_command includes template flag'] = function()
-  local cmd = LlmBackend.get_command({ cmd = 'llm' }, {
+  -- Setup backend with config (config is stored internally now)
+  LlmBackend.setup_async({ cmd = 'llm' })
+  local cmd = LlmBackend.get_command({
     prompt = 'test',
     template = 'my-template',
   })

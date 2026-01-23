@@ -11,6 +11,11 @@ H.state = {
   job_id = nil, -- current job ID
 }
 
+-- Configuration (set via setup_async)
+H.config = {
+  cmd = 'llm',
+}
+
 -- Helper data ================================================================
 
 -- Treat these extensions as attachments (images, documents, archives, media, etc.).
@@ -54,25 +59,21 @@ H.parse_json = function(json_str)
   return ok and result or nil
 end
 
+-- Validate templates path result.
+H.is_valid_templates_path = function(path) return path ~= '' and path:sub(1, 5) ~= 'Error' end
+
 -- Get the templates directory path (sync).
-H.get_templates_path = function(llm_cmd)
-  local result = vim.system({ llm_cmd, 'templates', 'path' }, { text = true }):wait()
+H.get_templates_path = function()
+  local result = vim.system({ H.config.cmd, 'templates', 'path' }, { text = true }):wait()
   local path = vim.trim(result.stdout or '')
-  if path ~= '' and path:sub(1, 5) ~= 'Error' then return path end
-  return nil
+  return H.is_valid_templates_path(path) and path or nil
 end
 
 -- Get the templates directory path (async).
-H.get_templates_path_async = function(llm_cmd, callback)
-  vim.system({ llm_cmd, 'templates', 'path' }, { text = true }, function(result)
+H.get_templates_path_async = function(callback)
+  vim.system({ H.config.cmd, 'templates', 'path' }, { text = true }, function(result)
     local path = vim.trim(result.stdout or '')
-    vim.schedule(function()
-      if path ~= '' and path:sub(1, 5) ~= 'Error' then
-        callback(path)
-      else
-        callback(nil)
-      end
-    end)
+    vim.schedule(function() callback(H.is_valid_templates_path(path) and path or nil) end)
   end)
 end
 
@@ -156,12 +157,10 @@ H.job_stop = function()
 end
 
 -- Build the llm CLI command (private helper).
----@param config table Backend configuration with cmd field.
 ---@param options LlmBuildCommandOptions Command options.
 ---@return string[] The assembled shell command.
-H.build_command = function(config, options)
-  local llm_cmd = config.cmd or 'llm'
-  local cmd = { llm_cmd }
+H.build_command = function(options)
+  local cmd = { H.config.cmd }
 
   if not options.prompt then error('prompt is required') end
 
@@ -242,19 +241,22 @@ end
 -- Public API =================================================================
 
 ---@class BackendSetupOptions
+---@field cmd string? Command or path to the LLM CLI (default: "llm").
 ---@field plugin_templates_path string? Path to plugin templates directory.
 ---@field on_template_installed fun(filename: string)? Callback when a template is installed.
 ---@field on_ready fun(default_model: string?)? Callback when setup is complete, receives default model.
 
 ---Async setup for the LLM backend. Fetches default model and installs templates.
----@param config table Backend configuration with cmd field.
 ---@param options BackendSetupOptions? Setup options.
-Backend.setup_async = function(config, options)
+Backend.setup_async = function(options)
   options = options or {}
+
+  -- Store config
+  if options.cmd then H.config.cmd = options.cmd end
+
   local plugin_templates_path = options.plugin_templates_path
   local on_template_installed = options.on_template_installed
   local on_ready = options.on_ready
-  local llm_cmd = config.cmd or 'llm'
 
   -- Track completion of async tasks
   local default_model = nil
@@ -266,7 +268,7 @@ Backend.setup_async = function(config, options)
   end
 
   -- Fetch default model asynchronously
-  vim.system({ llm_cmd, 'models', 'default' }, { text = true }, function(result)
+  vim.system({ H.config.cmd, 'models', 'default' }, { text = true }, function(result)
     local output = result.stdout or ''
     default_model = output:match('(.-)%s*$')
     vim.schedule(function()
@@ -290,7 +292,7 @@ Backend.setup_async = function(config, options)
   end
 
   -- Get llm templates path asynchronously
-  H.get_templates_path_async(llm_cmd, function(templates_path)
+  H.get_templates_path_async(function(templates_path)
     if not templates_path then
       templates_done = true
       check_ready()
@@ -341,11 +343,10 @@ Backend.is_busy = function() return H.state.job_id ~= nil end
 
 ---Prompt the LLM asynchronously.
 ---Handles token usage tracking internally and formats tool call headers.
----@param config table Backend configuration with cmd field.
 ---@param options LlmBuildCommandOptions Prompt options.
 ---@param callbacks PromptCallbacks Callbacks for line output and exit.
 ---@return nil
-Backend.prompt_async = function(config, options, callbacks)
+Backend.prompt_async = function(options, callbacks)
   callbacks = callbacks or {}
   local on_line = callbacks.on_line or function() end
   local on_exit = callbacks.on_exit or function() end
@@ -353,7 +354,7 @@ Backend.prompt_async = function(config, options, callbacks)
   -- Accumulated usage stats
   local usage = { input = 0, output = 0, cost = 0 }
 
-  local cmd = H.build_command(config, options)
+  local cmd = H.build_command(options)
 
   H.job_start(
     cmd,
@@ -392,8 +393,7 @@ Backend.prompt_async = function(config, options, callbacks)
     function(exit_code)
       local conversation_id = nil
       if exit_code == 0 then
-        local llm_cmd = config.cmd or 'llm'
-        local result = vim.system({ llm_cmd, 'logs', 'list', '--json', '-n', '1' }, { text = true }):wait()
+        local result = vim.system({ H.config.cmd, 'logs', 'list', '--json', '-n', '1' }, { text = true }):wait()
         local output = result.stdout or ''
         local parsed = H.parse_json(output)
         if parsed and #parsed > 0 then conversation_id = parsed[1].conversation_id end
@@ -406,10 +406,9 @@ Backend.prompt_async = function(config, options, callbacks)
 end
 
 ---Get the built command for debugging purposes.
----@param config table Backend configuration with cmd field.
 ---@param options LlmBuildCommandOptions Command options.
 ---@return string[] The assembled shell command.
-Backend.get_command = function(config, options) return H.build_command(config, options) end
+Backend.get_command = function(options) return H.build_command(options) end
 
 ---@class LlmBuildCommandOptions
 ---@field prompt string Required prompt text.
@@ -428,12 +427,10 @@ Backend.get_command = function(config, options) return H.build_command(config, o
 ---@field chain_limit integer? Chain limit for tools (default: 100).
 
 ---Get list of available models from llm CLI (async).
----@param config table Backend configuration with cmd field.
 ---@param callback fun(models: string[]) Callback with list of model names.
 ---@return nil
-Backend.get_models_async = function(config, callback)
-  local llm_cmd = config.cmd or 'llm'
-  vim.system({ llm_cmd, 'models' }, { text = true }, function(result)
+Backend.get_models_async = function(callback)
+  vim.system({ H.config.cmd, 'models' }, { text = true }, function(result)
     vim.schedule(function()
       local models = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
       local only_models = {}
@@ -447,24 +444,20 @@ Backend.get_models_async = function(config, callback)
 end
 
 ---Get model-specific options (async).
----@param config table Backend configuration with cmd field.
 ---@param model string Model name.
 ---@param callback fun(options: string[]) Callback with list of options description lines.
 ---@return nil
-Backend.get_model_options_async = function(config, model, callback)
-  local llm_cmd = config.cmd or 'llm'
-  vim.system({ llm_cmd, 'models', '--options', '-m', model }, { text = true }, function(result)
+Backend.get_model_options_async = function(model, callback)
+  vim.system({ H.config.cmd, 'models', '--options', '-m', model }, { text = true }, function(result)
     vim.schedule(function() callback(vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })) end)
   end)
 end
 
 ---Get list of available tools from llm CLI (async).
----@param config table Backend configuration with cmd field.
 ---@param callback fun(tools: string[]) Callback with list of tool names.
 ---@return nil
-Backend.get_tools_async = function(config, callback)
-  local llm_cmd = config.cmd or 'llm'
-  vim.system({ llm_cmd, 'tools', 'list', '--json' }, { text = true }, function(result)
+Backend.get_tools_async = function(callback)
+  vim.system({ H.config.cmd, 'tools', 'list', '--json' }, { text = true }, function(result)
     vim.schedule(function()
       local json_string = result.stdout or ''
       local spec = H.parse_json(json_string)
@@ -480,15 +473,13 @@ Backend.get_tools_async = function(config, callback)
 end
 
 ---Fetch history entries from llm logs (async).
----@param config table Backend configuration with cmd field.
 ---@param options table? History options.
 ---@param callback fun(entries: table[]?) Callback with list of history entries or nil.
 ---@return nil
-Backend.get_history_async = function(config, options, callback)
+Backend.get_history_async = function(options, callback)
   options = options or {}
-  local llm_cmd = config.cmd or 'llm'
   local count = options.count or 20
-  local cmd = { llm_cmd, 'logs', 'list', '--json', '-n', tostring(count) }
+  local cmd = { H.config.cmd, 'logs', 'list', '--json', '-n', tostring(count) }
 
   if options.query then
     table.insert(cmd, '-q')
@@ -531,12 +522,10 @@ Backend.get_history_async = function(config, options, callback)
   end)
 end
 
----@param config table Backend configuration with cmd field.
 ---@param callback fun(templates: string[]) Callback with list of template names.
 ---@return nil
-Backend.get_templates_async = function(config, callback)
-  local llm_cmd = config.cmd or 'llm'
-  vim.system({ llm_cmd, 'templates', 'list' }, { text = true }, function(result)
+Backend.get_templates_async = function(callback)
+  vim.system({ H.config.cmd, 'templates', 'list' }, { text = true }, function(result)
     vim.schedule(function()
       local output = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
       local templates = {}
@@ -552,13 +541,11 @@ Backend.get_templates_async = function(config, callback)
 end
 
 ---Get detailed information about a template (async).
----@param config table Backend configuration with cmd field.
 ---@param template_name string Name of the template.
 ---@param callback fun(template: table?) Callback with template data or nil.
 ---@return nil
-Backend.get_template_async = function(config, template_name, callback)
-  local llm_cmd = config.cmd or 'llm'
-  vim.system({ llm_cmd, 'templates', 'show', template_name }, { text = true }, function(result)
+Backend.get_template_async = function(template_name, callback)
+  vim.system({ H.config.cmd, 'templates', 'show', template_name }, { text = true }, function(result)
     vim.schedule(function()
       local output = result.stdout or ''
       if output == '' then
@@ -574,20 +561,14 @@ Backend.get_template_async = function(config, template_name, callback)
 end
 
 ---Get the templates directory path.
----@param config table Backend configuration with cmd field.
 ---@return string? Path to templates directory or nil.
-Backend.get_templates_path = function(config)
-  local llm_cmd = config.cmd or 'llm'
-  return H.get_templates_path(llm_cmd)
-end
+Backend.get_templates_path = function() return H.get_templates_path() end
 
 ---Open the template file in Neovim for editing.
----@param config table Backend configuration with cmd field.
 ---@param template_name string Name of the template to edit.
 ---@return boolean Success status.
-Backend.edit_template = function(config, template_name)
-  local llm_cmd = config.cmd or 'llm'
-  local templates_path = H.get_templates_path(llm_cmd)
+Backend.edit_template = function(template_name)
+  local templates_path = H.get_templates_path()
   if not templates_path then return false end
 
   local template_file = templates_path .. '/' .. template_name .. '.yaml'

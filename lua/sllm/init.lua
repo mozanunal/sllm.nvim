@@ -189,6 +189,12 @@ H.COMMANDS = {
   { cmd = 'toggle', desc = 'Toggle LLM buffer', action = 'toggle_llm_buffer', category = 'UI' },
 }
 
+-- Build command lookup table for O(1) access
+H.COMMANDS_BY_NAME = {}
+for _, cmd_def in ipairs(H.COMMANDS) do
+  H.COMMANDS_BY_NAME[cmd_def.cmd] = cmd_def
+end
+
 H.PROMPT_TEMPLATE = [[
 ${user_input}
 
@@ -273,7 +279,6 @@ H.state = {
   system_prompt = nil,
   model_options = {},
   online_enabled = false,
-  backend_config = {}, -- Backend-specific configuration
   session_stats = { input = 0, output = 0, cost = 0 }, -- Accumulated token usage
 
   -- Context
@@ -782,15 +787,27 @@ H.ui_append_to_llm_buffer = function(lines)
   end
 end
 
---- Copy a code block from the last response in the LLM buffer to the clipboard.
----@param position "first"|"last"  Which code block to copy from the last response.
----@return boolean  `true` if a code block was found and copied; `false` otherwise.
-H.ui_copy_code_block = function(position)
+--- Show debug command in LLM buffer (if debug mode is enabled).
+---@param options LlmBuildCommandOptions  Command options to display.
+---@return nil
+H.ui_show_debug_command = function(options)
+  if not Sllm.config.debug then return end
+  local cmd = H.backend.get_command(options)
+  H.ui_show_llm_buffer()
+  H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
+  H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
+  H.ui_append_to_llm_buffer({ '```', '' })
+end
+
+--- Get lines from the last response in the LLM buffer.
+---@param fallback_to_all boolean? If true, return all lines if no response marker found.
+---@return string[]? Lines from last response, or nil if buffer empty/no response found.
+H.ui_get_last_response_lines = function(fallback_to_all)
   local response_header = Sllm.config.ui.markdown_response_header or '> 🤖 Response'
   local buf = H.ui_ensure_llm_buffer()
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
-  if #lines == 0 then return false end
+  if #lines == 0 then return nil end
 
   -- Find the last occurrence of the response marker
   local last_response_idx = nil
@@ -801,19 +818,23 @@ H.ui_copy_code_block = function(position)
     end
   end
 
-  -- Extract lines from last response only
+  if not last_response_idx then return fallback_to_all and lines or nil end
+
   local response_lines = {}
-  if last_response_idx then
-    for i = last_response_idx + 1, #lines do
-      table.insert(response_lines, lines[i])
-    end
-  else
-    -- No response header found, use entire buffer as fallback
-    response_lines = lines
+  for i = last_response_idx + 1, #lines do
+    table.insert(response_lines, lines[i])
   end
+  return response_lines
+end
+
+--- Copy a code block from the last response in the LLM buffer to the clipboard.
+---@param position "first"|"last"  Which code block to copy from the last response.
+---@return boolean  `true` if a code block was found and copied; `false` otherwise.
+H.ui_copy_code_block = function(position)
+  local response_lines = H.ui_get_last_response_lines(true)
+  if not response_lines then return false end
 
   local code_blocks = H.utils_extract_code_blocks(response_lines)
-
   if #code_blocks == 0 then return false end
 
   local block = position == 'first' and code_blocks[1] or code_blocks[#code_blocks]
@@ -826,28 +847,8 @@ end
 --- Extracts content from the last response marker to the end.
 ---@return boolean  `true` if content was copied; `false` if no response found.
 H.ui_copy_last_response = function()
-  local response_header = Sllm.config.ui.markdown_response_header or '> 🤖 Response'
-  local buf = H.ui_ensure_llm_buffer()
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-
-  if #lines == 0 then return false end
-
-  -- Find the last occurrence of the response marker
-  local last_response_idx = nil
-  for i = #lines, 1, -1 do
-    if lines[i]:match('^' .. vim.pesc(response_header)) then
-      last_response_idx = i
-      break
-    end
-  end
-
-  if not last_response_idx then return false end
-
-  -- Extract from the response marker to the end (skip the marker line and empty lines)
-  local response_lines = {}
-  for i = last_response_idx + 1, #lines do
-    table.insert(response_lines, lines[i])
-  end
+  local response_lines = H.ui_get_last_response_lines(false)
+  if not response_lines then return false end
 
   -- Remove leading empty lines
   while #response_lines > 0 and response_lines[1]:match('^%s*$') do
@@ -915,9 +916,6 @@ H.apply_config = function(config)
     end
   end
 
-  -- Set up backend config
-  H.state.backend_config = { cmd = Sllm.config.llm_cmd }
-
   H.state.continue = not Sllm.config.on_start_new_chat
   H.state.online_enabled = Sllm.config.online_enabled or false
 
@@ -936,7 +934,8 @@ H.apply_config = function(config)
   local default_mode = Sllm.config.default_mode
   local user_specified_model = Sllm.config.default_model ~= 'default'
 
-  H.backend.setup_async(H.state.backend_config, {
+  H.backend.setup_async({
+    cmd = Sllm.config.llm_cmd,
     plugin_templates_path = plugin_templates_path,
     on_template_installed = function(name) H.notify('[sllm] template installed: ' .. name, vim.log.levels.INFO) end,
     on_ready = function(default_model)
@@ -965,12 +964,8 @@ end
 function Sllm.ask_llm()
   if H.utils_is_mode_visual() then Sllm.add_sel_to_ctx() end
   H.input({ prompt = Sllm.config.ui.ask_llm_prompt }, function(user_input)
-    if user_input == '' then
+    if not user_input or user_input == '' then
       H.notify('[sllm] no prompt provided.', vim.log.levels.INFO)
-      return
-    end
-    if user_input == nil then
-      H.notify('[sllm] prompt canceled.', vim.log.levels.INFO)
       return
     end
 
@@ -1025,16 +1020,10 @@ function Sllm.ask_llm()
       model_options = H.state.model_options,
     }
 
-    -- Debug: show command in LLM buffer
-    if Sllm.config.debug then
-      local cmd = H.backend.get_command(H.state.backend_config, options)
-      H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
-      H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
-      H.ui_append_to_llm_buffer({ '```', '' })
-    end
+    H.ui_show_debug_command(options)
 
     local first_line = false
-    H.backend.prompt_async(H.state.backend_config, options, {
+    H.backend.prompt_async(options, {
       -- Line handler: display each line (response + formatted tool calls)
       on_line = function(line)
         if not first_line then
@@ -1103,16 +1092,16 @@ end
 
 --- Focus the existing LLM window or create it.
 ---@return nil
-function Sllm.focus_llm_buffer() H.ui_focus_llm_buffer() end
+Sllm.focus_llm_buffer = H.ui_focus_llm_buffer
 
 --- Toggle visibility of the LLM window.
 ---@return nil
-function Sllm.toggle_llm_buffer() H.ui_toggle_llm_buffer() end
+Sllm.toggle_llm_buffer = H.ui_toggle_llm_buffer
 
 --- Prompt user to select an LLM model.
 ---@return nil
 function Sllm.select_model()
-  H.backend.get_models_async(H.state.backend_config, function(models)
+  H.backend.get_models_async(function(models)
     if not (models and #models > 0) then
       H.notify('[sllm] no models found.', vim.log.levels.ERROR)
       return
@@ -1132,7 +1121,7 @@ end
 --- Add a tool to the current context.
 ---@return nil
 function Sllm.add_tool_to_ctx()
-  H.backend.get_tools_async(H.state.backend_config, function(tools)
+  H.backend.get_tools_async(function(tools)
     if not (tools and #tools > 0) then
       H.notify('[sllm] no tools found.', vim.log.levels.ERROR)
       return
@@ -1270,18 +1259,17 @@ end
 ---@param cmd_input string? Optional command to execute directly (e.g., "new", "model").
 ---@return nil
 function Sllm.run_command(cmd_input)
-  -- If a command is provided directly, execute it
+  -- If a command is provided directly, execute it via lookup table
   if cmd_input and cmd_input ~= '' then
-    for _, cmd_def in ipairs(H.COMMANDS) do
-      if cmd_def.cmd == cmd_input then
-        local action = cmd_def.action
-        if type(action) == 'string' then
-          Sllm[action]()
-        else
-          action()
-        end
-        return
+    local cmd_def = H.COMMANDS_BY_NAME[cmd_input]
+    if cmd_def then
+      local action = cmd_def.action
+      if type(action) == 'string' then
+        Sllm[action]()
+      else
+        action()
       end
+      return
     end
     H.notify('[sllm] unknown command: ' .. cmd_input, vim.log.levels.WARN)
     return
@@ -1320,7 +1308,7 @@ function Sllm.show_model_options()
   end
 
   -- Run `llm models --options -m <model>` to show available options
-  H.backend.get_model_options_async(H.state.backend_config, H.state.selected_model, function(output)
+  H.backend.get_model_options_async(H.state.selected_model, function(output)
     H.ui_show_llm_buffer()
     H.ui_append_to_llm_buffer({ '', '> 📋 Available options for ' .. H.state.selected_model, '' })
     H.ui_append_to_llm_buffer(output)
@@ -1487,14 +1475,7 @@ H.complete_code_normal = function()
     raw = true, -- Skip tool flags for inline completion
   }
 
-  -- Debug: show command in LLM buffer
-  if Sllm.config.debug then
-    local cmd = H.backend.get_command(H.state.backend_config, options)
-    H.ui_show_llm_buffer()
-    H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
-    H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
-    H.ui_append_to_llm_buffer({ '```', '' })
-  end
+  H.ui_show_debug_command(options)
 
   -- Start loading indicator (shows in winbar if LLM buffer is visible)
   H.ui_start_loading_indicator()
@@ -1503,7 +1484,7 @@ H.complete_code_normal = function()
   -- Collect the completion output
   local completion_output = {}
 
-  H.backend.prompt_async(H.state.backend_config, options, {
+  H.backend.prompt_async(options, {
     on_line = function(line)
       if line ~= '' then table.insert(completion_output, line) end
     end,
@@ -1603,14 +1584,7 @@ H.complete_code_visual = function()
       raw = true, -- Skip tool flags for inline edit
     }
 
-    -- Debug: show command in LLM buffer
-    if Sllm.config.debug then
-      local cmd = H.backend.get_command(H.state.backend_config, options)
-      H.ui_show_llm_buffer()
-      H.ui_append_to_llm_buffer({ '', '> 🐛 Debug: LLM command', '```bash' })
-      H.ui_append_to_llm_buffer(vim.split(table.concat(cmd, ' '), '\n', { plain = true }))
-      H.ui_append_to_llm_buffer({ '```', '' })
-    end
+    H.ui_show_debug_command(options)
 
     -- Start loading indicator
     H.ui_start_loading_indicator()
@@ -1619,7 +1593,7 @@ H.complete_code_visual = function()
     -- Collect the output
     local edit_output = {}
 
-    H.backend.prompt_async(H.state.backend_config, options, {
+    H.backend.prompt_async(options, {
       on_line = function(line)
         if line ~= '' then table.insert(edit_output, line) end
       end,
@@ -1660,7 +1634,7 @@ end
 ---@return nil
 function Sllm.browse_history()
   local max_entries = Sllm.config.history_max_entries or 1000
-  H.backend.get_history_async(H.state.backend_config, { count = max_entries }, function(entries)
+  H.backend.get_history_async({ count = max_entries }, function(entries)
     if not entries or #entries == 0 then
       H.notify('[sllm] no history found.', vim.log.levels.INFO)
       return
@@ -1757,7 +1731,7 @@ end
 --- Select a template to use for future prompts.
 ---@return nil
 function Sllm.select_template()
-  H.backend.get_templates_async(H.state.backend_config, function(templates)
+  H.backend.get_templates_async(function(templates)
     if not (templates and #templates > 0) then
       H.notify('[sllm] no templates found.', vim.log.levels.INFO)
       return
@@ -1778,12 +1752,12 @@ end
 --- Select a mode (template) to configure the session.
 --- Modes are llm templates. Use `llm templates edit <name>` to customize.
 ---@return nil
-function Sllm.select_mode() Sllm.select_template() end
+Sllm.select_mode = Sllm.select_template
 
 --- Show details of the currently selected template or select one to show.
 ---@return nil
 function Sllm.show_template()
-  H.backend.get_templates_async(H.state.backend_config, function(templates)
+  H.backend.get_templates_async(function(templates)
     if not (templates and #templates > 0) then
       H.notify('[sllm] no templates found.', vim.log.levels.INFO)
       return
@@ -1805,7 +1779,7 @@ function Sllm.show_template()
 end
 
 H.show_template_content = function(template_name)
-  H.backend.get_template_async(H.state.backend_config, template_name, function(template)
+  H.backend.get_template_async(template_name, function(template)
     if not template then
       H.notify('[sllm] template not found: ' .. template_name, vim.log.levels.ERROR)
       return
@@ -1827,7 +1801,7 @@ function Sllm.edit_template()
     return
   end
 
-  local success = H.backend.edit_template(H.state.backend_config, H.state.selected_template)
+  local success = H.backend.edit_template(H.state.selected_template)
   if success then
     H.notify('[sllm] template edited: ' .. H.state.selected_template, vim.log.levels.INFO)
   else

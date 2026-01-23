@@ -197,7 +197,32 @@ ${snippets}
 ${files}
 ]]
 
-H.DEFAULT_CONFIG = vim.deepcopy({
+-- Lazy-loaded picker function (avoids loading mini.pick at module require time)
+H.lazy_pick_func = function(...)
+  local ok, mini_pick = pcall(require, 'mini.pick')
+  if ok and mini_pick.ui_select then
+    H.lazy_pick_func = mini_pick.ui_select
+    return mini_pick.ui_select(...)
+  else
+    H.lazy_pick_func = vim.ui.select
+    return vim.ui.select(...)
+  end
+end
+
+-- Lazy-loaded notify function (avoids loading mini.notify at module require time)
+H.lazy_notify_func = function(...)
+  local ok, mini_notify = pcall(require, 'mini.notify')
+  if ok and mini_notify.make_notify then
+    local notify = mini_notify.make_notify()
+    H.lazy_notify_func = notify
+    return notify(...)
+  else
+    H.lazy_notify_func = vim.notify
+    return vim.notify(...)
+  end
+end
+
+H.DEFAULT_CONFIG = {
   llm_cmd = 'llm',
   default_model = 'default',
   default_mode = 'sllm_chat', -- Default mode/template to use on startup
@@ -205,8 +230,8 @@ H.DEFAULT_CONFIG = vim.deepcopy({
   reset_ctx_each_prompt = true,
   window_type = 'vertical',
   scroll_to_bottom = true,
-  pick_func = (pcall(require, 'mini.pick') and require('mini.pick').ui_select) or vim.ui.select,
-  notify_func = (pcall(require, 'mini.notify') and require('mini.notify').make_notify()) or vim.notify,
+  pick_func = nil, -- Will use H.lazy_pick_func
+  notify_func = nil, -- Will use H.lazy_notify_func
   input_func = vim.ui.input,
   pre_hooks = nil,
   post_hooks = nil,
@@ -235,7 +260,7 @@ H.DEFAULT_CONFIG = vim.deepcopy({
     markdown_response_header = '> 🤖 Response',
     set_system_prompt = 'System Prompt: ',
   },
-})
+}
 
 -- Internal modules
 H.backend = require('sllm.backend.llm')
@@ -1013,66 +1038,40 @@ H.apply_config = function(config)
   H.state.continue = not Sllm.config.on_start_new_chat
   H.state.online_enabled = Sllm.config.online_enabled or false
 
-  H.notify = Sllm.config.notify_func
-  H.pick = Sllm.config.pick_func
+  H.notify = Sllm.config.notify_func or H.lazy_notify_func
+  H.pick = Sllm.config.pick_func or H.lazy_pick_func
   H.input = Sllm.config.input_func
 
-  -- Install default templates and set default mode
-  vim.schedule(function()
-    H.state.selected_model = Sllm.config.default_model ~= 'default' and Sllm.config.default_model
-      or H.backend.get_default_model(H.state.backend_config)
-    H.state.selected_template = Sllm.config.default_mode or nil
-    H.install_default_templates()
-  end)
-end
-
---- Install default templates by symlinking from plugin directory to llm templates dir.
----@return nil
-H.install_default_templates = function()
-  -- Get llm templates path
-  local templates_path = H.backend.get_templates_path(H.state.backend_config)
-  if not templates_path then
-    -- Silently skip if llm templates path not available
-    return
-  end
-
-  -- Get plugin templates path (absolute)
+  -- Setup backend asynchronously (fetches default model, installs templates)
   local plugin_path = debug.getinfo(1, 'S').source:sub(2):match('(.*/)')
-  if not plugin_path then return end
-
-  -- Go up from lua/sllm/ to plugin root, then to templates/
-  local plugin_templates_path = plugin_path:gsub('lua/sllm/$', '') .. 'templates'
-  -- Ensure absolute path
-  plugin_templates_path = vim.fn.fnamemodify(plugin_templates_path, ':p'):gsub('/$', '')
-
-  -- Check if plugin templates directory exists
-  if vim.fn.isdirectory(plugin_templates_path) == 0 then return end
-
-  -- Get list of template files (returns absolute paths)
-  local template_files = vim.fn.glob(plugin_templates_path .. '/sllm_*.yaml', false, true)
-
-  for _, src_file in ipairs(template_files) do
-    -- Ensure src_file is absolute
-    src_file = vim.fn.fnamemodify(src_file, ':p')
-    local filename = vim.fn.fnamemodify(src_file, ':t')
-    local dst_file = templates_path .. '/' .. filename
-
-    -- Only create symlink if destination doesn't exist or is already a symlink to our file
-    if vim.fn.filereadable(dst_file) == 0 then
-      -- Create symlink with absolute path
-      local result = vim.system({ 'ln', '-s', src_file, dst_file }, { text = true }):wait()
-      if result.code == 0 then H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO) end
-    elseif vim.fn.getftype(dst_file) == 'link' then
-      -- It's a symlink, check if it points to our file
-      local target = vim.fn.resolve(dst_file)
-      if target ~= src_file then
-        -- Different target, remove and recreate
-        vim.fn.delete(dst_file)
-        vim.system({ 'ln', '-s', src_file, dst_file }, { text = true }):wait()
-      end
-    end
-    -- If it's a regular file, leave it alone (user customized it)
+  local plugin_templates_path = nil
+  if plugin_path then
+    plugin_templates_path = plugin_path:gsub('lua/sllm/$', '') .. 'templates'
+    plugin_templates_path = vim.fn.fnamemodify(plugin_templates_path, ':p'):gsub('/$', '')
   end
+
+  local default_mode = Sllm.config.default_mode
+  local user_specified_model = Sllm.config.default_model ~= 'default'
+
+  H.backend.setup_async(H.state.backend_config, {
+    plugin_templates_path = plugin_templates_path,
+    on_template_installed = function(filename)
+      H.notify('[sllm] installed template: ' .. filename, vim.log.levels.INFO)
+    end,
+    on_ready = function(default_model)
+      -- Set default model (use user-specified or fetched default)
+      if user_specified_model then
+        H.state.selected_model = Sllm.config.default_model
+      else
+        H.state.selected_model = default_model
+      end
+      -- Set default template
+      if default_mode then
+        H.state.selected_template = default_mode
+      end
+      H.ui_render_winbar()
+    end,
+  })
 end
 
 -- Public API =================================================================

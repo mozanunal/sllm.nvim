@@ -53,12 +53,26 @@ H.parse_json = function(json_str)
   end
 end
 
--- Get the templates directory path.
+-- Get the templates directory path (sync).
 H.get_templates_path = function(llm_cmd)
   local result = vim.system({ llm_cmd, 'templates', 'path' }, { text = true }):wait()
   local path = vim.trim(result.stdout or '')
   if path ~= '' and path:sub(1, 5) ~= 'Error' then return path end
   return nil
+end
+
+-- Get the templates directory path (async).
+H.get_templates_path_async = function(llm_cmd, callback)
+  vim.system({ llm_cmd, 'templates', 'path' }, { text = true }, function(result)
+    local path = vim.trim(result.stdout or '')
+    vim.schedule(function()
+      if path ~= '' and path:sub(1, 5) ~= 'Error' then
+        callback(path)
+      else
+        callback(nil)
+      end
+    end)
+  end)
 end
 
 -- Check if a file should be treated as an attachment (image, PDF, etc.)
@@ -71,6 +85,91 @@ H.is_attachment = function(filename)
 end
 
 -- Public API =================================================================
+
+---@class BackendSetupOptions
+---@field plugin_templates_path string? Path to plugin templates directory.
+---@field on_template_installed fun(filename: string)? Callback when a template is installed.
+---@field on_ready fun(default_model: string?)? Callback when setup is complete, receives default model.
+
+---Async setup for the LLM backend. Fetches default model and installs templates.
+---@param config table Backend configuration with cmd field.
+---@param options BackendSetupOptions? Setup options.
+Backend.setup_async = function(config, options)
+  options = options or {}
+  local plugin_templates_path = options.plugin_templates_path
+  local on_template_installed = options.on_template_installed
+  local on_ready = options.on_ready
+  local llm_cmd = config.cmd or 'llm'
+
+  -- Track completion of async tasks
+  local default_model = nil
+  local templates_done = false
+  local model_done = false
+
+  local function check_ready()
+    if templates_done and model_done and on_ready then
+      on_ready(default_model)
+    end
+  end
+
+  -- Fetch default model asynchronously
+  vim.system({ llm_cmd, 'models', 'default' }, { text = true }, function(result)
+    local output = result.stdout or ''
+    default_model = output:match('(.-)%s*$')
+    vim.schedule(function()
+      model_done = true
+      check_ready()
+    end)
+  end)
+
+  -- Install templates if path provided
+  if not plugin_templates_path or vim.fn.isdirectory(plugin_templates_path) == 0 then
+    templates_done = true
+    check_ready()
+    return
+  end
+
+  local template_files = vim.fn.glob(plugin_templates_path .. '/sllm_*.yaml', false, true)
+  if #template_files == 0 then
+    templates_done = true
+    check_ready()
+    return
+  end
+
+  -- Get llm templates path asynchronously
+  H.get_templates_path_async(llm_cmd, function(templates_path)
+    if not templates_path then
+      templates_done = true
+      check_ready()
+      return
+    end
+
+    for _, src_file in ipairs(template_files) do
+      src_file = vim.fn.fnamemodify(src_file, ':p')
+      local filename = vim.fn.fnamemodify(src_file, ':t')
+      local dst_file = templates_path .. '/' .. filename
+
+      if vim.fn.filereadable(dst_file) == 0 then
+        vim.system({ 'ln', '-s', src_file, dst_file }, { text = true }, function(ln_result)
+          if ln_result.code == 0 and on_template_installed then
+            vim.schedule(function()
+              on_template_installed(filename)
+            end)
+          end
+        end)
+      elseif vim.fn.getftype(dst_file) == 'link' then
+        local target = vim.fn.resolve(dst_file)
+        if target ~= src_file then
+          vim.fn.delete(dst_file)
+          vim.system({ 'ln', '-s', src_file, dst_file }, { text = true })
+        end
+      end
+    end
+
+    templates_done = true
+    check_ready()
+  end)
+end
 
 ---Get list of available models from llm CLI.
 ---@param config table Backend configuration with cmd field.
@@ -85,16 +184,6 @@ Backend.get_models = function(config)
     if model then table.insert(only_models, model) end
   end
   return only_models
-end
-
----Get the default model name from llm CLI.
----@param config table Backend configuration with cmd field.
----@return string Default model name.
-Backend.get_default_model = function(config)
-  local llm_cmd = config.cmd or 'llm'
-  local result = vim.system({ llm_cmd, 'models', 'default' }, { text = true }):wait()
-  local output = result.stdout or ''
-  return output:match('(.-)%s*$')
 end
 
 ---Get model-specific options.

@@ -11,11 +11,13 @@ T['llm'] = MiniTest.new_set()
 
 T['llm']['has correct name'] = function() MiniTest.expect.equality(LlmBackend.name, 'llm') end
 
-T['llm']['get_templates is a function'] = function()
-  MiniTest.expect.equality(type(LlmBackend.get_templates), 'function')
+T['llm']['get_templates_async is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.get_templates_async), 'function')
 end
 
-T['llm']['get_template is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_template), 'function') end
+T['llm']['get_template_async is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.get_template_async), 'function')
+end
 
 T['llm']['get_templates_path is a function'] = function()
   MiniTest.expect.equality(type(LlmBackend.get_templates_path), 'function')

@@ -328,26 +328,17 @@ end
 ---@return string?  File path or `nil` if the buffer is unnamed.
 H.utils_get_path_of_buffer = function(buf)
   local buf_name = vim.api.nvim_buf_get_name(buf)
-  if buf_name == '' then
-    return nil
-  else
-    return buf_name
-  end
+  return buf_name ~= '' and buf_name or nil
 end
 
 --- Convert an absolute path to one relative to the cwd.
 ---@param abspath string?  Absolute path (or `nil`).
 ---@return string?  Relative path if possible; otherwise original or `nil`.
 H.utils_get_relpath = function(abspath)
-  if abspath == nil then return abspath end
+  if abspath == nil then return nil end
   local cwd = vim.uv.cwd()
   if cwd == nil then return abspath end
-  local rel = vim.fs.relpath(cwd, abspath)
-  if rel then
-    return rel
-  else
-    return abspath
-  end
+  return vim.fs.relpath(cwd, abspath) or abspath
 end
 
 --- Return the window ID showing buffer `buf`, or `nil` if not visible.
@@ -636,7 +627,7 @@ H.ui_render_winbar_impl = function()
   -- 4. Online indicator
   if H.state.online_enabled then table.insert(parts, ' 🌐') end
 
-  -- 4. Stats (if available)
+  -- 5. Stats (if available)
   local stats = H.state.session_stats
   if stats.input > 0 or stats.output > 0 or stats.cost > 0 then
     table.insert(
@@ -757,25 +748,13 @@ end
 
 --- Show the LLM buffer, creating a window if needed.
 ---@return integer win_id  Window handle where the buffer is shown.
-H.ui_show_llm_buffer = function()
-  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if win then
-    return win
-  else
-    return H.ui_create_llm_win()
-  end
-end
+H.ui_show_llm_buffer = function() return H.utils_check_buffer_visible(H.state.ui.llm_buf) or H.ui_create_llm_win() end
 
 --- Focus (enter) the LLM window, creating it if necessary.
 ---@return nil
 H.ui_focus_llm_buffer = function()
-  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if win then
-    vim.api.nvim_set_current_win(win)
-  else
-    win = H.ui_show_llm_buffer()
-    vim.api.nvim_set_current_win(win)
-  end
+  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf) or H.ui_show_llm_buffer()
+  vim.api.nvim_set_current_win(win)
 end
 
 --- Toggle the LLM window: close if open, open if closed.
@@ -1342,12 +1321,8 @@ function Sllm.show_model_options()
 
   -- Run `llm models --options -m <model>` to show available options
   H.backend.get_model_options_async(H.state.backend_config, H.state.selected_model, function(output)
-    -- Display in a floating window or show in the LLM buffer
     H.ui_show_llm_buffer()
-    H.ui_append_to_llm_buffer(
-      { '', '> 📋 Available options for ' .. H.state.selected_model, '' },
-      Sllm.config.scroll_to_bottom
-    )
+    H.ui_append_to_llm_buffer({ '', '> 📋 Available options for ' .. H.state.selected_model, '' })
     H.ui_append_to_llm_buffer(output)
     H.ui_append_to_llm_buffer({ '' })
     H.notify('[sllm] showing model options', vim.log.levels.INFO)
@@ -1717,9 +1692,8 @@ function Sllm.browse_history()
           if type(timestamp_raw) ~= 'string' then timestamp_raw = '' end
           local timestamp = timestamp_raw:gsub('T', ' '):gsub('Z', ''):sub(1, 19)
 
-          local model_raw = first.model
-          if type(model_raw) ~= 'string' then model_raw = 'unknown' end
-          local model = model_raw
+          local model = first.model
+          if type(model) ~= 'string' then model = 'unknown' end
 
           local prompt_raw = first.prompt
           if type(prompt_raw) ~= 'string' then prompt_raw = '' end

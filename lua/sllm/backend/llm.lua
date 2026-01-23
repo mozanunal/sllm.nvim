@@ -51,11 +51,7 @@ H.ATTACHMENT_EXTENSIONS = {
 -- Parse JSON string safely with error handling.
 H.parse_json = function(json_str)
   local ok, result = pcall(vim.fn.json_decode, json_str)
-  if ok then
-    return result
-  else
-    return nil
-  end
+  return ok and result or nil
 end
 
 -- Get the templates directory path (sync).
@@ -84,9 +80,7 @@ end
 H.is_attachment = function(filename)
   local ext = filename:match('%.([^%.]+)$')
   if not ext then return false end
-
-  ext = ext:lower()
-  return H.ATTACHMENT_EXTENSIONS[ext] == true
+  return H.ATTACHMENT_EXTENSIONS[ext:lower()] or false
 end
 
 -- Remove ANSI escape codes from a string.
@@ -433,21 +427,6 @@ Backend.get_command = function(config, options) return H.build_command(config, o
 ---@field model_options table? Model-specific options.
 ---@field chain_limit integer? Chain limit for tools (default: 100).
 
----Get list of available models from llm CLI (sync).
----@param config table Backend configuration with cmd field.
----@return string[] List of model names.
-Backend.get_models = function(config)
-  local llm_cmd = config.cmd or 'llm'
-  local result = vim.system({ llm_cmd, 'models' }, { text = true }):wait()
-  local models = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
-  local only_models = {}
-  for _, line in ipairs(models) do
-    local model = line:match('^.-:%s*([^(%s]+)')
-    if model then table.insert(only_models, model) end
-  end
-  return only_models
-end
-
 ---Get list of available models from llm CLI (async).
 ---@param config table Backend configuration with cmd field.
 ---@param callback fun(models: string[]) Callback with list of model names.
@@ -467,16 +446,6 @@ Backend.get_models_async = function(config, callback)
   end)
 end
 
----Get model-specific options (sync).
----@param config table Backend configuration with cmd field.
----@param model string Model name.
----@return string[] List of options description lines.
-Backend.get_model_options = function(config, model)
-  local llm_cmd = config.cmd or 'llm'
-  local result = vim.system({ llm_cmd, 'models', '--options', '-m', model }, { text = true }):wait()
-  return vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
-end
-
 ---Get model-specific options (async).
 ---@param config table Backend configuration with cmd field.
 ---@param model string Model name.
@@ -487,23 +456,6 @@ Backend.get_model_options_async = function(config, model, callback)
   vim.system({ llm_cmd, 'models', '--options', '-m', model }, { text = true }, function(result)
     vim.schedule(function() callback(vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })) end)
   end)
-end
-
----Get list of available tools from llm CLI (sync).
----@param config table Backend configuration with cmd field.
----@return string[] List of tool names.
-Backend.get_tools = function(config)
-  local llm_cmd = config.cmd or 'llm'
-  local result = vim.system({ llm_cmd, 'tools', 'list', '--json' }, { text = true }):wait()
-  local json_string = result.stdout or ''
-  local spec = H.parse_json(json_string)
-  local names = {}
-  if spec and spec.tools then
-    for _, tool in ipairs(spec.tools) do
-      table.insert(names, tool.name)
-    end
-  end
-  return names
 end
 
 ---Get list of available tools from llm CLI (async).
@@ -525,51 +477,6 @@ Backend.get_tools_async = function(config, callback)
       callback(names)
     end)
   end)
-end
-
----Fetch history entries from llm logs (sync).
----@param config table Backend configuration with cmd field.
----@param options table? History options.
----@return table[]? List of history entries or nil.
-Backend.get_history = function(config, options)
-  options = options or {}
-  local llm_cmd = config.cmd or 'llm'
-  local count = options.count or 20
-  local cmd = { llm_cmd, 'logs', 'list', '--json', '-n', tostring(count) }
-
-  if options.query then
-    table.insert(cmd, '-q')
-    table.insert(cmd, options.query)
-  end
-  if options.model then
-    table.insert(cmd, '-m')
-    table.insert(cmd, options.model)
-  end
-
-  local result = vim.system(cmd, { text = true }):wait()
-  local output = result.stdout or ''
-  local parsed = H.parse_json(output)
-
-  if not parsed then return nil end
-
-  local entries = {}
-  for _, entry in ipairs(parsed) do
-    local usage = nil
-    if entry.response_json and type(entry.response_json) == 'table' then usage = entry.response_json.usage end
-
-    table.insert(entries, {
-      id = entry.id or '',
-      conversation_id = entry.conversation_id or '',
-      model = entry.model or '',
-      prompt = entry.prompt or '',
-      response = entry.response or '',
-      system = entry.system,
-      timestamp = entry.datetime_utc or '',
-      usage = usage,
-    })
-  end
-
-  return entries
 end
 
 ---Fetch history entries from llm logs (async).
@@ -624,39 +531,6 @@ Backend.get_history_async = function(config, options, callback)
   end)
 end
 
----Fetch the last conversation ID.
----@param config table Backend configuration with cmd field.
----@return string? conversation_id or nil.
-Backend.get_last_conversation_id = function(config)
-  local llm_cmd = config.cmd or 'llm'
-  local cmd = { llm_cmd, 'logs', 'list', '--json', '-n', '1' }
-  local result = vim.system(cmd, { text = true }):wait()
-  local output = result.stdout or ''
-  local parsed = H.parse_json(output)
-  if not parsed or #parsed == 0 then return nil end
-  return parsed[1].conversation_id
-end
-
----Get list of available templates from llm CLI (sync).
----@param config table Backend configuration with cmd field.
----@return string[] List of template names.
-Backend.get_templates = function(config)
-  local llm_cmd = config.cmd or 'llm'
-  local result = vim.system({ llm_cmd, 'templates', 'list' }, { text = true }):wait()
-  local output = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
-
-  local templates = {}
-  for _, line in ipairs(output) do
-    if line:match('^%S+%s*:') then
-      local name = line:match('^(%S+)%s*:')
-      if name then table.insert(templates, name) end
-    end
-  end
-
-  return templates
-end
-
----Get list of available templates from llm CLI (async).
 ---@param config table Backend configuration with cmd field.
 ---@param callback fun(templates: string[]) Callback with list of template names.
 ---@return nil
@@ -675,23 +549,6 @@ Backend.get_templates_async = function(config, callback)
       callback(templates)
     end)
   end)
-end
-
----Get detailed information about a template (sync).
----@param config table Backend configuration with cmd field.
----@param template_name string Name of the template.
----@return table? Template data (yaml content) or nil.
-Backend.get_template = function(config, template_name)
-  local llm_cmd = config.cmd or 'llm'
-  local result = vim.system({ llm_cmd, 'templates', 'show', template_name }, { text = true }):wait()
-  local output = result.stdout or ''
-
-  if output == '' then return nil end
-
-  return {
-    name = template_name,
-    content = output,
-  }
 end
 
 ---Get detailed information about a template (async).

@@ -339,9 +339,9 @@ H.utils_get_relpath = function(abspath)
 end
 
 --- Return the window ID showing buffer `buf`, or `nil` if not visible.
----@param buf integer Buffer handle.
+---@param buf integer? Buffer handle (or `nil`).
 ---@return integer?  Window ID or `nil`.
-H.utils_check_buffer_visible = function(buf)
+H.utils_get_buf_win = function(buf)
   if not H.utils_buf_is_valid(buf) then return nil end
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == buf then return win end
@@ -351,11 +351,7 @@ end
 
 --- Get the valid LLM window, or nil if not visible/valid.
 ---@return integer?  Window ID or nil.
-H.utils_get_llm_win = function()
-  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
-  if win and vim.api.nvim_win_is_valid(win) then return win end
-  return nil
-end
+H.utils_get_llm_win = function() return H.utils_get_buf_win(H.state.ui.llm_buf) end
 
 --- Strip markdown code fences from LLM output.
 ---@param text string  Raw LLM output text.
@@ -721,19 +717,16 @@ end
 
 --- Show the LLM buffer, creating a window if needed.
 ---@return integer win_id  Window handle where the buffer is shown.
-H.ui_show_llm_buffer = function() return H.utils_check_buffer_visible(H.state.ui.llm_buf) or H.ui_create_llm_win() end
+H.ui_show_llm_buffer = function() return H.utils_get_llm_win() or H.ui_create_llm_win() end
 
 --- Focus (enter) the LLM window, creating it if necessary.
 ---@return nil
-H.ui_focus_llm_buffer = function()
-  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf) or H.ui_show_llm_buffer()
-  vim.api.nvim_set_current_win(win)
-end
+H.ui_focus_llm_buffer = function() vim.api.nvim_set_current_win(H.ui_show_llm_buffer()) end
 
 --- Toggle the LLM window: close if open, open if closed.
 ---@return nil
 H.ui_toggle_llm_buffer = function()
-  local win = H.utils_check_buffer_visible(H.state.ui.llm_buf)
+  local win = H.utils_get_llm_win()
   if win then
     vim.api.nvim_win_close(win, false)
   else
@@ -748,10 +741,9 @@ H.ui_append_to_llm_buffer = function(lines)
   if not lines then return end
   local buf = H.ui_ensure_llm_buffer()
   vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
-  local win = H.utils_check_buffer_visible(buf)
+  local win = H.utils_get_llm_win()
   if win and Sllm.config.scroll_to_bottom then
-    local last = vim.api.nvim_buf_line_count(buf)
-    vim.api.nvim_win_set_cursor(win, { last, 0 })
+    vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(buf), 0 })
   end
 end
 
@@ -1743,19 +1735,11 @@ function Sllm.show_template()
   end)
 end
 
+-- show_template_content reuses edit_template (opens file with syntax highlighting)
 H.show_template_content = function(template_name)
-  H.backend.get_template_async(template_name, function(template)
-    if not template then
-      H.notify('[sllm] template not found: ' .. template_name, vim.log.levels.ERROR)
-      return
-    end
-
-    H.ui_show_llm_buffer()
-    H.ui_append_to_llm_buffer({ '', '> 📋 Template: ' .. template.name, '' })
-    H.ui_append_to_llm_buffer(vim.split(template.content, '\n', { plain = true }))
-    H.ui_append_to_llm_buffer({ '' })
-    H.notify('[sllm] showing template: ' .. template.name, vim.log.levels.INFO)
-  end)
+  if not H.backend.edit_template(template_name) then
+    H.notify('[sllm] template not found: ' .. template_name, vim.log.levels.ERROR)
+  end
 end
 
 --- Edit the currently selected template in your editor.

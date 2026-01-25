@@ -106,20 +106,11 @@ H.job_start = function(cmd, on_stdout, on_stderr, on_exit)
   -- Helper to route a line to the appropriate handler based on --stdout/--stderr prefix
   local function route_line(line)
     local stripped = H.strip_ansi_codes(line):gsub('\r', '')
-    local stdout_content = stripped:match('^%-%-stdout (.*)$')
-    local stderr_content = stripped:match('^%-%-stderr (.*)$')
-
-    if stdout_content then
-      on_stdout(stdout_content)
-    elseif stderr_content then
-      on_stderr(stderr_content)
-    elseif stripped == '--stdout' then
-      on_stdout('')
-    elseif stripped == '--stderr' then
-      on_stderr('')
-    else
-      on_stdout(stripped)
-    end
+    local content = stripped:match('^%-%-stdout%s?(.*)$')
+    if content then return on_stdout(content) end
+    content = stripped:match('^%-%-stderr%s?(.*)$')
+    if content then return on_stderr(content) end
+    on_stdout(stripped)
   end
 
   -- Build shell command that prefixes stdout with --stdout and stderr with --stderr
@@ -169,23 +160,14 @@ end
 ---@param options LlmBuildCommandOptions Command options.
 ---@return string[] The assembled shell command.
 H.build_command = function(options)
-  local cmd = { H.config.cmd }
   if not options.prompt then error('prompt is required') end
+  local cmd = { H.config.cmd }
 
   -- Helper to add flag with optional value(s)
-  local function add(flag, ...)
-    table.insert(cmd, flag)
-    for _, v in ipairs({ ... }) do
-      table.insert(cmd, tostring(v))
-    end
-  end
+  local function add(flag, ...) vim.list_extend(cmd, { flag, ... }) end
 
   -- Tool flags unless raw mode
-  if not options.raw then
-    add('--td')
-    add('--cl', options.chain_limit or 100)
-  end
-
+  if not options.raw then add('--td', '--cl', tostring(options.chain_limit or 100)) end
   if options.no_stream then add('--no-stream') end
 
   if type(options.continue) == 'string' then
@@ -197,35 +179,24 @@ H.build_command = function(options)
   if options.show_usage then add('-u') end
   if options.model then add('-m', options.model) end
 
-  if options.ctx_files then
-    for _, filename in ipairs(options.ctx_files) do
-      add(H.is_attachment(filename) and '-a' or '-f', filename)
-    end
+  for _, filename in ipairs(options.ctx_files or {}) do
+    add(H.is_attachment(filename) and '-a' or '-f', filename)
   end
-
-  if options.tools then
-    for _, tool_name in ipairs(options.tools) do
-      add('-T', tool_name)
-    end
+  for _, tool_name in ipairs(options.tools or {}) do
+    add('-T', tool_name)
   end
-
-  if options.functions then
-    for _, func_str in ipairs(options.functions) do
-      add('--functions', func_str)
-    end
+  for _, func_str in ipairs(options.functions or {}) do
+    add('--functions', func_str)
   end
 
   if options.online then add('-o', 'online', '1') end
   if options.system_prompt then add('-s', options.system_prompt) end
 
-  if options.model_options then
-    for key, value in pairs(options.model_options) do
-      add('-o', key, value)
-    end
+  for key, value in pairs(options.model_options or {}) do
+    add('-o', key, tostring(value))
   end
 
   if options.template then add('-t', options.template) end
-
   add('--', options.prompt)
   return cmd
 end
@@ -381,16 +352,17 @@ Backend.prompt_async = function(options, callbacks)
     end,
     -- exit handler: fetch conversation ID and pass usage
     function(exit_code)
-      local conversation_id = nil
-      if exit_code == 0 then
-        local result = vim.system({ H.config.cmd, 'logs', 'list', '--json', '-n', '1' }, { text = true }):wait()
-        local output = result.stdout or ''
-        local parsed = H.parse_json(output)
-        if parsed and #parsed > 0 then conversation_id = parsed[1].conversation_id end
-      end
-      -- Only pass usage if we collected any
       local final_usage = (usage.input > 0 or usage.output > 0) and usage or nil
-      on_exit(exit_code, conversation_id, final_usage)
+      if exit_code ~= 0 then
+        on_exit(exit_code, nil, final_usage)
+        return
+      end
+      -- Fetch conversation ID asynchronously
+      H.system_async({ H.config.cmd, 'logs', 'list', '--json', '-n', '1' }, function(result)
+        local parsed = H.parse_json(result.stdout or '')
+        local conversation_id = parsed and #parsed > 0 and parsed[1].conversation_id or nil
+        on_exit(exit_code, conversation_id, final_usage)
+      end)
     end
   )
 end

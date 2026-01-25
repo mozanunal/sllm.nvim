@@ -152,14 +152,6 @@ Open picker to select a template.
 require('sllm').select_template()
 ```
 
-### Sllm.show_template()
-
-Display the active template's contents in the LLM buffer.
-
-```lua
-require('sllm').show_template()
-```
-
 ### Sllm.edit_template()
 
 Open the active template file for editing in Neovim.

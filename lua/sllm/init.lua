@@ -169,12 +169,6 @@ H.COMMANDS = {
   },
   -- Template
   {
-    cmd = 'template-show',
-    desc = 'Show template content',
-    action = 'show_template',
-    category = 'Template',
-  },
-  {
     cmd = 'template-edit',
     desc = 'Edit template file',
     action = 'edit_template',
@@ -1710,37 +1704,6 @@ end
 --- Modes are llm templates. Use `llm templates edit <name>` to customize.
 ---@return nil
 Sllm.select_mode = Sllm.select_template
-
---- Show details of the currently selected template or select one to show.
----@return nil
-function Sllm.show_template()
-  H.backend.get_templates_async(function(templates)
-    if not (templates and #templates > 0) then
-      H.notify('[sllm] no templates found.', vim.log.levels.INFO)
-      return
-    end
-
-    local template_name = H.state.selected_template
-    if not template_name or not vim.tbl_contains(templates, template_name) then
-      H.pick(templates, { prompt = 'Select template to show:', default = template_name }, function(item)
-        if item then
-          H.show_template_content(item)
-        else
-          H.notify('[sllm] no template selected', vim.log.levels.WARN)
-        end
-      end)
-    else
-      H.show_template_content(template_name)
-    end
-  end)
-end
-
--- show_template_content reuses edit_template (opens file with syntax highlighting)
-H.show_template_content = function(template_name)
-  if not H.backend.edit_template(template_name) then
-    H.notify('[sllm] template not found: ' .. template_name, vim.log.levels.ERROR)
-  end
-end
 
 --- Edit the currently selected template in your editor.
 ---@return nil

@@ -11,11 +11,13 @@ T['llm'] = MiniTest.new_set()
 
 T['llm']['has correct name'] = function() MiniTest.expect.equality(LlmBackend.name, 'llm') end
 
-T['llm']['get_templates is a function'] = function()
-  MiniTest.expect.equality(type(LlmBackend.get_templates), 'function')
+T['llm']['get_templates_async is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.get_templates_async), 'function')
 end
 
-T['llm']['get_template is a function'] = function() MiniTest.expect.equality(type(LlmBackend.get_template), 'function') end
+T['llm']['get_template_async is a function'] = function()
+  MiniTest.expect.equality(type(LlmBackend.get_template_async), 'function')
+end
 
 T['llm']['get_templates_path is a function'] = function()
   MiniTest.expect.equality(type(LlmBackend.get_templates_path), 'function')
@@ -25,8 +27,9 @@ T['llm']['edit_template is a function'] = function()
   MiniTest.expect.equality(type(LlmBackend.edit_template), 'function')
 end
 
-T['llm']['build_command includes template flag'] = function()
-  local cmd = LlmBackend.build_command({ cmd = 'llm' }, {
+T['llm']['get_command includes template flag'] = function()
+  -- H.config.cmd defaults to 'llm', so no setup needed for this test
+  local cmd = LlmBackend.get_command({
     prompt = 'test',
     template = 'my-template',
   })

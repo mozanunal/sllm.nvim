@@ -80,11 +80,8 @@ passed to the model with `-o key value`.
 
 ## Template commands
 
-**`/template-show`** - Show the active template's contents. Displays the YAML
-configuration in the LLM buffer.
-
 **`/template-edit`** - Open the active template file for editing. Opens the YAML
-file in a new buffer so you can customize it.
+file in a new buffer with syntax highlighting.
 
 ## Copy commands
 

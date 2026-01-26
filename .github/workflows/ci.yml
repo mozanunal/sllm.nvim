@@ -37,7 +37,7 @@ jobs:
 
       # 6. Check formatting (using the new 'format-check' target)
       - name: Check formatting (stylua)
-        run: make format-check
+        run: make format_check
 
       # 7. Run the unit test
       - name: Run unit test (MiniTest)
